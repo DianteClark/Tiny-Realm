@@ -5,7 +5,7 @@ import { loadAll, drawSprite } from '../src/assets.js';
 import { generateIsland, renderTerrain, foamCells, rng, T } from '../src/terrain.js';
 await loadAll();
 const seed = +(new URLSearchParams(location.search).get('seed') || 7);
-const m = generateIsland({ w: 44, h: 32, seed, plateaus: 7, reserve: { x: 19, y: 13, w: 5, h: 3 } });
+const m = generateIsland({ w: 46, h: 34, seed, plateaus: 6, highs: 2, reserve: { x: 19, y: 13, w: 7, h: 6 }, colors: [1, 3, 2], landFrac: 0.6 });
 const tc = renderTerrain(m);
 const c = document.getElementById('c'); c.width = tc.width; c.height = tc.height;
 const x = c.getContext('2d'); x.imageSmoothingEnabled = false;

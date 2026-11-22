@@ -6,7 +6,7 @@ import { T } from './terrain.js';
 import { MAJOR } from './events.js';
 import { audio } from './audio.js';
 
-export const VERSION = '2.0';
+export const VERSION = '2.1';
 
 const $ = s => document.querySelector(s);
 const src = k => SHEETS[k] ? encodeURI(SHEETS[k].src) : '';
@@ -109,7 +109,8 @@ export class UI {
         Tap a unit in a training queue to cancel it for a full refund.<br>
         Pay wood to repair damaged buildings instantly.<br>
         New pawns go straight to work on your scarcest resource.<br>
-        Screen shake, hit flashes, damage numbers, a goal tracker, and smoother camera glide.</p>
+        Screen shake, hit flashes, damage numbers, a goal tracker, and smoother camera glide.<br>
+        Islands rebuilt to follow the Tiny Swords tilemap rules: chunky coastlines, sea cliffs, two levels of high ground, and boats and clouds layered properly.${R.migrated ? '<br>Your island has been reshaped. Buildings were moved to the nearest solid ground.' : ''}</p>
         <p class="muted" style="font-size:12px">Sound starts after your first tap. Volume is in Settings.</p>`;
       this.choice('Tiny Realm ' + VERSION, div, [{ label: 'Onward' }]);
     }
@@ -486,8 +487,8 @@ export class UI {
       const cur = describeLevel(b.type, b.level);
       html += `<p class="section-title">Level ${b.level}${cur && b.level > 1 ? ': ' + cur : ''}</p>`;
       if (b.type === 'tower') {
-        const L = levelEffects('tower', b.level), high = R.home.map.level(b.cx, b.cy) === 1;
-        html += `<p style="text-align:center;font-size:14px">Damage ${Math.round(BUILDINGS.tower.defense.dmg * (1 + (S.tier - 1) * 0.25) * L.dmg)}, range ${(BUILDINGS.tower.defense.range + (high ? 1.5 : 0) + L.range).toFixed(1)} tiles${high ? ' (high ground bonus)' : ''}.</p>`;
+        const L = levelEffects('tower', b.level), hl = R.home.map.level(b.cx, b.cy), high = hl > 0;
+        html += `<p style="text-align:center;font-size:14px">Damage ${Math.round(BUILDINGS.tower.defense.dmg * (1 + (S.tier - 1) * 0.25) * L.dmg)}, range ${(BUILDINGS.tower.defense.range + hl * 1.5 + L.range).toFixed(1)} tiles${high ? ' (high ground bonus)' : ''}.</p>`;
       }
       if (b.upEnd) {
         html += `<p class="section-title" id="bupl">Upgrading to level ${b.level + 1}: ${time((b.upEnd - Date.now()) / 1000)}</p>`;

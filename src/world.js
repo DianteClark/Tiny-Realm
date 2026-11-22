@@ -107,7 +107,7 @@ export class Unit {
   }
   effRange(t) {
     let r = this.range;
-    if (this.def.proj && this.team === 0 && this.scene.map.level(cellOf(this.x), cellOf(this.y)) === 1 && !(t instanceof Building) && t.y !== undefined && this.scene.map.level(cellOf(t.x), cellOf(t.y)) === 0) r += 1.5 * T;
+    if (this.def.proj && this.team === 0 && !(t instanceof Building) && t.y !== undefined) { const up = this.scene.map.level(cellOf(this.x), cellOf(this.y)) - this.scene.map.level(cellOf(t.x), cellOf(t.y)); if (up > 0) r += 1.5 * up * T; }
     return r + (t.big ? 18 : 0);
   }
   canAttack() { return this.atkT <= 0 && this.atkAnim < 0 && this.cursed <= 0; }
@@ -476,9 +476,9 @@ export class Scene {
       if (this.kind === 'home' && dist(u.x, u.y, u.home.x, u.home.y) > leash * T && !u.target.big) { u.target = null; }
       else return this.engage(u, u.target, dt);
     }
-    // return to post
+    // return to post (if the post can't be reached, the current spot becomes the post)
     if (u.atkAnim < 0 && dist(u.x, u.y, u.home.x, u.home.y) > 40) {
-      if (!u.path || !u.path.length) u.setPath(u.home.x, u.home.y);
+      if ((!u.path || !u.path.length) && !u.setPath(u.home.x, u.home.y)) { u.home = { x: u.x, y: u.y }; return; }
       if (u.stepPath(dt)) u.charged = true;
     } else { u.moving = false; u.charged = true; }
   }
@@ -506,7 +506,7 @@ export class Scene {
       if (f && fd > 2.5 * T) { if (!u.path || !u.path.length || (u.pathT -= dt) <= 0) { u.pathT = 0.8; u.setPath(f.x, f.y); } u.stepPath(dt); return; }
     }
     if (u.atkAnim < 0 && dist(u.x, u.y, u.home.x, u.home.y) > 40 && this.kind === 'home') {
-      if (!u.path || !u.path.length) u.setPath(u.home.x, u.home.y);
+      if ((!u.path || !u.path.length) && !u.setPath(u.home.x, u.home.y)) { u.home = { x: u.x, y: u.y }; return; }
       u.stepPath(dt);
     } else u.moving = false;
   }
@@ -544,7 +544,7 @@ export class Scene {
     }
     if (u.target && (u.giveUp || 0) <= 0) return this.engage(u, u.target, dt);
     if (dist(u.x, u.y, u.home.x, u.home.y) > 48 && u.mode !== 'raid') {
-      if (!u.path || !u.path.length) u.setPath(u.home.x, u.home.y);
+      if ((!u.path || !u.path.length) && !u.setPath(u.home.x, u.home.y)) { u.home = { x: u.x, y: u.y }; return; }
       u.stepPath(dt);
     } else u.moving = false;
   }
@@ -581,7 +581,7 @@ export class Scene {
       b.atkT -= dt;
       if (b.atkT <= 0) {
         const L = levelEffects('tower', b.level);
-        const lvlBonus = this.map.level(b.cx, b.cy) === 1 ? 1.5 : 0;
+        const lvlBonus = this.map.level(b.cx, b.cy) * 1.5;
         const range = (def.range + lvlBonus + L.range) * T;
         const foes = [];
         for (const u of this.units) if (u.team === 1 && u.alive && !u.duel) { const d = dist(u.x, u.y, b.x, b.y - 20); if (d < range) foes.push([d, u]); }
@@ -696,8 +696,6 @@ export class Scene {
     const t = this.time;
     for (const d of this.map.decor) if (d.type === 'wrock' && vis(center(d.x), center(d.y))) drawSprite(ctx, 'wrock' + d.v, center(d.x), center(d.y) + 8, t + d.t);
     for (const f of this.foam) if (vis(center(f.x), center(f.y))) drawSprite(ctx, 'foam', center(f.x), center(f.y), t + f.t);
-    for (const b of this.boats) drawSprite(ctx, b.key, b.x, b.y, b.t, { flip: b.flip });
-    if (this.duck) drawSprite(ctx, 'duck', this.duck.x, this.duck.y, 0, { frame: Math.floor(this.duck.t * 3) % 3, scale: 1.4 });
     // terrain
     const sx = Math.max(0, x0), sy = Math.max(0, y0);
     const sw = Math.min(this.terrain.width, x1) - sx, sh = Math.min(this.terrain.height, y1) - sy;
@@ -706,6 +704,8 @@ export class Scene {
     // y-sorted objects
     const list = [];
     for (const d of this.map.decor) if (d.type !== 'wrock') { const x = center(d.x) + d.ox, y = center(d.y) + d.oy + 16; if (vis(x, y)) list.push({ y, d: () => drawSprite(ctx, (d.type === 'bush' ? 'bush' : 'rock') + d.v, x, y, t + d.t) }); }
+    for (const b of this.boats) if (vis(b.x, b.y)) list.push({ y: b.y - 30, d: () => drawSprite(ctx, b.key, b.x, b.y, b.t, { flip: b.flip }) });
+    if (this.duck) { const dk = this.duck; list.push({ y: dk.y - 20, d: () => drawSprite(ctx, 'duck', dk.x, dk.y, 0, { frame: Math.floor(dk.t * 3) % 3, scale: 1.4 }) }); }
     for (const tr of this.trees) {
       const x = center(tr.cx), y = center(tr.cy) + 22;
       if (!vis(x, y)) continue;
@@ -779,7 +779,7 @@ export class Scene {
     }
     ctx.globalAlpha = 1;
     // clouds
-    for (const c of this.clouds) if (vis(c.x, c.y)) drawSprite(ctx, c.k, c.x, c.y, 0, { alpha: 0.55 });
+    for (const c of this.clouds) if (vis(c.x, c.y)) drawSprite(ctx, c.k, c.x, c.y, 0, { alpha: 0.9 });
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (this.tint > 0) { ctx.fillStyle = `rgba(70,10,40,${0.32 * this.tint})`; ctx.fillRect(0, 0, vw, vh); }
   }

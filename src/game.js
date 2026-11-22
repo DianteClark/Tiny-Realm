@@ -1,5 +1,5 @@
 // The Realm: persistent state, economy, pawn work, raids, expeditions, quests, saving.
-import { T, generateIsland, rng, hashStr, reachable, K_LOW, K_WATER } from './terrain.js';
+import { T, generateIsland, rng, hashStr, reachable, boatSpots, K_LOW, K_WATER } from './terrain.js';
 import { Scene, Unit, Building, cellOf } from './world.js';
 import {
   UNITS, ENEMIES, BUILDINGS, TIERS, TRAITS, COMMON_TRAITS, XP_LEVELS, MAX_LEVEL, RELICS, REGIONS,
@@ -12,6 +12,7 @@ import { audio } from './audio.js';
 
 const SAVE_KEY = 'tinyrealm.save.v1';
 const HOME_W = 46, HOME_H = 34;
+const MAP_VERSION = 2; // bump when island generation changes so saves get migrated
 const CASTLE = { x: 20, y: 14, w: 5, h: 2 };
 const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
 const center = c => c * T + T / 2;
@@ -132,7 +133,9 @@ export class Realm {
   // ------------------------------------------------------------ home island
   buildHome() {
     const S = this.state;
-    const map = generateIsland({ w: HOME_W, h: HOME_H, seed: S.seed, plateaus: 6, reserve: { x: CASTLE.x - 1, y: CASTLE.y - 1, w: CASTLE.w + 2, h: CASTLE.h + 4 }, flatColor: 1, highColor: 3 });
+    const migrate = S.buildings && S.mapVer !== MAP_VERSION;
+    if (migrate) { S.trees = null; S.golds = null; S.goldRespawns = []; for (const rec of S.soldiers) rec.post = null; }
+    const map = generateIsland({ w: HOME_W, h: HOME_H, seed: S.seed, plateaus: 6, highs: 2, reserve: { x: CASTLE.x - 1, y: CASTLE.y - 1, w: CASTLE.w + 2, h: CASTLE.h + 4 }, colors: [1, 3, 2], landFrac: 0.6 });
     const h = new Scene(this, 'home', map, S.seed);
     this.home = h;
     const r = rng(S.seed + 1234);
@@ -147,6 +150,17 @@ export class Realm {
       nb.level = lvl; nb.upEnd = b.upEnd || 0; nb.upTotal = b.upTotal || 0;
     }
     this.castle = h.buildings.find(b => b.type === 'castle');
+    // buildings from an older map layout that no longer sit on valid ground get moved later
+    const stranded = [];
+    for (const b of [...h.buildings]) {
+      if (b.type === 'castle') continue;
+      let ok = true, lvl = null;
+      for (const [x, y] of b.cells()) {
+        if (!map.ground(x, y) || map.stairAt(x, y) || map.block[map.i(x, y)] > 1) ok = false;
+        const l = map.level(x, y); if (lvl === null) lvl = l; else if (l !== lvl) ok = false;
+      }
+      if (!ok) { stranded.push(b); h.removeBuilding(b); }
+    }
     // resources (deterministic layout from the seed, then saved state applied)
     const free = (x, y, pad = 0) => {
       for (let oy = -pad; oy <= pad; oy++) for (let ox = -pad; ox <= pad; ox++) {
@@ -213,14 +227,22 @@ export class Realm {
     // reachability from the castle door (for raids and placement)
     this.door = h.nearestWalkable(CASTLE.x + 2, CASTLE.y + 2);
     this.reach = reachable(map, this.door[0], this.door[1]);
-    this.shore = [];
-    for (let y = 1; y < map.h - 1; y++) for (let x = 1; x < map.w - 1; x++) {
-      if (map.kindAt(x, y) !== K_WATER) continue;
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const lx = x + dx, ly = y + dy;
-        if (map.kindAt(lx, ly) === K_LOW && this.reach[map.i(lx, ly)]) { this.shore.push({ wx: x, wy: y, lx, ly }); break; }
+    // re-home stranded buildings at the nearest valid spot (refund if there is none)
+    for (const b of stranded) {
+      let spot = null;
+      for (let rr = 0; rr < 18 && !spot; rr++) for (let dy = -rr; dy <= rr && !spot; dy++) for (let dx = -rr; dx <= rr && !spot; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== rr) continue;
+        if (this.canPlace(b.type, b.cx + dx, b.cy + dy)) spot = [b.cx + dx, b.cy + dy];
       }
+      if (spot) {
+        const nb = h.addBuilding(b.type, spot[0], spot[1], { hp: b.hp, maxHp: b.maxHp, buildEnd: b.buildEnd, buildTotal: b.buildTotal, variant: b.variant, queue: b.queue });
+        nb.level = b.level; nb.upEnd = b.upEnd; nb.upTotal = b.upTotal;
+      } else this.addAll(BUILDINGS[b.type].cost);
+      this.reach = reachable(map, this.door[0], this.door[1]);
     }
+    if (migrate) this.migrated = true;
+    S.mapVer = MAP_VERSION;
+    this.shore = boatSpots(map, this.reach);
     // people
     for (let i = 0; i < S.pawns; i++) this.spawnPawn(true);
     for (const rec of S.soldiers) if (rec.status === 'home') this.spawnSoldier(rec, true);
@@ -246,7 +268,8 @@ export class Realm {
     if (rec.post) return rec.post;
     const idx = this.state.soldiers.indexOf(rec);
     const row = Math.floor(idx / 6), col = idx % 6;
-    const c = this.home.nearestWalkable(CASTLE.x - 1 + col, CASTLE.y + 3 + row) || this.door;
+    const m = this.home.map, lvl = m.level(this.door[0], this.door[1]);
+    const c = this.home.nearestWalkable(CASTLE.x - 1 + col, CASTLE.y + 3 + row, 10, (x, y) => this.reach[m.i(x, y)] && m.level(x, y) === lvl) || this.door;
     return { x: center(c[0]), y: center(c[1]) + 8 };
   }
   spawnSoldier(rec, initial, at) {
@@ -774,6 +797,7 @@ export class Realm {
     const level = 1 + Math.floor(S.stats.raidsSurvived / 4) + (S.tier - 1) + S.renown;
     // landing spots far from the castle
     const far = this.shore.filter(s => dist(s.lx, s.ly, CASTLE.x + 2, CASTLE.y + 1) > 11);
+    if (!this.shore.length) this.shore = [{ wx: 1, wy: 1, lx: this.door[0], ly: this.door[1] }];
     const pool = far.length ? far : this.shore;
     const main = pool[Math.floor(Math.random() * pool.length)];
     const spawns = [main];
@@ -796,7 +820,7 @@ export class Realm {
     return { kind, region, level, spawns, queue, dir, gap: opts.gap };
   }
   showBoat(plan) {
-    this.home.boats = plan.spawns.map(s => ({ key: plan.region.key === 'reef' ? 'seahorse' : 'boat', x: center(s.wx), y: center(s.wy) + 40, t: 0, flip: s.wx > s.lx }));
+    this.home.boats = plan.spawns.map(s => ({ key: plan.region.key === 'reef' ? 'seahorse' : 'boat', x: center(s.wx), y: center(s.wy) + (plan.region.key === 'reef' ? 30 : 46), t: 0, flip: s.wx > s.lx }));
   }
   startRaid(plan, opts = {}) {
     this.pendingRaid = null; this.raidWarned = false;
@@ -984,26 +1008,25 @@ export class Realm {
     const seed = bounty ? hashStr('bounty' + todayStr()) : hashStr('isle' + n + 'x' + S.seed);
     const region = bounty ? REGIONS[seed % REGIONS.length] : info.region;
     const level = bounty ? Math.max(2, info.level + 1) : info.level;
-    const map = generateIsland({ w: 40, h: 30, seed, plateaus: 5, flatColor: region.flat, highColor: region.high, bias: 0.05 });
+    const map = generateIsland({ w: 40, h: 30, seed, plateaus: 5, highs: 2, colors: region.colors, landFrac: 0.55 });
     const sc = new Scene(this, 'expedition', map, seed);
     sc.islandName = bounty ? 'the Bounty Isle' : info.name; sc.info = info; sc.region = region; sc.level = level; sc.bounty = !!bounty; sc.n = n;
     sc.expLoot = 0;
     const r = rng(seed + 5);
-    // landing on the west shore
+    // landing on the west shore, boat floating clear of the coast
     const reach0 = [];
     for (let y = 2; y < map.h - 2; y++) for (let x = 2; x < map.w - 2; x++) if (map.kindAt(x, y) === K_LOW) reach0.push([x, y]);
-    reach0.sort((a, b) => a[0] - b[0]);
-    let land = null;
-    for (const [x, y] of reach0.slice(0, 60)) { if (map.kindAt(x - 1, y) === K_WATER && map.walkable(x + 1, y)) { land = [x, y]; break; } }
-    land = land || reach0[0];
-    sc.boats.push({ key: 'boat', x: center(land[0] - 1) - 10, y: center(land[1]) + 40, t: 0, flip: false });
+    const spots = boatSpots(map, null).filter(b => b.dx === -1);
+    const spot = (spots.length ? spots : boatSpots(map, null)).sort((a, b) => a.lx - b.lx)[0];
+    const land = spot ? [spot.lx, spot.ly] : reach0[0];
+    if (spot) sc.boats.push({ key: 'boat', x: center(spot.wx), y: center(spot.wy) + 46, t: 0, flip: spot.dx < 0 });
     const re = reachable(map, land[0], land[1]);
     // camps
     const nCamps = Math.min(5, 2 + Math.floor(level / 4));
     const camps = [];
-    const spots = reach0.filter(([x, y]) => re[map.i(x, y)] && dist(x, y, land[0], land[1]) > 9);
+    const campSpots = reach0.filter(([x, y]) => re[map.i(x, y)] && dist(x, y, land[0], land[1]) > 9);
     for (let k = 0; k < 400 && camps.length < nCamps; k++) {
-      const [x, y] = spots[Math.floor(r() * spots.length)] || [];
+      const [x, y] = campSpots[Math.floor(r() * campSpots.length)] || [];
       if (x == null) break;
       if (camps.some(c => dist(c[0], c[1], x, y) < 8)) continue;
       camps.push([x, y]);

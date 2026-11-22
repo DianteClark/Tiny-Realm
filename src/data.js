@@ -111,11 +111,11 @@ export const RELICS = {
 
 // ---------- expedition regions ----------
 export const REGIONS = [
-  { key: 'goblin', name: 'Goblin Shore', flat: 4, high: 2, enemies: ['torchgoblin', 'speargoblin', 'torchgoblin', 'pigrider'], camp: 'goblinHut', boss: 'bear', bossRelic: 'bearpelt' },
-  { key: 'gnome', name: 'Gnome Woods', flat: 3, high: 2, enemies: ['gnome', 'slinggnome', 'gnome', 'gnoll'], camp: 'gnomeHut', camp2: 'gnomeTower', boss: 'panda', bossRelic: 'pandabelt' },
-  { key: 'badlands', name: 'Gnoll Badlands', flat: 4, high: 1, enemies: ['gnoll', 'lizard', 'snake', 'spider'], camp: 'cave', boss: 'minotaur', bossRelic: 'minotaurhorn' },
-  { key: 'reef', name: 'Shark Reef', flat: 5, high: 3, enemies: ['paddleshark', 'harpoonshark', 'bombfish', 'paddleshark'], camp: 'fishHut', camp2: 'pirateTower', boss: 'turtle', bossRelic: 'turtleshell' },
-  { key: 'crypt', name: 'Skull Crypts', flat: 2, high: 5, enemies: ['skull', 'bat', 'imp', 'skull', 'shaman'], camp: 'skullSpike', camp2: 'deadTree', boss: 'troll', bossRelic: 'trolltusk' },
+  { key: 'goblin', name: 'Goblin Shore', colors: [4, 2, 3], enemies: ['torchgoblin', 'speargoblin', 'torchgoblin', 'pigrider'], camp: 'goblinHut', boss: 'bear', bossRelic: 'bearpelt' },
+  { key: 'gnome', name: 'Gnome Woods', colors: [3, 2, 1], enemies: ['gnome', 'slinggnome', 'gnome', 'gnoll'], camp: 'gnomeHut', camp2: 'gnomeTower', boss: 'panda', bossRelic: 'pandabelt' },
+  { key: 'badlands', name: 'Gnoll Badlands', colors: [4, 1, 2], enemies: ['gnoll', 'lizard', 'snake', 'spider'], camp: 'cave', boss: 'minotaur', bossRelic: 'minotaurhorn' },
+  { key: 'reef', name: 'Shark Reef', colors: [5, 3, 1], enemies: ['paddleshark', 'harpoonshark', 'bombfish', 'paddleshark'], camp: 'fishHut', camp2: 'pirateTower', boss: 'turtle', bossRelic: 'turtleshell' },
+  { key: 'crypt', name: 'Skull Crypts', colors: [2, 5, 4], enemies: ['skull', 'bat', 'imp', 'skull', 'shaman'], camp: 'skullSpike', camp2: 'deadTree', boss: 'troll', bossRelic: 'trolltusk' },
 ];
 
 export const CAMP_STRUCTS = {
