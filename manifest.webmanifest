@@ -1,0 +1,12 @@
+{
+  "name": "Tiny Realm",
+  "short_name": "Tiny Realm",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#47aba9",
+  "theme_color": "#47aba9",
+  "icons": [
+    { "src": "assets/warfare/King/King%20Avatar/King_Avatar_01.png", "sizes": "256x256", "type": "image/png" }
+  ]
+}

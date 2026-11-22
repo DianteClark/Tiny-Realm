@@ -270,7 +270,7 @@ export class EventDirector {
     while (traits.length < 2) { const t = pick(COMMON_TRAITS); if (!traits.includes(t)) traits.push(t); }
     const price = Math.round((UNITS[type].cost.gold || 30) * 2 + level * 30);
     const name = pick(FIRST_NAMES) + ' ' + pick(EPITHETS);
-    R.ui.choice('A wandering mercenary', `${name}, a level ${level} ${UNITS[type].name} (${traits.map(t => TRAITS[t].name).join(', ')}), offers their sword for ${price} gold.`, [
+    R.ui.choice('A wandering mercenary', `${name}, a level ${level} ${UNITS[type].name} (${traits.map(t => TRAITS[t].name).join(', ')}), offers to join your realm for ${price} gold.`, [
       { label: `Hire for ${price} gold`, fn: () => {
         if (R.popUsed() + UNITS[type].pop > R.popCap()) return R.ui.toast('No room. Build more Houses.', 'red');
         if (!R.pay({ gold: price })) return R.ui.toast('Not enough gold.', 'red');

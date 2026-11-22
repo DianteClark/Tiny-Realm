@@ -52,6 +52,9 @@ export class Realm {
     this.state.stats = Object.assign(freshState().stats, this.state.stats || {});
     this.state.timers = Object.assign(freshState().timers, this.state.timers || {});
     this.state.daily = Object.assign(freshState().daily, this.state.daily || {});
+    // a voyage interrupted by closing the app counts as a retreat
+    for (const rec of this.state.soldiers) if (rec.status === 'away') { rec.status = 'home'; rec.post = null; }
+    if (this.state.timers.raid < 60) this.state.timers.raid = 60;
     this.buildHome();
     const away = fresh ? 0 : this.applyOffline();
     this.scene = this.home;
@@ -594,7 +597,7 @@ export class Realm {
     const mult = 1 + Math.min(D.streak - 1, 6) * 0.25;
     const base = 40 + this.state.tier * 40;
     const gift = { gold: Math.round(base * mult), wood: Math.round(base * mult), meat: Math.round(base * 0.8 * mult) };
-    this.addAll(gift);
+    for (const k in gift) gift[k] = this.addRes(k, gift[k]);
     this.pendingDaily = { streak: D.streak, gift };
   }
 
@@ -697,6 +700,7 @@ export class Realm {
   }
   startRaid(plan, opts = {}) {
     this.pendingRaid = null; this.raidWarned = false;
+    this.state.timers.raid = 480 + Math.random() * 360;
     if (!this.home.boats.length && plan.spawns[0] && !plan.spawns[0].ground) this.showBoat(plan);
     this.raid = { id: Math.random(), active: true, t: 0, spawnT: 0, queue: plan.queue.slice(), units: [], spawns: plan.spawns, level: plan.level, kind: plan.kind, gap: plan.gap, onEnd: opts.onEnd, title: opts.title || 'Raid', loot: 0, region: plan.region };
     if (!opts.silent) this.ui.banner(opts.title || 'To arms!', opts.text || 'Raiders are landing. Pawns are taking shelter in the castle.', 'red');

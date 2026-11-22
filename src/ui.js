@@ -168,6 +168,7 @@ export class UI {
     $('#bottombar').classList.toggle('hidden', exp);
     $('#squadbar').classList.toggle('hidden', !exp);
     $('#exphud').classList.toggle('hidden', !exp);
+    $('#subbar').classList.toggle('hidden', exp);
     $('#selbar').classList.add('hidden');
     this.view.focusScene();
     if (exp) this.renderSquad(true);

@@ -753,7 +753,7 @@ export class Scene {
     }
     ctx.globalAlpha = 1;
     // clouds
-    for (const c of this.clouds) if (vis(c.x, c.y)) drawSprite(ctx, c.k, c.x, c.y, 0, { alpha: 0.75 });
+    for (const c of this.clouds) if (vis(c.x, c.y)) drawSprite(ctx, c.k, c.x, c.y, 0, { alpha: 0.55 });
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (this.tint > 0) { ctx.fillStyle = `rgba(70,10,40,${0.32 * this.tint})`; ctx.fillRect(0, 0, vw, vh); }
   }

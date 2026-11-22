@@ -27,7 +27,7 @@ const view = {
   focusScene() {
     const sc = realm.scene;
     if (sc === realm.home) this.centerOn(realm.castle.x, realm.castle.y + 40);
-    else { const u = sc.units.find(u => u.team === 0); if (u) this.centerOn(u.x + 120, u.y); }
+    else { const u = sc.units.find(u => u.team === 0); if (u) this.centerOn(u.x + Math.min(160, vw / cam.z * 0.22), u.y); }
   },
 };
 
@@ -123,6 +123,7 @@ function drawGhost() {
 let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (!realm.state) return; // wiped, reload pending
   realm.update(dt);
   ui.frame(dt);
   const zc = { x: cam.x, y: cam.y, z: cam.z * dpr };
