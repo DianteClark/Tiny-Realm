@@ -285,3 +285,6 @@ body.exp #abilitybar { bottom: calc(var(--safe-bot) + 124px); }
 #modalBody { overflow-y: auto; min-height: 0; flex: 1 1 auto; overscroll-behavior: contain; }
 #modalBtns { flex: none; }
 .rank { display: inline-block; padding: 0 5px; margin-right: 2px; font-size: 12px; color: #3a2a10; background: #f2c14e; border-radius: 4px; vertical-align: 2px; }
+.decree .good { color: #4f8f3a; } .card:not(.light).decree .good { color: #9be37b; }
+.decree .bad { color: #b3362f; } .card:not(.light).decree .bad { color: #ff9d93; }
+.other-laws { margin: 0 0 6px; font-size: 13px; } .other-laws summary { cursor: pointer; text-align: center; opacity: .8; margin-bottom: 6px; }

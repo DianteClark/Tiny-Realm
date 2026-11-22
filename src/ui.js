@@ -12,6 +12,7 @@ import * as Gear from './gear.js';
 import { NEEDS, MOODS, EXCHANGE } from './needs.js';
 import { CHAPTERS, nextChapter, chapterOpen, chapterState } from './campaign.js';
 import { ports } from './trade.js';
+import { DECREES } from './decrees.js';
 
 export const VERSION = '3.4';
 
@@ -236,6 +237,7 @@ export class UI {
     if (R.home.goldRush > 0) N.push(['rush', 'gold', 'ic-gold', `Gold Rush ${time(R.home.goldRush)}`]);
     if (S.upgradeEnd) N.push(['upgrade', 'blue', 'ic-hammer', `Castle grows ${time((S.upgradeEnd - Date.now()) / 1000)}`]);
     if (!R.exp && S.orders) { const o = S.orders.list, d = o.filter(x => x.done).length; if (d < o.length) N.push(['orders', S.orders.kind === 'night' ? 'purple' : 'gold', 'ic-sword', `${S.orders.kind === 'night' ? 'Night' : 'Day'} orders ${d}/${o.length}`]); }
+    if (!R.exp && !R.decrees.D.pick) N.push(['decree', 'purple', 'ic-info', 'Choose this week\'s royal decree']);
     if (!R.exp && R.needs.get().mood.key === 'unhappy') N.push(['mood', 'red', 'ic-pawn', 'Your people are unhappy']);
     if (!R.exp && R.chal.C.day && !R.chal.C.day.done) { const c = R.chal.C.day; N.push(['chal', 'gold', 'ic-shield', `Daily: ${c.text}${c.n > 1 ? ` ${Math.floor(c.have)}/${c.n}` : ''}`]); }
     if (!R.exp) { const q = R.currentQuest(); N.push(['quest', 'blue', 'ic-info', `${q.text} ${Math.min(R.questValue(q.type), q.n)}/${q.n}`]); }
@@ -263,6 +265,7 @@ export class UI {
     if (k === 'merchant') this.openPanel('merchant');
     else if (k === 'quest' || k === 'orders' || k === 'chal') this.openPanel('chronicle');
     else if (k === 'mood') this.openPanel('workers');
+    else if (k === 'decree') this.openPanel('chronicle');
     else if (k === 'market') this.openPanel('nightmarket');
     else if (k === 'holiday') { const h = R.holiday(); if (h) this.banner(h.name, (h.verse ? h.verse + ' ' : '') + h.desc, h.colour || 'gold'); }
     else if (k === 'env') { const e = R.env; this.toast(`${e.season.name}: ${e.season.desc}${e.weather !== 'clear' ? ' ' + e.w.name + ': ' + e.w.desc : ''}`); }
@@ -788,7 +791,7 @@ export class UI {
     const relicsOwned = Object.values(S.relics).filter(Boolean).length;
     const O = S.orders;
     const orders = O ? `<p class="section-title">${O.kind === 'night' ? 'Night orders' : 'Day orders'} <span class="muted">(new ones at ${O.kind === 'night' ? 'dawn' : 'dusk'})</span></p>` + O.list.map(o => `<div class="card ${o.done ? '' : 'light'}"><i class="ic ${o.done ? 'ic-shield' : 'ic-sword'}"></i><div class="grow"><h3>${esc(o.text)}</h3><p>${o.done ? 'Done.' : `${Math.floor(o.have || 0)} / ${o.n}`}</p>${o.done ? '' : `<div class="xpbar"><i style="width:${Math.min(100, (o.have || 0) / o.n * 100)}%"></i></div>`}${this.costHtml(o.reward).replace(/lack/g, '')}</div></div>`).join('') : '';
-    return this.chalHtml() + orders + `<p class="section-title">Chronicle</p><div class="card"><i class="ic ic-info" style="width:40px;height:40px"></i><div class="grow"><h3>${esc(q.text)}</h3><p>${Math.min(v, q.n)} / ${q.n}</p><div class="xpbar"><i style="width:${pct}%"></i></div>
+    return this.decreeHtml() + this.chalHtml() + orders + `<p class="section-title">Chronicle</p><div class="card"><i class="ic ic-info" style="width:40px;height:40px"></i><div class="grow"><h3>${esc(q.text)}</h3><p>${Math.min(v, q.n)} / ${q.n}</p><div class="xpbar"><i style="width:${pct}%"></i></div>
       <p style="margin-top:4px">Reward</p>${this.costHtml(q.reward).replace(/lack/g, '')}</div></div>
       ${(() => { const nx = nextChapter(S); if (nx < 0) return '<p class="section-title">The Drowned Crown</p><div class="card"><div class="grow"><p>Complete. The crown of the Sea Kings is yours.</p></div></div>'; const ch = CHAPTERS[nx];
         return `<p class="section-title">The Drowned Crown</p><div class="card light"><div class="grow"><h3>Chapter ${nx + 1}: ${esc(ch.name)}</h3><p>${chapterOpen(S, nx) ? 'Ready. Find it along the bottom of the sea chart in Voyage.' : `Clear ${ch.need} frontier islands to reach it (${S.cleared} so far).`}</p><div class="xpbar"><i style="width:${nx / CHAPTERS.length * 100}%"></i></div></div></div>`; })()}
@@ -798,6 +801,12 @@ export class UI {
       <div class="card light"><div class="grow"><p>Relics found: ${relicsOwned} of ${Object.keys(RELICS).length}. Great events like the Troll Breakout hold the rarest.</p></div></div>`;
   }
 
+  decreeHtml() {
+    const R = this.R, D = R.decrees.D, a = R.decrees.active();
+    const opt = k => { const d = DECREES[k], on = D.pick === k; return `<div class="card ${on ? '' : 'light'} decree"><div class="grow"><h3>${on ? '<span class="rank">In force</span> ' : ''}${d.name}</h3><p class="good">${d.good}.</p><p class="bad">${d.bad}.</p></div>
+      ${on ? '' : `<button class="btn small" data-act="decree:${k}" ${D.pick && D.changed ? 'disabled' : ''}>${D.pick ? 'Change' : 'Decree'}</button>`}</div>`; };
+    return `<p class="section-title">Royal decree <span class="muted">(new laws on Monday)</span></p>` + (a ? opt(D.pick) + `<details class="other-laws"><summary>Other laws before the council${D.changed ? '' : `, change once for ${R.decrees.changeCost().gold} gold`}</summary>${D.offers.filter(k => k !== D.pick).map(opt).join('')}</details>` : `<p style="text-align:center;font-size:13px">Choose one law for this week. Every law has a price.</p>` + D.offers.map(opt).join(''));
+  }
   chalHtml() {
     const R = this.R, C = R.chal.C; if (!C.day) return '';
     const card = (c, label, sub) => `<div class="card ${c.done ? '' : 'light'} chal"><i class="ic ${c.done ? 'ic-shield' : 'ic-sword'}"></i><div class="grow"><p class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:1px">${label}</p><h3>${esc(c.text)}</h3>
@@ -956,6 +965,7 @@ export class UI {
       return;
     }
     if (k === 'selall') { this.closePanel(); this.selectAll(); return; }
+    if (k === 'decree') { const D = R.decrees.D; if (D.pick && D.pick !== x) return this.confirm('Change the law?', `Replace ${DECREES[D.pick].name} with ${DECREES[x].name} for ${R.decrees.changeCost().gold} gold? You can only change it once this week.`, 'Change', () => { err(R.decrees.choose(x)); this.refresh(); }); err(R.decrees.choose(x)); return this.refresh(); }
     if (k === 'tsend') { err(R.trade.send(a.slice(6))); return this.refresh(); }
     if (k === 'tstop') { R.trade.stop(+x); return this.refresh(); }
     if (k === 'hire') { err(R.hireHero()); return this.refresh(); }

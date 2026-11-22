@@ -14,6 +14,7 @@ import { Challenges } from './challenges.js';
 import { Needs, EXCHANGE } from './needs.js';
 import { CHAPTERS, chapterState } from './campaign.js';
 import { Trade } from './trade.js';
+import { Decrees, DECREES } from './decrees.js';
 import { SHEETS } from './assets.js';
 import { audio } from './audio.js';
 import { Environment } from './env.js';
@@ -64,6 +65,7 @@ export class Realm {
     this.chal = new Challenges(this);
     this.needs = new Needs(this);
     this.trade = new Trade(this);
+    this.decrees = new Decrees(this);
   }
 
   // ------------------------------------------------------------ persistence
@@ -137,6 +139,7 @@ export class Realm {
       castleHp: R.turtleshell ? 0.2 : 0,
     };
     for (const k in P) b[k] = (b[k] || 0) + P[k];
+    if (this.decrees) { const a = this.decrees.active(); if (a) for (const k of ['dmg', 'gather', 'towerDmg', 'xp']) if (a.fx[k]) b[k] = (b[k] || 0) + a.fx[k]; }
     return b;
   }
   get tierDef() { return TIERS[this.state.tier]; }
@@ -735,7 +738,8 @@ export class Realm {
     if (this.countOf(type) >= this.limitFor(type)) return 'Your castle must grow before you can build more of these.';
     if (!this.canPlace(type, cx, cy)) return 'That spot is blocked.';
     if (!this.pay(d.cost)) return 'Not enough resources.';
-    const b = this.home.addBuilding(type, cx, cy, { buildEnd: Date.now() + d.time * 1000, buildTotal: d.time, variant: Math.floor(Math.random() * 3) });
+    const bt = Math.round(d.time * (1 + this.decrees.fx('build')));
+    const b = this.home.addBuilding(type, cx, cy, { buildEnd: Date.now() + bt * 1000, buildTotal: bt, variant: Math.floor(Math.random() * 3) });
     b.hp = b.maxHp; b.pop = 1;
     this.home.fxAt('dust2', b.x, b.y, { scale: 1.6 });
     this.sfx('place'); this.shake(3);
@@ -758,7 +762,7 @@ export class Realm {
     return Object.entries(UNITS).filter(([k, u]) => u.from === b.type).map(([k, u]) => ({ key: k, def: u, locked: u.tier > this.state.tier, block: this.trainBlock(b, k) }));
   }
   queueCap(b) { return b.type === 'castle' ? 5 : levelEffects(b.type, b.level).queue || 5; }
-  trainTime(b, unit) { const e = levelEffects(b.type, b.level); return Math.round(UNITS[unit].time * (e.speed || 1) * (this.needs && this.home ? this.needs.trainMult() : 1)); }
+  trainTime(b, unit) { const e = levelEffects(b.type, b.level); return Math.round(UNITS[unit].time * (e.speed || 1) * (this.needs && this.home ? this.needs.trainMult() : 1) * (1 + this.decrees.fx('train'))); }
   // Why can't this unit be trained right now? null if it can.
   trainBlock(b, unit) {
     const d = UNITS[unit];
@@ -811,7 +815,7 @@ export class Realm {
   upgradeBuilding(b) {
     const block = this.upgradeBlock(b); if (block) return block.msg;
     this.pay(upgradeCost(b.type, b.level));
-    b.upTotal = upgradeTime(b.type, b.level); b.upEnd = Date.now() + b.upTotal * 1000;
+    b.upTotal = Math.round(upgradeTime(b.type, b.level) * (1 + this.decrees.fx('build'))); b.upEnd = Date.now() + b.upTotal * 1000;
     this.home.fxAt('dust2', b.x, b.y, { scale: 1.8 });
     this.sfx('build');
     this.save(); return null;
@@ -1093,7 +1097,7 @@ export class Realm {
       S.rivals[rv.key].raids++;
     }
     const days = (Date.now() - S.created) / 86400000;
-    const budget = opts.budget ?? (3 + S.tier * 2.5 + S.stats.raidsSurvived * 0.7 + Math.min(days, 60) * 0.25 + S.renown * 2);
+    const budget = (opts.budget ?? (3 + S.tier * 2.5 + S.stats.raidsSurvived * 0.7 + Math.min(days, 60) * 0.25 + S.renown * 2)) * (1 + this.decrees.fx('raidSize'));
     const level = 1 + Math.floor(S.stats.raidsSurvived / 4) + (S.tier - 1) + S.renown;
     // landing spots far from the castle
     const far = this.shore.filter(s => dist(s.lx, s.ly, CASTLE.x + 2, CASTLE.y + 1) > 11);
@@ -1143,7 +1147,7 @@ export class Realm {
       S.stats.raidsSurvived++; S.lastRaidWon = Date.now();
       if (this.env.isNight) S.stats.nightRaids = (S.stats.nightRaids || 0) + 1;
       if (this.env.weather === 'storm') S.stats.stormRaids = (S.stats.stormRaids || 0) + 1;
-      const reward = Math.round((R.loot + 20 + R.level * 6) * (this.env.isNight ? 1.5 : 1));
+      const reward = Math.round((R.loot + 20 + R.level * 6) * (this.env.isNight ? 1.5 : 1) * (1 + this.decrees.fx('raidGold')));
       this.addRes('gold', reward);
       this.sfx('victory');
       this.ui.banner(R.kind === 'raid' ? 'Raid repelled' : R.title + ' survived', `The raiders are beaten. You recover ${reward} gold from the field.`, 'blue');

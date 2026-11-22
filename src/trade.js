@@ -54,7 +54,7 @@ export class Trade {
   }
   deliver(slot, mult = 1, quiet) {
     const R = this.R, got = {};
-    for (const k in slot.cargo) got[k] = R.addRes(k, Math.round(slot.cargo[k] * mult));
+    for (const k in slot.cargo) got[k] = R.addRes(k, Math.round(slot.cargo[k] * mult * (1 + R.decrees.fx('trade'))));
     R.state.stats.tradeTrips = (R.state.stats.tradeTrips || 0) + 1;
     if (!quiet) {
       const p = this.port(slot.port), any = Object.values(got).some(v => v > 0);
