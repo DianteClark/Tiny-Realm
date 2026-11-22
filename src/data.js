@@ -264,6 +264,8 @@ for (const r of RIVALS) {
   CAMP_STRUCTS[`${r.key}Castle`] = { name: `${house} Castle`, sprite: `b${r.key}_Castle`, hp: 1600, fw: 5, fh: 2, rival: r.key };
   CAMP_STRUCTS[`${r.key}Tower`] = { name: `${house} Tower`, sprite: `b${r.key}_Tower`, hp: 650, fw: 2, fh: 1, shoots: 'arrow', rival: r.key };
   CAMP_STRUCTS[`${r.key}Barracks`] = { name: `${house} Barracks`, sprite: `b${r.key}_Barracks`, hp: 700, fw: 3, fh: 2, rival: r.key };
+  CAMP_STRUCTS[`${r.key}Wall`] = { name: `${house} Palisade`, sprite: 'fence', hp: 420, fw: 1, fh: 1, rival: r.key, wall: true, palisade: true };
+  CAMP_STRUCTS[`${r.key}Gate`] = { name: `${house} Gate`, sprite: 'fence', hp: 320, fw: 1, fh: 1, rival: r.key, wall: true, palisade: true, gate: true };
   CAMP_STRUCTS[`${r.key}House`] = { name: `${house} House`, sprite: `b${r.key}_House1`, hp: 350, fw: 2, fh: 1, rival: r.key };
 }
 export const rivalDef = k => RIVALS.find(r => r.key === k);

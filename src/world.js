@@ -369,8 +369,8 @@ export class Scene {
   }
   onBuildingDown(b, src) { this.fxAt('explosion1', b.x, b.y - 20, { scale: 1.2 }); this.game.sfx('explosion', b, this); this.game.shake(8, this); this.game.onBuildingDown(this, b, src); }
   onStructDown(s, src) {
-    this.fxAt('explosion2', s.x, s.y - 30, { scale: 1.3 });
-    this.game.sfx('explosion', s, this); this.game.shake(7, this);
+    if (s.def.palisade) { this.fxAt('dust2', s.x, s.y - 10); this.game.sfx('thud', s, this); this.game.shake(3, this); }
+    else { this.fxAt('explosion2', s.x, s.y - 30, { scale: 1.3 }); this.game.sfx('explosion', s, this); this.game.shake(7, this); }
     this.structs = this.structs.filter(o => o !== s); this.placeBlock(s.cells, -1);
     this.game.onStructDown(this, s, src);
   }
@@ -461,6 +461,11 @@ export class Scene {
         if (u.team === 1 && !u.flying && this.walls().size && !(t.def && t.def.wall)) {
           const w = this.game.breachTarget(this, u);
           if (w) { u.target = w; u.pathT = 0; return; }
+        }
+        // attackers storm a walled capital: go for the gate, else the nearest palisade they can reach
+        if (u.team === 0 && !(t.def && t.def.palisade) && this.structs.some(s => s.def.palisade)) {
+          const pal = this.structs.filter(s => s.def.palisade && s.alive).sort((a, b) => (u.distTo(a) - (a.def.gate ? 3 * T : 0)) - (u.distTo(b) - (b.def.gate ? 3 * T : 0)));
+          for (const w of pal.slice(0, 5)) if (u.setPath(w.x, w.y - 10, this.adjacentGoal(w.cells))) { u.target = w; u.pathT = 0.6; return; }
         }
         u.giveUp = 2.5; u.target = null; u.stop(); return;
       }
@@ -818,6 +823,7 @@ export class Scene {
     }
     for (const s of this.structs) {
       if (!vis(s.x, s.y)) continue;
+      if (s.def.palisade) { list.push({ y: s.y - 1, d: () => this.drawWall(ctx, s) }); continue; }
       list.push({ y: s.y, d: () => {
         const opt = { frame: s.def.anim ? undefined : 0, alpha: s.flash > 0 ? 0.7 : 1 };
         drawSprite(ctx, s.def.sprite, s.x, s.y + 4, s.t, opt);
@@ -885,17 +891,20 @@ export class Scene {
   }
   walls() { if (!this.wallMap) this.refreshWalls(); return this.wallMap; }
   wallAt(x, y) { return this.walls().get(x + ',' + y) || null; }
+  palAt(x, y) { return this.structs.find(s => s.def.palisade && s.cx === x && s.cy === y) || null; }
   drawWall(ctx, b) {
     const s = SHEETS.fence; if (!s || !s.img) return;
-    const n = (dx, dy) => !!this.wallAt(b.cx + dx, b.cy + dy);
+    const look = b instanceof Struct ? (x, y) => this.palAt(x, y) : (x, y) => this.wallAt(x, y);
+    const n = (dx, dy) => !!look(b.cx + dx, b.cy + dy);
     const L = n(-1, 0), R = n(1, 0), U = n(0, -1), D = n(0, 1);
     let c = [1, 0];
     if (b.def.gate && b.open) return this.drawGateOpen(ctx, b, L || R);
     if (L && R) c = [1, 0]; else if (U && D) c = [0, 1];
     else if (R && D) c = [0, 0]; else if (L && D) c = [3, 0]; else if (U && R) c = [0, 2]; else if (U && L) c = [3, 2];
     else if (L) c = [1, 2]; else if (R) c = [2, 2]; else if (U || D) c = [0, 1]; else c = [2, 2];
-    ctx.globalAlpha = b.done ? 1 : 0.5;
+    ctx.globalAlpha = b.done === false ? 0.5 : 1;
     ctx.drawImage(s.img, c[0] * T, c[1] * T, T, T, b.cx * T, b.cy * T, T, T);
+    if (b instanceof Struct && b.flash > 0) { ctx.globalAlpha = 0.5; ctx.fillStyle = '#fff'; ctx.fillRect(b.cx * T + 6, b.cy * T + 10, T - 12, T - 20); }
     if (b.def.gate) { ctx.fillStyle = '#8c5a2b'; ctx.fillRect(b.cx * T + 8, b.cy * T + 24, 48, 6); ctx.fillStyle = '#3b2f2a'; ctx.fillRect(b.cx * T + 8, b.cy * T + 30, 48, 2); }
     ctx.globalAlpha = 1;
     if (b.flash > 0) b.flash -= 1 / 60;

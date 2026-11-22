@@ -1186,6 +1186,7 @@ export class Realm {
     this.ui.toast(`Your ${BUILDINGS[b.type].name} is in ruins. Builders can restore it.`, 'red');
   }
   onStructDown(scene, s) {
+    if (s.def.palisade) { if (s.def.gate) { scene.floatText('The gate is broken', s.x, s.y - 60, '#ffe066'); this.ui.toast('The gate is down. Storm the castle.', 'gold'); } return; }
     scene.floatText(s.def.name + ' destroyed', s.x, s.y - 100, '#ffe066');
     if (scene.expLoot !== undefined) scene.expLoot += 25 * s.level;
   }
@@ -1243,8 +1244,13 @@ export class Realm {
     // landing on the west shore, boat floating clear of the coast
     const reach0 = [];
     for (let y = 2; y < map.h - 2; y++) for (let x = 2; x < map.w - 2; x++) if (map.kindAt(x, y) === K_LOW) reach0.push([x, y]);
-    const spots = boatSpots(map, null).filter(b => b.dx === -1);
-    const spot = (spots.length ? spots : boatSpots(map, null)).sort((a, b) => a.lx - b.lx)[0];
+    // land on a shore that connects to most of the island (some coves are cut-off pockets)
+    const allSpots = boatSpots(map, null), size = new Map();
+    const area = s => { const k = s.lx + ',' + s.ly; if (!size.has(k)) { const re0 = reachable(map, s.lx, s.ly); let n = 0; for (const [x, y] of reach0) if (re0[map.i(x, y)]) n++; size.set(k, n); } return size.get(k); };
+    const good = allSpots.filter(s => area(s) >= reach0.length * 0.5);
+    const pool = good.length ? good : allSpots.sort((a, b) => area(b) - area(a)).slice(0, 1);
+    const west = pool.filter(b => b.dx === -1);
+    const spot = (west.length ? west : pool).sort((a, b) => a.lx - b.lx)[0];
     const land = spot ? [spot.lx, spot.ly] : reach0[0];
     if (spot) sc.boats.push({ key: 'boat', x: center(spot.wx), y: center(spot.wy) + 46, t: 0, flip: spot.dx < 0 });
     const re = reachable(map, land[0], land[1]);
@@ -1297,6 +1303,7 @@ export class Realm {
         boss.home = { x: boss.x, y: boss.y }; boss.isBoss = true; sc.boss = boss;
       }
     });
+    if (rivalKey) this.buildSiege(sc, rivalKey, level, land);
     // squad
     const squad = S.soldiers.filter(s => ids.includes(s.id));
     sc.squadTypes = squad.map(s => s.type);
@@ -1312,12 +1319,32 @@ export class Realm {
     this.ui.onSceneChange();
     this.save();
   }
+  // 3.4 sieges: a palisade ring with a gate around a rival's capital, towers at the front corners
+  buildSiege(sc, key, level, land) {
+    const m = sc.map, castle = sc.structs.find(s => s.type === `${key}Castle`); if (!castle) return;
+    const lv = m.level(castle.cx, castle.cy);
+    const x0 = castle.cx - 2, x1 = castle.cx + castle.fw + 1, y0 = castle.cy - 3, y1 = castle.cy + castle.fh + 1;
+    const ring = [];
+    for (let x = x0; x <= x1; x++) { ring.push([x, y0]); ring.push([x, y1]); }
+    for (let y = y0 + 1; y < y1; y++) { ring.push([x0, y]); ring.push([x1, y]); }
+    const ok = (x, y) => m.in(x, y) && m.walkable(x, y) && !m.stairAt(x, y) && m.level(x, y) === lv && !m.block[m.i(x, y)];
+    const cells = ring.filter(([x, y]) => ok(x, y));
+    if (cells.length < 8) return; // no room for a proper wall on this ground
+    // the gate faces the landing
+    const corner = ([x, y]) => (x === x0 || x === x1) && (y === y0 || y === y1);
+    const gate = cells.filter(c => !corner(c)).sort((a, b) => dist(a[0], a[1], land[0], land[1]) - dist(b[0], b[1], land[0], land[1]))[0];
+    for (const [x, y] of cells) sc.addStruct(gate && x === gate[0] && y === gate[1] ? `${key}Gate` : `${key}Wall`, x, y, castle.campId, level);
+    for (const [tx, ty] of [[x0 - 2, y1 - 1], [x1 + 1, y1 - 1]]) if (ok(tx, ty) && ok(tx + 1, ty) && m.walkable(tx, ty + 1)) sc.addStruct(`${key}Tower`, tx, ty, castle.campId, level);
+    // anyone standing where the wall went up steps aside
+    for (const u of sc.units) { const cx = cellOf(u.x), cy = cellOf(u.y); if (m.block[m.i(cx, cy)]) { const c = sc.nearestWalkable(cx, cy, 4); if (c) { u.x = center(c[0]); u.y = center(c[1]) + 8; u.home = { x: u.x, y: u.y }; } } }
+    sc.siege = true;
+  }
   campDef(t) { return CAMP_STRUCTS[t]; }
   expStatus() {
     const sc = this.exp; if (!sc) return null;
     const foes = sc.units.filter(u => u.team === 1 && u.alive).length;
     const squad = sc.units.filter(u => u.team === 0 && u.alive);
-    return { camps: sc.structs.length, foes, squad, name: sc.islandName, region: sc.region.name, level: sc.level, boss: sc.boss };
+    return { camps: sc.structs.filter(s => !s.def.palisade).length, foes, squad, name: sc.islandName, region: sc.region.name, level: sc.level, boss: sc.boss };
   }
   checkExpedition() {
     const st = this.expStatus(); if (!st || this.exp.ended) return;
