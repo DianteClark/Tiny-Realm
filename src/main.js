@@ -144,6 +144,9 @@ function frame(now) {
     const f = Math.pow(0.04, dt); glide.vx *= f; glide.vy *= f;
     if (Math.hypot(glide.vx, glide.vy) < 0.01) glide = null;
   }
+  // camera hook for annexed land (src/annex.js): glide toward realm.cameraTarget {x, y, z?}
+  const ct = realm.cameraTarget;
+  if (ct) { const k = 1 - Math.pow(0.03, dt), c = [cam.x + vw / cam.z / 2, cam.y + vh / cam.z / 2]; if (ct.z) cam.z += (ct.z - cam.z) * k; view.centerOn(c[0] + (ct.x - c[0]) * k, c[1] + (ct.y - c[1]) * k); glide = null; }
   const raidOn = (realm.raid && realm.raid.active) || realm.events.pending || realm.events.active;
   audio.setMood(realm.exp ? 'voyage' : raidOn ? 'battle' : 'home');
   let sx = 0, sy = 0;

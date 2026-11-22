@@ -191,13 +191,13 @@ function plateauOk(m, x, y, L) {
   return m.H(x, y + 2) === L - 1;
 }
 
-function placePlateaus(m, r, L, count, reserved, sizes, coastal = 0) {
+function placePlateaus(m, r, L, count, reserved, sizes, coastal = 0, anchorOk = null) {
   const { w, h } = m;
   let placed = 0, coastPlaced = 0;
   // anchors: cells on level L-1 (for upper levels, inside a lower plateau); coast anchors sit on a shoreline
   const inner = [], coast = [];
   for (let y = 2; y < h - 2; y++) for (let x = 2; x < w - 2; x++) {
-    if (m.H(x, y) !== L - 1) continue;
+    if (m.H(x, y) !== L - 1 || (anchorOk && !anchorOk(x, y))) continue;
     inner.push([x, y]);
     if (L === 1 && m.H(x, y + 1) === -1 && m.H(x - 1, y + 1) === -1 && m.H(x + 1, y + 1) === -1) coast.push([x, y]);
   }
@@ -234,12 +234,13 @@ function placePlateaus(m, r, L, count, reserved, sizes, coastal = 0) {
   return placed;
 }
 
-function settle(m, L) {
+// mask (optional): only cells where mask(x,y) is true may be lowered (annex merges keep old land frozen)
+function settle(m, L, mask = null) {
   // drop any level-L cell that breaks the rules or forms a one-row sliver
   for (let pass = 0; pass < 10; pass++) {
     let ch = false;
     for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) {
-      if (m.H(x, y) !== L) continue;
+      if (m.H(x, y) !== L || (mask && !mask(x, y))) continue;
       const sliver = (m.H(x, y - 1) < L && m.H(x, y + 1) < L) || (m.H(x - 1, y) < L && m.H(x + 1, y) < L);
       if (sliver || !plateauOk(m, x, y, L)) { m.height[m.i(x, y)] = L - 1; ch = true; }
     }
@@ -269,10 +270,11 @@ function stairCands(m, cells, L, okLanding) {
 function putStair(m, [sx, sy, side], L) {
   for (const [yy, v] of [[sy, 1], [sy + 1, 2]]) { const i = m.i(sx, yy); m.stair[i] = v; m.stairSide[i] = side; m.stairLvl[i] = L; }
 }
-function placeStairs(m, r, L) {
+function placeStairs(m, r, L, mask = null) {
   const plats = components(m, (x, y) => m.H(x, y) >= L);
   for (const p of plats) {
-    const cands = stairCands(m, p, L);
+    if (mask && !p.every(([x, y]) => mask(x, y))) continue;
+    const cands = stairCands(m, p, L).filter(c => !mask || (mask(c[0], c[1]) && mask(c[0], c[1] + 1) && mask(c[0], c[1] + 2)));
     if (!cands.length) { for (const [x, y] of p) if (m.H(x, y) >= L) m.height[m.i(x, y)] = L - 1; continue; }
     const n = Math.min(cands.length, p.length > 16 ? 2 : 1);
     const used = [];
@@ -297,19 +299,20 @@ function cleanStairs(m) {
   }
 }
 // Every plateau must be reachable from the start cell: add a stair that lands on reachable ground, or flatten it.
-function ensureConnected(m, r, start) {
+// mask (optional): only plateaus inside the mask are checked, given stairs or flattened.
+function ensureConnected(m, r, start, mask = null) {
   for (let pass = 0; pass < 40; pass++) {
     m.computeKinds();
     const re = reachable(m, start[0], start[1]);
     let bad = null;
-    for (let y = 0; y < m.h && !bad; y++) for (let x = 0; x < m.w && !bad; x++) if (m.ground(x, y) && m.H(x, y) >= 1 && !re[m.i(x, y)] && !m.stairAt(x, y)) bad = [x, y];
+    for (let y = 0; y < m.h && !bad; y++) for (let x = 0; x < m.w && !bad; x++) if (m.ground(x, y) && m.H(x, y) >= 1 && !re[m.i(x, y)] && !m.stairAt(x, y) && (!mask || mask(x, y))) bad = [x, y];
     if (!bad) return;
     const L = m.H(bad[0], bad[1]);
     const comp = components(m, (x, y) => m.H(x, y) >= L).find(c => c.some(([x, y]) => x === bad[0] && y === bad[1]));
-    const cands = stairCands(m, comp, L, (x, y) => re[m.i(x, y)] === 1);
+    const cands = stairCands(m, comp, L, (x, y) => re[m.i(x, y)] === 1).filter(c => !mask || (mask(c[0], c[1]) && mask(c[0], c[1] + 1)));
     if (cands.length) { putStair(m, r.pick(cands), L); continue; }
-    for (const [x, y] of comp) if (m.H(x, y) >= L) m.height[m.i(x, y)] = L - 1;
-    settle(m, L - 1 || 1);
+    for (const [x, y] of comp) if (m.H(x, y) >= L && (!mask || mask(x, y))) m.height[m.i(x, y)] = L - 1;
+    settle(m, L - 1 || 1, mask);
     cleanStairs(m);
   }
 }
@@ -383,16 +386,22 @@ function tileFor(L, R, U, D) {
 }
 
 // Static terrain to an offscreen canvas, layer by layer as the guide describes.
-export function renderTerrain(m) {
+export function renderTerrain(m) { return renderTerrainRect(m, 0, 0, m.w, m.h); }
+
+// Renders cells [x0,x0+w) x [y0,y0+h) into a w*T x h*T canvas. Neighbouring cells within
+// 2 tiles are drawn too (clipped), so chunks are pixel-identical to a full-map render.
+export function renderTerrainRect(m, x0, y0, w, h) {
   const cv = document.createElement('canvas');
-  cv.width = m.w * T; cv.height = m.h * T;
+  cv.width = w * T; cv.height = h * T;
   const c = cv.getContext('2d');
   c.imageSmoothingEnabled = false;
+  c.translate(-x0 * T, -y0 * T);
+  const ax = Math.max(0, x0 - 2), ay = Math.max(0, y0 - 2), bx = Math.min(m.w, x0 + w + 2), by = Math.min(m.h, y0 + h + 2);
   const sheet = lvl => SHEETS['tiles' + m.colors[Math.min(lvl, m.colors.length - 1)]].img;
   const tile = (img, col, row, x, y) => c.drawImage(img, col * T, row * T, T, T, x * T, y * T, T, T);
   // Flat Ground
   const flat = sheet(0);
-  for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) {
+  for (let y = ay; y < by; y++) for (let x = ax; x < bx; x++) {
     if (!m.isLand(x, y)) continue;
     const [col, row] = tileFor(m.isLand(x - 1, y), m.isLand(x + 1, y), m.isLand(x, y - 1), m.isLand(x, y + 1));
     tile(flat, col, row, x, y);
@@ -400,12 +409,12 @@ export function renderTerrain(m) {
   // Shadow + Elevated Ground for each level
   for (let L = 1; L <= MAX_LEVEL; L++) {
     const img = sheet(L);
-    for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) if (m.H(x, y) >= L) drawSprite(c, 'shadow', x * T + 32, y * T + 32 + 64, 0);
+    for (let y = ay; y < by; y++) for (let x = ax; x < bx; x++) if (m.H(x, y) >= L) drawSprite(c, 'shadow', x * T + 32, y * T + 32 + 64, 0);
     const up = (x, y) => m.H(x, y) >= L;
     const hiConn = (x, y) => up(x, y) || (m.stairAt(x, y) === 1 && m.stairLvl[m.i(x, y)] === L);
     const isCl = (x, y) => m.cliffLevel(x, y) === L;
     const cliffConn = (x, y) => isCl(x, y) || (m.stairAt(x, y) === 2 && m.stairLvl[m.i(x, y)] === L);
-    for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) {
+    for (let y = ay; y < by; y++) for (let x = ax; x < bx; x++) {
       if (up(x, y)) {
         const [col, row] = tileFor(hiConn(x - 1, y), hiConn(x + 1, y), up(x, y - 1), up(x, y + 1));
         tile(img, 5 + col, row, x, y);
@@ -421,6 +430,64 @@ export function renderTerrain(m) {
     }
   }
   return cv;
+}
+
+// Terrain split into CHUNK x CHUNK tile canvases (one big canvas would break iOS Safari's
+// ~16.7 MP limit on a 96x72 map). Chunks render lazily on first draw; chunks of open sea
+// get no canvas at all. invalidate() marks the chunks around changed cells for a redraw.
+export const CHUNK = 16;
+export class TerrainChunks {
+  constructor(m, size = CHUNK) {
+    this.m = m; this.size = size;
+    this.cols = Math.ceil(m.w / size); this.rows = Math.ceil(m.h / size);
+    this.cv = new Array(this.cols * this.rows).fill(undefined); // undefined = not rendered, null = empty sea
+    this.renders = 0;
+  }
+  get width() { return this.m.w * T; }
+  get height() { return this.m.h * T; }
+  rect(k) {
+    const S = this.size, x = (k % this.cols) * S, y = Math.floor(k / this.cols) * S;
+    return { x, y, w: Math.min(S, this.m.w - x), h: Math.min(S, this.m.h - y) };
+  }
+  build(k, m = this.m) {
+    const R = this.rect(k);
+    let any = false;
+    for (let y = Math.max(0, R.y - 2); y < Math.min(m.h, R.y + R.h + 2) && !any; y++) for (let x = Math.max(0, R.x - 2); x < Math.min(m.w, R.x + R.w + 2); x++) if (m.land[m.i(x, y)] || m.cliffLevel(x, y)) { any = true; break; }
+    this.renders++;
+    return any ? renderTerrainRect(m, R.x, R.y, R.w, R.h) : null;
+  }
+  // chunk indices touched by cells [x0..x1]x[y0..y1] (inclusive), padded by the 2-tile sprite reach
+  keysFor(x0, y0, x1, y1) {
+    const S = this.size, out = [];
+    const c0 = Math.max(0, Math.floor((x0 - 2) / S)), c1 = Math.min(this.cols - 1, Math.floor((x1 + 2) / S));
+    const r0 = Math.max(0, Math.floor((y0 - 2) / S)), r1 = Math.min(this.rows - 1, Math.floor((y1 + 2) / S));
+    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) out.push(r * this.cols + c);
+    return out;
+  }
+  free(k) { const c = this.cv[k]; if (c) { c.width = 0; c.height = 0; } this.cv[k] = undefined; }
+  invalidate(x0 = 0, y0 = 0, x1 = this.m.w - 1, y1 = this.m.h - 1) { for (const k of this.keysFor(x0, y0, x1, y1)) this.free(k); }
+  // render the given cells' chunks from another map of the same size (e.g. a merge preview), to adopt() later
+  prepare(m, x0, y0, x1, y1) { const out = new Map(); for (const k of this.keysFor(x0, y0, x1, y1)) out.set(k, this.build(k, m)); return out; }
+  adopt(prepared) { for (const [k, c] of prepared) { this.free(k); this.cv[k] = c; } }
+  get(k) { if (this.cv[k] === undefined) this.cv[k] = this.build(k); return this.cv[k]; }
+  // Draws the chunks overlapping world rect [wx0,wx1)x[wy0,wy1). Each chunk is placed on whole
+  // device pixels so neighbours share exact edges at any zoom (no hairline seams).
+  draw(ctx, cam, wx0, wy0, wx1, wy1) {
+    const P = this.size * T, z = cam.z;
+    const c0 = Math.max(0, Math.floor(wx0 / P)), c1 = Math.min(this.cols - 1, Math.floor(wx1 / P));
+    const r0 = Math.max(0, Math.floor(wy0 / P)), r1 = Math.min(this.rows - 1, Math.floor(wy1 / P));
+    if (c1 < c0 || r1 < r0) return;
+    const tx = Math.round(-cam.x * z), ty = Math.round(-cam.y * z);
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
+      const cv = this.get(r * this.cols + c); if (!cv) continue;
+      const px = c * P, py = r * P;
+      const dx0 = Math.round(px * z) + tx, dy0 = Math.round(py * z) + ty;
+      const dx1 = Math.round((px + cv.width) * z) + tx, dy1 = Math.round((py + cv.height) * z) + ty;
+      ctx.drawImage(cv, 0, 0, cv.width, cv.height, dx0, dy0, dx1 - dx0, dy1 - dy0);
+    }
+    ctx.restore();
+  }
 }
 
 // Water Foam goes under every tile that touches the water, including water cliffs.
@@ -501,4 +568,359 @@ export function reachable(m, sx, sy) {
     }
   }
   return seen;
+}
+
+// ---------- map copies (annex merges work on a copy, then swap it in) ----------
+
+export function cloneMap(m) {
+  const c = new TerrainMap(m.w, m.h);
+  copyTerrain(c, m);
+  return c;
+}
+// copy the terrain (not the live block counts) from src into dst (same size)
+export function copyTerrain(dst, src) {
+  dst.land.set(src.land); dst.height.set(src.height); dst.stair.set(src.stair);
+  dst.stairSide.set(src.stairSide); dst.stairLvl.set(src.stairLvl);
+  dst.colors = src.colors.slice();
+  dst.decor = src.decor.map(d => ({ ...d }));
+  dst.computeKinds();
+}
+// place map src at (ox,oy) inside a new w x h sea
+export function embedMap(src, w, h, ox, oy) {
+  const m = new TerrainMap(w, h);
+  m.colors = src.colors.slice();
+  for (let y = 0; y < src.h; y++) for (let x = 0; x < src.w; x++) {
+    const a = src.i(x, y), b = m.i(x + ox, y + oy);
+    m.land[b] = src.land[a]; m.height[b] = src.height[a]; m.stair[b] = src.stair[a];
+    m.stairSide[b] = src.stairSide[a]; m.stairLvl[b] = src.stairLvl[a];
+  }
+  m.decor = src.decor.map(d => ({ ...d, x: d.x + ox, y: d.y + oy }));
+  m.computeKinds();
+  return m;
+}
+
+// ---------- annexed land ----------
+// An annex is a chunk of new land that attaches to the current coastline. Placement
+// (annexSlot) finds a rect of open sea beside the coast; mergeAnnex grows chunky land in
+// it, bridges and smooths the seam, then re-runs the island rules on the new cells only.
+// Old land is never removed and its heights never change, so anything standing on it stays
+// on the same ground.
+
+export const ANNEX_DIRS = { N: [0, -1], E: [1, 0], S: [0, 1], W: [-1, 0], NE: [1, -1], SE: [1, 1], SW: [-1, 1], NW: [-1, -1] };
+export const ANNEX_SIDES = Object.keys(ANNEX_DIRS);
+const EDGE = 4; // annex rects keep this many tiles of open sea to the world edge
+
+function landBox(m) {
+  let x0 = m.w, y0 = m.h, x1 = -1, y1 = -1;
+  for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) if (m.land[m.i(x, y)]) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  return x1 < 0 ? null : { x0, y0, x1, y1 };
+}
+function rectTouchesLand(m, rx, ry, w, h, pad) {
+  for (let y = ry - pad; y < ry + h + pad; y++) for (let x = rx - pad; x < rx + w + pad; x++) if (m.isLand(x, y) || (m.in(x, y) && m.cliffLevel(x, y))) return true;
+  return false;
+}
+
+// Rect of open sea for a w x h chunk on the given side, `offset` tiles along the coast, or null.
+// The rect slides out from the island along one axis until it clears the coast by one tile.
+// Corners slide along both axes and keep whichever slot sits closer.
+export function annexSlot(m, side, w, h, offset = 0) {
+  const d = ANNEX_DIRS[side]; if (!d) return null;
+  const B = landBox(m); if (!B) return null;
+  const cx = (B.x0 + B.x1 + 1) / 2, cy = (B.y0 + B.y1 + 1) / 2;
+  const tries = [];
+  if (d[0] && d[1]) {
+    // corner: hang half over the bbox corner, then slide out along x or along y
+    const hy = (d[1] < 0 ? B.y0 - h / 2 : B.y1 + 1 - h / 2) + offset, hx = (d[0] < 0 ? B.x0 - w / 2 : B.x1 + 1 - w / 2) + offset;
+    tries.push({ ax: [d[0], 0], sx: cx - w / 2, sy: hy });
+    tries.push({ ax: [0, d[1]], sx: hx, sy: cy - h / 2 });
+  } else if (d[0]) tries.push({ ax: d, sx: cx - w / 2, sy: cy - h / 2 + offset });
+  else tries.push({ ax: d, sx: cx - w / 2 + offset, sy: cy - h / 2 });
+  const kx = d[0] < 0 ? B.x0 : d[0] > 0 ? B.x1 + 1 : cx, ky = d[1] < 0 ? B.y0 : d[1] > 0 ? B.y1 + 1 : cy;
+  let best = null;
+  for (const t of tries) {
+    let rx = Math.round(t.sx), ry = Math.round(t.sy), steps = 0;
+    while (rectTouchesLand(m, rx, ry, w, h, 1) && steps < 200) { rx += t.ax[0]; ry += t.ax[1]; steps++; }
+    if (rx < EDGE || ry < EDGE || rx + w > m.w - EDGE || ry + h > m.h - EDGE) continue;
+    if (!rectTouchesLand(m, rx, ry, w, h, 2)) continue; // must actually sit against the coast
+    const score = Math.hypot(rx + w / 2 - kx, ry + h / 2 - ky);
+    if (!best || score < best.score) best = { x: rx, y: ry, w, h, score };
+  }
+  if (!best) return null;
+  delete best.score;
+  return best;
+}
+
+// Chunky land inside a w x h chunk, flush with the sides that face the island.
+function chunkLand(w, h, r, face) {
+  const L = new Uint8Array(w * h);
+  const inL = face[0] < 0 ? 0 : 1, inR = face[0] > 0 ? 0 : 1, inT = face[1] < 0 ? 0 : 1, inB = face[1] > 0 ? 0 : 1;
+  const ok = (x, y) => x >= inL && y >= inT && x < w - inR && y < h - inB;
+  const fill = (x0, y0, rw, rh) => { for (let y = y0; y < y0 + rh; y++) for (let x = x0; x < x0 + rw; x++) if (ok(x, y)) L[y * w + x] = 1; };
+  const cw = Math.round(w * (0.55 + r() * 0.2)), ch = Math.round(h * (0.55 + r() * 0.2));
+  const cx0 = face[0] < 0 ? 0 : face[0] > 0 ? w - cw : Math.round((w - cw) / 2 + r.int(-1, 1));
+  const cy0 = face[1] < 0 ? 0 : face[1] > 0 ? h - ch : Math.round((h - ch) / 2 + r.int(-1, 1));
+  fill(cx0, cy0, cw, ch);
+  const target = Math.floor(w * h * (0.58 + r() * 0.12));
+  const area = () => L.reduce((a, v) => a + v, 0);
+  for (let k = 0; k < 200 && area() < target; k++) {
+    const rw = r.int(3, Math.max(4, Math.round(w * 0.5))), rh = r.int(3, Math.max(3, Math.round(h * 0.5)));
+    let ax = 0, ay = 0, hit = false;
+    for (let t = 0; t < 30 && !hit; t++) { ax = r.int(0, w - 1); ay = r.int(0, h - 1); hit = L[ay * w + ax] === 1; }
+    if (!hit) continue;
+    fill(ax - r.int(0, rw - 1), ay - r.int(0, rh - 1), rw, rh);
+  }
+  return L;
+}
+
+// Fill-only / trim tidy passes in a box. canRemove(x,y) says which land may be trimmed.
+function tidyBox(m, box, canRemove) {
+  const M = 3;
+  const x0 = Math.max(M, box.x0), y0 = Math.max(M, box.y0), x1 = Math.min(m.w - M - 1, box.x1), y1 = Math.min(m.h - M - 1, box.y1);
+  let any = false;
+  for (let pass = 0; pass < 14; pass++) {
+    let ch = false;
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      const i = m.i(x, y), L = m.isLand(x - 1, y), R = m.isLand(x + 1, y), U = m.isLand(x, y - 1), D = m.isLand(x, y + 1);
+      const n = L + R + U + D;
+      if (!m.land[i]) { if (n >= 3 || (L && R) || (U && D)) { m.land[i] = 1; m.height[i] = 0; ch = true; } }
+      else if (canRemove && canRemove(x, y) && (n <= 1 || (!L && !R) || (!U && !D))) { m.land[i] = 0; m.height[i] = 0; ch = true; }
+    }
+    any = any || ch;
+    if (!ch) break;
+  }
+  return any;
+}
+
+// One-tile-wide land (a bridge or a strip) is widened by filling the side with more land next to it.
+function thicken(m) {
+  let ch = false;
+  const small = new Uint8Array(m.w * m.h);
+  for (const c of components(m, (x, y) => m.isLand(x, y))) if (c.length <= 4) for (const [x, y] of c) small[m.i(x, y)] = 1;
+  for (let y = 3; y < m.h - 3; y++) for (let x = 3; x < m.w - 3; x++) {
+    if (!m.isLand(x, y) || small[m.i(x, y)]) continue;
+    const L = m.isLand(x - 1, y), R = m.isLand(x + 1, y), U = m.isLand(x, y - 1), D = m.isLand(x, y + 1);
+    if (L + R + U + D === 0) continue; // islet
+    const put = (a, b) => { if (a >= 3 && b >= 3 && a < m.w - 3 && b < m.h - 3 && !m.land[m.i(a, b)]) { m.land[m.i(a, b)] = 1; m.height[m.i(a, b)] = 0; ch = true; } };
+    const around = (a, b) => m.isLand(a - 1, b) + m.isLand(a + 1, b) + m.isLand(a, b - 1) + m.isLand(a, b + 1);
+    if (!U && !D) { if (around(x, y + 1) >= around(x, y - 1)) put(x, y + 1); else put(x, y - 1); }
+    else if (!L && !R) { if (around(x + 1, y) >= around(x - 1, y)) put(x + 1, y); else put(x - 1, y); }
+  }
+  return ch;
+}
+
+// A cliff that partly meets land and partly water would mix the guide's two cliff rows, and a
+// land cliff needs a strip of ground under it: fill the water so the whole run stands on ground.
+function fixCliffRuns(m) {
+  let any = false;
+  for (let pass = 0; pass < 12; pass++) {
+    let ch = false;
+    for (let y = 1; y < m.h - 1; y++) {
+      let x = 0;
+      while (x < m.w) {
+        const Lp = m.cliffLevel(x, y);
+        if (!Lp) { x++; continue; }
+        let e = x; while (e + 1 < m.w && m.cliffLevel(e + 1, y) === Lp) e++;
+        let land = 0, water = 0;
+        for (let k = x; k <= e; k++) if (m.isLand(k, y)) land++; else water++;
+        if (land && water) for (let k = x; k <= e; k++) if (!m.isLand(k, y)) { m.land[m.i(k, y)] = 1; m.height[m.i(k, y)] = Lp - 1; ch = true; }
+        if (land || water === 0) for (let k = x; k <= e; k++) if (!m.isLand(k, y + 1)) { m.land[m.i(k, y + 1)] = 1; m.height[m.i(k, y + 1)] = 0; ch = true; }
+        x = e + 1;
+      }
+    }
+    any = any || ch;
+    if (!ch) break;
+  }
+  return any;
+}
+
+// Shortest water path from the chunk to the old coast, widened to 3 tiles (fallback bridge).
+function corridor(m, isChunk, isOld) {
+  const prev = new Int32Array(m.w * m.h).fill(-2), q = [];
+  for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) if (isChunk(x, y)) { prev[m.i(x, y)] = -1; q.push(m.i(x, y)); }
+  let hit = -1;
+  for (let h = 0; h < q.length && hit < 0; h++) {
+    const i = q[h], x = i % m.w, y = (i / m.w) | 0;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 3 || ny < 3 || nx >= m.w - 3 || ny >= m.h - 3) continue;
+      const ni = m.i(nx, ny);
+      if (prev[ni] !== -2) continue;
+      prev[ni] = i;
+      if (isOld(nx, ny)) { hit = i; break; }
+      if (!m.land[ni]) q.push(ni);
+    }
+  }
+  if (hit < 0) return false;
+  for (let i = hit; i >= 0 && prev[i] !== -1; i = prev[i]) {
+    const x = i % m.w, y = (i / m.w) | 0;
+    for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) { const xx = x + ox, yy = y + oy; if (xx >= 3 && yy >= 3 && xx < m.w - 3 && yy < m.h - 3 && !m.land[m.i(xx, yy)]) { m.land[m.i(xx, yy)] = 1; m.height[m.i(xx, yy)] = 0; } }
+  }
+  return true;
+}
+
+// Merge annex rec {seed, side, size, x, y, w, h} into map m (in place). start = a ground cell
+// of the home island (the castle). Returns { cells: [[x,y]] new land inside the rect,
+// added: count of all new land cells, box: changed cell bbox, chunk: Uint8Array mask (m.w*m.h) }.
+export function mergeAnnex(m, rec, start) {
+  const r = rng((rec.seed >>> 0) ^ 0x5eed);
+  const { x: rx, y: ry, w, h } = rec;
+  const d = ANNEX_DIRS[rec.side] || [1, 0], face = [-d[0], -d[1]];
+  const liveBlock = m.block; m.block = new Uint16Array(m.w * m.h); // generation ignores units/buildings
+  const old = m.land.slice(), oldH = m.height.slice(), oldS = m.stair.slice();
+  const isOld = (x, y) => m.in(x, y) && old[m.i(x, y)] === 1;
+  const isNew = (x, y) => m.in(x, y) && m.land[m.i(x, y)] === 1 && !old[m.i(x, y)];
+  const inRect = (x, y) => x >= rx && y >= ry && x < rx + w && y < ry + h;
+  const set = (x, y) => { if (x >= 3 && y >= 3 && x < m.w - 3 && y < m.h - 3 && !m.land[m.i(x, y)]) { m.land[m.i(x, y)] = 1; m.height[m.i(x, y)] = 0; } };
+  // 1. chunk land
+  const L = chunkLand(w, h, r, face);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (L[y * w + x]) set(rx + x, ry + y);
+  // 2. bridge the water gap row by row (and column by column) toward the island
+  const D = 8;
+  if (face[0]) for (let y = ry; y < ry + h; y++) {
+    let e = -1;
+    for (let k = 0; k < w; k++) { const x = face[0] < 0 ? rx + k : rx + w - 1 - k; if (m.land[m.i(x, y)]) { e = x; break; } }
+    if (e < 0) continue;
+    for (let s = 1; s <= D; s++) { const x = e + face[0] * s; if (isOld(x, y)) { for (let k = 1; k < s; k++) set(e + face[0] * k, y); break; } }
+  }
+  if (face[1]) for (let x = rx; x < rx + w; x++) {
+    let e = -1;
+    for (let k = 0; k < h; k++) { const y = face[1] < 0 ? ry + k : ry + h - 1 - k; if (m.land[m.i(x, y)]) { e = y; break; } }
+    if (e < 0) continue;
+    for (let s = 1; s <= D; s++) { const y = e + face[1] * s; if (isOld(x, y)) { for (let k = 1; k < s; k++) set(x, e + face[1] * k); break; } }
+  }
+  // the seam band: the rect plus the bridged gap toward the island
+  const band = {
+    x0: Math.min(rx, rx + face[0] * D) - 2, y0: Math.min(ry, ry + face[1] * D) - 2,
+    x1: Math.max(rx + w - 1, rx + w - 1 + face[0] * D) + 2, y1: Math.max(ry + h - 1, ry + h - 1 + face[1] * D) + 2,
+  };
+  // 3. morphological closing (radius 2) along the seam fills narrow gaps and notches
+  {
+    const R = 2, bx0 = Math.max(3, band.x0), by0 = Math.max(3, band.y0), bx1 = Math.min(m.w - 4, band.x1), by1 = Math.min(m.h - 4, band.y1);
+    const dil = (x, y) => { for (let oy = -R; oy <= R; oy++) for (let ox = -R; ox <= R; ox++) if (m.isLand(x + ox, y + oy)) return true; return false; };
+    const D2 = new Map();
+    const dilAt = (x, y) => { const k = y * m.w + x; let v = D2.get(k); if (v === undefined) { v = dil(x, y); D2.set(k, v); } return v; };
+    const add = [];
+    for (let y = by0; y <= by1; y++) for (let x = bx0; x <= bx1; x++) {
+      if (m.land[m.i(x, y)]) continue;
+      let all = true;
+      for (let oy = -R; oy <= R && all; oy++) for (let ox = -R; ox <= R && all; ox++) if (!dilAt(x + ox, y + oy)) all = false;
+      if (all) add.push([x, y]);
+    }
+    for (const [x, y] of add) set(x, y);
+  }
+  // 4. tidy the seam (new land may be trimmed, old land never)
+  tidyBox(m, band, isNew);
+  // 5. make sure the chunk is joined to the island; drop any new land that is not
+  const mainComp = () => {
+    const lab = new Uint8Array(m.w * m.h), st = [start]; lab[m.i(start[0], start[1])] = 1;
+    while (st.length) { const [x, y] = st.pop(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy; if (m.isLand(nx, ny) && !lab[m.i(nx, ny)]) { lab[m.i(nx, ny)] = 1; st.push([nx, ny]); } } }
+    return lab;
+  };
+  let lab = mainComp();
+  let joined = false;
+  for (let y = ry; y < ry + h && !joined; y++) for (let x = rx; x < rx + w; x++) if (isNew(x, y) && lab[m.i(x, y)]) { joined = true; break; }
+  if (!joined) {
+    corridor(m, (x, y) => inRect(x, y) && isNew(x, y), (x, y) => lab[m.i(x, y)] === 1);
+    tidyBox(m, { x0: 0, y0: 0, x1: m.w, y1: m.h }, null);
+    lab = mainComp();
+  }
+  for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) if (isNew(x, y) && !lab[m.i(x, y)]) m.land[m.i(x, y)] = 0;
+  // 6. fill enclosed water, then settle the cliffs that now meet land; repeat until stable
+  const fillLakes = () => {
+    for (const c of components(m, (x, y) => !m.isLand(x, y))) if (!c.some(([x, y]) => x === 0 || y === 0 || x === m.w - 1 || y === m.h - 1)) for (const [x, y] of c) { m.land[m.i(x, y)] = 1; m.height[m.i(x, y)] = 0; }
+  };
+  fillLakes();
+  const all = { x0: 0, y0: 0, x1: m.w, y1: m.h };
+  for (let k = 0; k < 10; k++) {
+    const a = fixCliffRuns(m), b = tidyBox(m, all, null), c = thicken(m);
+    if (!a && !b && !c) break;
+  }
+  fillLakes();
+  // 7. plateaus and stairs on the chunk itself, following the island rules
+  const inChunk = (x, y) => inRect(x, y) && isNew(x, y);
+  const reserved = (x, y) => !m.in(x, y) || old[m.i(x, y)] === 1 || !inRect(x, y) || (m.isLand(x, y) && !isNew(x, y));
+  const size = rec.size || 2;
+  if (size >= 3) placePlateaus(m, r, 1, 1, reserved, [6, 8, 5, 6], 0, inChunk);
+  placePlateaus(m, r, 1, size >= 2 ? 2 : 1, reserved, [3, 6, 2, 4], 1, inChunk);
+  settle(m, 1, inChunk);
+  if (size >= 3) { placePlateaus(m, r, 2, 1, reserved, [3, 4, 2, 3], 0, inChunk); settle(m, 2, inChunk); settle(m, 1, inChunk); }
+  placeStairs(m, r, 2, inChunk);
+  settle(m, 2, inChunk);
+  placeStairs(m, r, 1, inChunk);
+  cleanStairs(m);
+  const newMask = (x, y) => isNew(x, y);
+  ensureConnected(m, r, start, newMask);
+  m.computeKinds();
+  // 8. decorations: clear water rocks that are now ashore, scatter new bushes / rocks / water rocks
+  m.decor = m.decor.filter(dd => {
+    if (dd.type !== 'wrock') return !isNew(dd.x, dd.y) || m.ground(dd.x, dd.y);
+    for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) if (m.isLand(dd.x + ox, dd.y + oy) || m.isCliff(dd.x + ox, dd.y + oy)) return false;
+    return true;
+  });
+  for (let y = band.y0 - 3; y <= band.y1 + 3; y++) for (let x = band.x0 - 3; x <= band.x1 + 3; x++) {
+    if (!m.in(x, y)) continue;
+    const k = m.kindAt(x, y);
+    if (isNew(x, y) && (k === K_LOW || k === K_HIGH) && !m.isCliff(x, y + 1) && r.chance(0.035)) m.decor.push({ type: r.chance(0.6) ? 'bush' : 'rock', x, y, v: r.int(1, 4), ox: r.int(-12, 12), oy: r.int(-8, 4), t: r() * 5 });
+    if (k === K_WATER && !m.isCliff(x, y) && !m.decor.some(dd => dd.x === x && dd.y === y)) {
+      let near = false, touching = false;
+      for (let oy = -2; oy <= 2; oy++) for (let ox = -2; ox <= 2; ox++) if (isNew(x + ox, y + oy)) near = true;
+      for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) if (m.isLand(x + ox, y + oy) || m.isCliff(x + ox, y + oy)) touching = true;
+      if (near && !touching && r.chance(0.04)) m.decor.push({ type: 'wrock', x, y, v: r.int(1, 4), t: r() * 5 });
+    }
+  }
+  m.block = liveBlock;
+  // what changed
+  const box = { x0: m.w, y0: m.h, x1: -1, y1: -1 }, cells = [], chunk = new Uint8Array(m.w * m.h);
+  let added = 0;
+  for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) {
+    const i = m.i(x, y);
+    if (m.land[i] !== old[i] || m.height[i] !== oldH[i] || m.stair[i] !== oldS[i]) { if (x < box.x0) box.x0 = x; if (x > box.x1) box.x1 = x; if (y < box.y0) box.y0 = y; if (y > box.y1) box.y1 = y; }
+    if (m.land[i] && !old[i]) { added++; if (inRect(x, y)) { chunk[i] = 1; cells.push([x, y]); } }
+  }
+  return { cells, added, box, chunk };
+}
+
+// ---------- rules audit (used by tests / the debug console) ----------
+// Returns a list of { rule, x, y } for every broken tilemap rule. start = a home ground cell.
+export function auditMap(m, start) {
+  const out = [], bad = (rule, x, y) => out.push({ rule, x, y });
+  m.computeKinds();
+  for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) {
+    const H = m.H(x, y);
+    if (H >= 1 && !plateauOk(m, x, y, H)) bad('plateau', x, y);
+    const cl = m.cliffLevel(x, y);
+    if (cl && m.isLand(x, y)) {
+      if (m.H(x, y) !== cl - 1) bad('cliff-on-cliff', x, y);
+      if (m.H(x, y + 1) !== cl - 1 && !m.stairAt(x, y + 1)) bad('cliff-no-ground', x, y);
+    }
+    if (cl && !m.isLand(x, y) && cl > 1) bad('high-sea-cliff', x, y);
+    const s = m.stairAt(x, y);
+    if (s === 1) {
+      const L = m.stairLvl[m.i(x, y)], px = x + m.stairSide[m.i(x, y)];
+      if (!(m.H(px, y) >= L && m.H(x, y) === L - 1 && m.stairAt(x, y + 1) === 2 && m.cliffLevel(px, y + 1) === L)) bad('orphan-stair', x, y);
+    }
+    if (s === 2 && m.stairAt(x, y - 1) !== 1) bad('orphan-stair', x, y);
+  }
+  // cliff runs must be all land cliffs or all sea cliffs
+  for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; ) {
+    const L = m.cliffLevel(x, y); if (!L) { x++; continue; }
+    let e = x, land = 0, water = 0;
+    while (e < m.w && m.cliffLevel(e, y) === L) { if (m.isLand(e, y)) land++; else water++; e++; }
+    if (land && water) bad('mixed-cliff', x, y);
+    x = e;
+  }
+  if (start) {
+    const re = reachable(m, start[0], start[1]);
+    for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) if (m.ground(x, y) && m.H(x, y) >= 1 && !re[m.i(x, y)] && !m.stairAt(x, y)) bad('unreachable', x, y);
+  }
+  // jagged coast: one-tile slivers and notches (islets of up to 4 tiles are decoration)
+  const small = new Set();
+  for (const c of components(m, (x, y) => m.isLand(x, y))) if (c.length <= 4) for (const [x, y] of c) small.add(m.i(x, y));
+  for (let y = 1; y < m.h - 1; y++) for (let x = 1; x < m.w - 1; x++) {
+    if (small.has(m.i(x, y))) continue;
+    const L = m.isLand(x - 1, y), R = m.isLand(x + 1, y), U = m.isLand(x, y - 1), D = m.isLand(x, y + 1);
+    if (m.isLand(x, y) && ((!L && !R) || (!U && !D))) bad('sliver', x, y);
+    if (!m.isLand(x, y) && ((L && R) || (U && D) || L + R + U + D >= 3)) bad('notch', x, y);
+  }
+  return out;
 }
