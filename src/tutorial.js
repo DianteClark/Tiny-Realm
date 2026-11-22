@@ -118,6 +118,7 @@ export const FEATS = [
   { id: 'abyss10', name: 'Into the Deep', desc: 'Clear floor 10 of the Abyss.', test: S => ((S.abyss && S.abyss.best) || 0) >= 10 },
   { id: 'abyss25', name: 'Bottomless', desc: 'Clear floor 25 of the Abyss.', test: S => ((S.abyss && S.abyss.best) || 0) >= 25 },
   { id: 'seasonboss', name: 'Season Slayer', desc: 'Beat a seasonal boss.', test: S => (S.stats.seasonBosses || 0) >= 1 },
+  { id: 'founder', name: 'A New Beginning', desc: 'Found a realm with a hero from the last one.', test: S => (S.soldiers || []).some(s => s.founder) },
   { id: 'weekly', name: 'Week Won', desc: 'Complete a weekly challenge.', test: S => (S.stats.weeklyChallenges || 0) >= 1 },
   { id: 'annex', name: 'Land Grabber', desc: 'Annex new land to your island.', test: S => (S.annexed || []).length >= 1 },
 ];

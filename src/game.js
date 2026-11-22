@@ -16,6 +16,7 @@ import { CHAPTERS, chapterState } from './campaign.js';
 import { Trade } from './trade.js';
 import { Decrees, DECREES } from './decrees.js';
 import { Seasonal } from './seasonal.js';
+import * as Legacy from './legacy.js';
 import { SHEETS } from './assets.js';
 import { audio } from './audio.js';
 import { Environment } from './env.js';
@@ -86,11 +87,12 @@ export class Realm {
     // a voyage interrupted by closing the app counts as a retreat
     for (const rec of this.state.soldiers) if (rec.status === 'away') { rec.status = 'home'; rec.post = null; }
     if (this.state.timers.raid < 60) this.state.timers.raid = 60;
+    const inherit = fresh ? Legacy.applyToFresh(this.state) : null;
     this.buildHome();
     const away = fresh ? 0 : this.applyOffline();
     this.scene = this.home;
     this.checkDaily();
-    return { fresh, away };
+    return { fresh, away, inherit };
   }
   save() {
     if (!this.state) return;
@@ -141,6 +143,7 @@ export class Realm {
       castleHp: R.turtleshell ? 0.2 : 0,
     };
     for (const k in P) b[k] = (b[k] || 0) + P[k];
+    if (this.state.legacyRank) { const L = Legacy.rankBonus(this.state.legacyRank); for (const k of ['hp', 'dmg', 'gather', 'xp']) b[k] = (b[k] || 0) + L[k]; }
     if (this.decrees) { const a = this.decrees.active(); if (a) for (const k of ['dmg', 'gather', 'towerDmg', 'xp']) if (a.fx[k]) b[k] = (b[k] || 0) + a.fx[k]; }
     return b;
   }

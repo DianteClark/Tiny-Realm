@@ -95,6 +95,7 @@ export class Seasonal {
   bossReady() { return this.st.bossWeek !== weekKey(); }
   summonBlock() {
     const R = this.R;
+    if (R.state.tier < 2) return 'Grow your castle into a Town before facing the season\'s boss.';
     if (!this.bossReady()) return 'The boss has already come this week.';
     if (R.exp) return 'Come home first.';
     if ((R.raid && R.raid.active) || R.events.blocking || R.slam) return 'Deal with the current threat first.';

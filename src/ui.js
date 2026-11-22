@@ -14,6 +14,7 @@ import { CHAPTERS, nextChapter, chapterOpen, chapterState } from './campaign.js'
 import { ports } from './trade.js';
 import { DECREES } from './decrees.js';
 import { SHOP, SEASON_EVENTS } from './seasonal.js';
+import * as Legacy from './legacy.js';
 
 export const VERSION = '3.4';
 
@@ -109,6 +110,10 @@ export class UI {
     if (info.fresh || !S.introSeen) {
       S.introSeen = true;
       this.choice('Tiny Realm', STORY.intro + '\n', [{ label: 'Begin', fn: () => this.toast('Follow the Chronicle for your first goals.') }]);
+      if (info.inherit && (info.inherit.rank || info.inherit.founder)) {
+        const b = Legacy.rankBonus(info.inherit.rank), f = info.inherit.founder;
+        $('#modalBody').innerHTML += `<p style="font-size:14px"><b>Legacy rank ${info.inherit.rank}.</b> ${info.inherit.rank ? `Every realm you found starts with ${b.start} of each resource${b.pawns ? ` and ${b.pawns} extra pawn${b.pawns > 1 ? 's' : ''}` : ''}, and gathers and fights ${Math.round(b.gather * 100)}% better.` : ''}${f ? ` ${esc(f.name)} sailed with you as the realm's Founder${f.heirloom ? `, carrying ${esc(f.heirloom.name)}` : ''}.` : ''}</p>`;
+      }
       $('#modalBody').innerHTML += `<p class="muted" style="font-size:13px">Drag to look around, pinch or scroll to zoom. Tap a soldier then tap the ground to move them. Tap buildings to train and upgrade.</p>`;
     } else if (info.away && info.away.secs >= 30) {
       const a = info.away;
@@ -238,7 +243,7 @@ export class UI {
     if (R.home.goldRush > 0) N.push(['rush', 'gold', 'ic-gold', `Gold Rush ${time(R.home.goldRush)}`]);
     if (S.upgradeEnd) N.push(['upgrade', 'blue', 'ic-hammer', `Castle grows ${time((S.upgradeEnd - Date.now()) / 1000)}`]);
     if (!R.exp && S.orders) { const o = S.orders.list, d = o.filter(x => x.done).length; if (d < o.length) N.push(['orders', S.orders.kind === 'night' ? 'purple' : 'gold', 'ic-sword', `${S.orders.kind === 'night' ? 'Night' : 'Day'} orders ${d}/${o.length}`]); }
-    if (!R.exp && R.seasonal.bossReady() && !R.seasonal.summonBlock()) N.push(['season', 'purple', 'ic-sword', `${R.seasonal.ev.boss.title} awaits`]);
+    if (!R.exp && R.state.tier >= 2 && R.seasonal.bossReady() && !R.seasonal.summonBlock()) N.push(['season', 'purple', 'ic-sword', `${R.seasonal.ev.boss.title} awaits`]);
     if (!R.exp && !R.decrees.D.pick) N.push(['decree', 'purple', 'ic-info', 'Choose this week\'s royal decree']);
     if (!R.exp && R.needs.get().mood.key === 'unhappy') N.push(['mood', 'red', 'ic-pawn', 'Your people are unhappy']);
     if (!R.exp && R.chal.C.day && !R.chal.C.day.done) { const c = R.chal.C.day; N.push(['chal', 'gold', 'ic-shield', `Daily: ${c.text}${c.n > 1 ? ` ${Math.floor(c.have)}/${c.n}` : ''}`]); }
@@ -555,7 +560,7 @@ export class UI {
     return `<div class="card ${opts.pick ? 'light' : ''}" ${opts.pick ? `data-act="pick:${rec.id}"` : ''}>
       ${opts.pick ? `<button class="check ${this.squadPick.has(rec.id) ? 'on' : ''}"></button>` : ''}
       <div class="thumb"><img src="${src(rec.avatar)}" class="av" alt=""></div>
-      <div class="grow"><h3>${rec.promoted ? `<span class="rank">${esc(rec.title || 'Elite')}</span> ` : ''}${esc(rec.name)}</h3><p>Level ${rec.level} ${U.name} - ${rec.kills} kills - ${status}</p>
+      <div class="grow"><h3>${rec.promoted || rec.founder ? `<span class="rank">${esc(rec.promoted ? (rec.title || 'Elite') : 'Founder')}</span> ` : ''}${esc(rec.name)}</h3><p>Level ${rec.level} ${U.name} - ${rec.kills} kills - ${status}</p>
         <div>${rec.traits.map(t => `<span class="trait ${TRAITS[t].rare ? 'rare' : ''}" title="${TRAITS[t].desc}">${TRAITS[t].name}</span>`).join('')}</div>
         ${this.gearRow(rec)}
         <div class="hpbar"><i style="width:${hpPct}%"></i></div><div class="xpbar"><i style="width:${xpPct}%"></i></div></div>
@@ -783,7 +788,7 @@ export class UI {
       const moon = R.moon();
       const hols = upcomingHolidays(5).map(h => `<div class="card light"><div class="grow"><h3>${h.name}</h3><p>${h.date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}. ${esc(h.desc)}</p></div></div>`).join('');
       const moonHtml = `<div class="card"><div class="grow"><h3>${moon.name}</h3><p>${moon.full ? 'Full moon tonight: the Moonlit Hunt stirs.' : moon.dark ? "A thieves' moon: dark nights bring extra thieves." : `Full moon in about ${Math.round(((29.53 / 2) - moon.age + 29.53) % 29.53)} days.`}</p></div></div>`;
-      return `<div class="stat-grid">${rows.map(([a, b]) => `<span>${a}</span><span>${b}</span>`).join('')}</div><p class="section-title">The moon</p>${moonHtml}<p class="section-title">Holy days and festivals</p>${hols}<p class="section-title">Provinces</p>${provHtml}<p class="section-title">Rival houses</p>${rv}`;
+      return `<div class="stat-grid">${rows.map(([a, b]) => `<span>${a}</span><span>${b}</span>`).join('')}</div><p class="section-title">The moon</p>${moonHtml}<p class="section-title">Holy days and festivals</p>${hols}<p class="section-title">Provinces</p>${provHtml}<p class="section-title">Rival houses</p>${rv}<p class="section-title">Legacy</p>${this.legacyHtml(true)}`;
     }
     if (this.tab === 'log') {
       if (!S.log.length) return '<p class="section-title">Your tale has yet to be told.</p>';
@@ -809,7 +814,7 @@ export class UI {
     const R = this.R, S = R.state, Z = R.seasonal, ev = Z.ev, st = Z.st;
     const days = Math.max(1, Math.ceil(Z.endsIn() / 86400000));
     let html = `<div class="card season"><div class="grow"><h3>${ev.name}</h3><p>${esc(ev.blurb)}</p><p class="muted">${R.env.season.name} event, ${days} day${days === 1 ? '' : 's'} left. Tokens: <b>${st.tokens}</b></p></div></div>`;
-    html += `<p class="section-title">Weekly boss</p><div class="card light"><div class="grow"><h3>${ev.boss.title}</h3><p>${esc(ev.boss.text)} Beat it for 5 tokens and epic gear.</p>${Z.bossReady() ? '' : '<p class="muted">Beaten or fled this week. It returns on Monday.</p>'}</div>
+    html += `<p class="section-title">Weekly boss</p><div class="card light"><div class="grow"><h3>${ev.boss.title}</h3><p>${esc(ev.boss.text)} Beat it for 5 tokens and epic gear.</p>${Z.bossReady() ? (S.tier < 2 ? '<p class="muted">Reach Town to face it.</p>' : '') : '<p class="muted">Beaten or fled this week. It returns on Monday.</p>'}</div>
       ${Z.bossReady() ? `<button class="btn small red" data-act="sboss" ${Z.summonBlock() ? 'disabled' : ''}>Summon</button>` : ''}</div>`;
     html += `<p class="section-title">Season tasks (4 tokens each)</p>` + st.tasks.map((t, i) => `<div class="card ${t.done ? '' : 'light'}"><i class="ic ${t.done ? 'ic-shield' : 'ic-sword'}"></i><div class="grow"><h3>${esc(ev.tasks[i].text(t.n))}</h3><p>${t.done ? 'Done.' : `${Math.floor(t.have || 0)} / ${t.n}`}</p>${t.done ? '' : `<div class="xpbar"><i style="width:${Math.min(100, (t.have || 0) / t.n * 100)}%"></i></div>`}</div></div>`).join('');
     const rel = RELICS[ev.relic];
@@ -820,6 +825,16 @@ export class UI {
       item('chest', 'Epic war chest', 'A piece of epic gear or better.') +
       item('bundle', 'Fair goods', `${200 + S.tier * 120} each of gold, wood and meat.`);
     return html + '<p class="muted" style="text-align:center;font-size:12px">Tokens and tasks reset when the season changes. Spend them before it ends.</p>';
+  }
+  legacyHtml(full) {
+    const R = this.R, L = Legacy.loadLegacy(), rank = Legacy.rankOf(L.points), sc = Legacy.realmScore(R), b = Legacy.rankBonus(rank);
+    const next = rank < 20 ? (rank + 1) * 100 : null;
+    let html = `<div class="card light"><div class="grow"><h3>Legacy rank ${rank}</h3><p>${L.points} points${next ? `, ${next - L.points} to rank ${rank + 1}` : ', the highest rank'}.${rank ? ` Each new realm: +${Math.round(b.gather * 100)}% gathering, health and damage, +${Math.round(b.xp * 100)}% experience, ${b.start} of each resource${b.pawns ? `, ${b.pawns} extra pawns` : ''}.` : ''}</p>
+      ${next ? `<div class="xpbar"><i style="width:${(L.points % 100)}%"></i></div>` : ''}<p class="muted">This realm is worth ${sc.total} points: ${sc.parts.map(p => `${p[0].toLowerCase()} ${p[1]}`).join(', ') || 'nothing yet'}.</p></div></div>`;
+    html += Legacy.canFound(R) ? `<button class="btn wide" data-act="found">Found a new realm</button><p class="muted" style="text-align:center;font-size:12px">Bank this realm's points, choose a hero to sail with you, and begin again on a new island.</p>`
+      : `<p style="text-align:center;font-size:13px">Reach Stronghold to found a new realm and bank your Legacy.</p>`;
+    if (full && L.realms.length) html += '<p class="section-title">Hall of Realms</p>' + L.realms.map((r, i) => `<div class="card light"><div class="grow"><h3>Realm ${L.realms.length - i}</h3><p>${r.days} days, ${TIERS[r.tier].name}${r.renown ? ` renown ${r.renown}` : ''}, ${r.cleared} islands, Abyss floor ${r.abyss}, ${r.chapters} story chapters. Worth ${r.points} points. Ended ${ago(r.ended)}.</p></div></div>`).join('');
+    return html;
   }
   decreeHtml() {
     const R = this.R, D = R.decrees.D, a = R.decrees.active();
@@ -952,8 +967,10 @@ export class UI {
       <button class="btn wide" data-act="export">Export save</button><p></p>
       <textarea id="saveText" placeholder="Paste a save here to import"></textarea><p></p>
       <button class="btn wide" data-act="import">Import save</button>
+      <p class="section-title">Legacy</p>
+      ${this.legacyHtml()}
       <p class="section-title">Start over</p>
-      <p style="text-align:center;font-size:13px">Wiping erases your castle, soldiers, relics and every record. This cannot be undone.</p>
+      <p style="text-align:center;font-size:13px">Wiping erases your castle, soldiers, relics, every record and your Legacy. This cannot be undone.</p>
       <button class="btn wide red" data-act="wipe">Wipe realm</button>
       <p class="section-title">Credits</p>
       <p style="text-align:center;font-size:13px">Art: Tiny Swords by Pixel Frog. Font: BoldPixels by YukiPixels (CC BY-SA 4.0). Music and sound are synthesized in your browser.</p>
@@ -1036,10 +1053,23 @@ export class UI {
         try { R.importSave(v); location.reload(); } catch (e) { err('That save could not be read.'); }
       });
     }
+    if (k === 'found') {
+      const S = R.state, sc = Legacy.realmScore(R);
+      if (!Legacy.canFound(R)) return err('Reach Stronghold first.');
+      const heroes = [...S.soldiers].filter(s => s.type !== 'king').sort((a, b) => b.level - a.level || b.kills - a.kills).slice(0, 5);
+      const go = id => this.confirm('Found a new realm?', `This realm ends and its ${sc.total} points join your Legacy.${id ? ` ${S.soldiers.find(s => s.id === id).name} sails with you, with their best piece of gear.` : ''} Everything else stays behind.`, 'Set sail', () => {
+        Legacy.foundNewRealm(R, id); this.wiping = true; R.wipe(); location.reload();
+      });
+      return this.choice('Choose a founder', `Your new realm begins with one hero from this one, back at level 5, keeping up to three traits and their best piece of gear.`, [
+        ...heroes.map(h => ({ label: `${h.name}, level ${h.level} ${UNITS[h.type].name}`, fn: () => go(h.id) })),
+        { label: 'Go alone', fn: () => go(null) },
+        { label: 'Not yet', cls: 'red' },
+      ]);
+    }
     if (k === 'wipe') {
       return this.confirm('Wipe your realm?', 'Everything will be erased and a new island will rise from the sea.', 'Wipe it all', () => {
         this.confirm('Are you certain?', 'Last chance. Your soldiers, relics and records will be gone forever.', 'Yes, start over', () => {
-          this.wiping = true; R.wipe(); location.reload();
+          this.wiping = true; try { localStorage.removeItem('tinyrealm.legacy'); } catch (e) { /* ignore */ } R.wipe(); location.reload();
         });
       });
     }
