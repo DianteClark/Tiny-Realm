@@ -48,7 +48,7 @@ export class Tutorial {
   }
   update(dt) {
     const i = this.step;
-    if (i < 0 || i >= STEPS.length) { if (i >= STEPS.length) this.finish(); return; }
+    if (i < 0 || i >= STEPS.length) { if (i >= STEPS.length) this.finish(); else { this.box.classList.add('hidden'); this.hand.classList.add('hidden'); } return; }
     if (this.R.exp) { this.box.classList.add('hidden'); this.hand.classList.add('hidden'); return; }
     this.t += dt;
     const st = STEPS[i];
