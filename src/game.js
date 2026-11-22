@@ -4,9 +4,11 @@ import { Scene, Unit, Building, cellOf } from './world.js';
 import {
   UNITS, ENEMIES, BUILDINGS, TIERS, TRAITS, COMMON_TRAITS, XP_LEVELS, MAX_LEVEL, RELICS, REGIONS,
   islandInfo, FIRST_NAMES, EPITHETS, QUESTS, endlessQuest, renownCost, RENOWN_BONUS,
+  maxBuildingLevel, upgradeCost, upgradeTime, levelHp, levelEffects, castlePop,
 } from './data.js';
 import { EventDirector } from './events.js';
 import { SHEETS } from './assets.js';
+import { audio } from './audio.js';
 
 const SAVE_KEY = 'tinyrealm.save.v1';
 const HOME_W = 46, HOME_H = 34;
@@ -78,12 +80,16 @@ export class Realm {
   syncState() {
     const S = this.state, h = this.home;
     if (!h) return;
-    S.buildings = h.buildings.map(b => ({ type: b.type, cx: b.cx, cy: b.cy, hp: Math.round(b.hp), maxHp: b.maxHp, buildEnd: b.buildEnd, buildTotal: b.buildTotal, variant: b.variant, queue: b.queue }));
+    S.buildings = h.buildings.map(b => ({ type: b.type, cx: b.cx, cy: b.cy, hp: Math.round(b.hp), maxHp: b.maxHp, buildEnd: b.buildEnd, buildTotal: b.buildTotal, variant: b.variant, queue: b.queue, level: b.level, upEnd: b.upEnd, upTotal: b.upTotal }));
     S.trees = h.trees.map(t => ({ wood: t.wood, regrow: t.regrow }));
     S.golds = h.golds.map(g => ({ cx: g.cx, cy: g.cy, amount: Math.round(g.amount) }));
     S.sheep = h.sheep.filter(s => !s.caught).length;
     for (const u of h.units) if (u.rec && u.alive) { u.rec.hp = Math.round(u.hp); u.rec.post = { x: Math.round(u.home.x), y: Math.round(u.home.y) }; }
   }
+
+  // ------------------------------------------------------------ feedback
+  sfx(name, pos, scene) { if (scene && scene !== this.scene) return; audio.play(name, pos); }
+  shake(n, scene) { if (scene && scene !== this.scene) return; this.shakeAmt = Math.min(14, Math.max(this.shakeAmt || 0, n)); }
 
   // ------------------------------------------------------------ bonuses
   bonus() {
@@ -103,7 +109,7 @@ export class Realm {
   }
   get tierDef() { return TIERS[this.state.tier]; }
   storage() { return this.tierDef.storage + this.state.renown * 2000; }
-  popCap() { return 5 + this.home.buildings.filter(b => b.type === 'house' && b.done && !b.ruined).length * BUILDINGS.house.pop; }
+  popCap() { let n = castlePop(this.state.tier); for (const b of this.home.buildings) if (b.type === 'house' && b.done && !b.ruined) n += levelEffects('house', b.level).pop; return n; }
   popUsed() {
     let n = this.state.pawns;
     for (const s of this.state.soldiers) n += UNITS[s.type].pop;
@@ -135,8 +141,10 @@ export class Realm {
       S.buildings = [{ type: 'castle', cx: CASTLE.x, cy: CASTLE.y, hp: TIERS[1].castleHp }];
     }
     for (const b of S.buildings) {
-      const maxHp = b.type === 'castle' ? Math.round(TIERS[S.tier].castleHp * (1 + this.bonus().castleHp)) : (b.maxHp || BUILDINGS[b.type].hp);
-      h.addBuilding(b.type, b.cx, b.cy, { hp: Math.min(b.hp ?? maxHp, maxHp), maxHp, buildEnd: b.buildEnd || 0, buildTotal: b.buildTotal || 0, variant: b.variant, queue: b.queue || [] });
+      const lvl = b.level || 1;
+      const maxHp = b.type === 'castle' ? Math.round(TIERS[S.tier].castleHp * (1 + this.bonus().castleHp)) : levelHp(b.type, lvl);
+      const nb = h.addBuilding(b.type, b.cx, b.cy, { hp: Math.min(b.hp ?? maxHp, maxHp), maxHp, buildEnd: b.buildEnd || 0, buildTotal: b.buildTotal || 0, variant: b.variant, queue: b.queue || [] });
+      nb.level = lvl; nb.upEnd = b.upEnd || 0; nb.upTotal = b.upTotal || 0;
     }
     this.castle = h.buildings.find(b => b.type === 'castle');
     // resources (deterministic layout from the seed, then saved state applied)
@@ -314,7 +322,7 @@ export class Realm {
       if (u.stepPath(dt)) {
         const r = u.carry.toLowerCase();
         const got = this.addRes(r, u.carryN);
-        if (got > 0) scene.floatText('+' + got, u.x, u.y - 70, r === 'gold' ? '#ffe066' : r === 'wood' ? '#e6b98a' : '#f4a0a0');
+        if (got > 0) { scene.floatText('+' + got, u.x, u.y - 70, r === 'gold' ? '#ffe066' : r === 'wood' ? '#e6b98a' : '#f4a0a0'); if (r === 'gold') this.sfx('coin', u, scene); }
         else scene.floatText('Full', u.x, u.y - 70, '#ffffff');
         u.carry = null; u.task = null;
       }
@@ -343,6 +351,8 @@ export class Realm {
       if (u.task === 'work') {
         u.working = true; u.flip = center(u.node.cx) < u.x;
         if (job === 'wood' && Math.random() < dt * 2) u.node.shake = 0.2;
+        u.sndT = (u.sndT || 0) - dt;
+        if (u.sndT <= 0) { u.sndT = 0.6; this.sfx(job === 'wood' ? 'chop' : 'mine', u, scene); }
         u.workT -= dt;
         if (u.workT <= 0) {
           u.working = false;
@@ -378,7 +388,7 @@ export class Realm {
       if (u.task === 'work') {
         u.working = true; u.flip = s.x < u.x; u.workT -= dt;
         if (u.workT <= 0) {
-          u.working = false; s.caught = true; scene.fxAt('dust1', s.x, s.y);
+          u.working = false; s.caught = true; scene.fxAt('dust1', s.x, s.y); this.sfx('baa', s, scene);
           scene.sheep = scene.sheep.filter(o => o !== s);
           this.releaseNode(u);
           u.carry = 'Meat'; u.carryN = Math.round(8 * (1 + gb.gather)); u.task = null;
@@ -387,7 +397,7 @@ export class Realm {
       return;
     }
     if (job === 'build') {
-      const needs = b => (!b.done) || (b.hp < b.maxHp && !(this.raid && this.raid.active));
+      const needs = b => (!b.done) || !!b.upEnd || (b.hp < b.maxHp && !(this.raid && this.raid.active));
       if (!u.node || !needs(u.node) || !scene.buildings.includes(u.node)) {
         u.node = null;
         let best = null, bd = 1e9;
@@ -398,7 +408,9 @@ export class Realm {
       }
       if (u.task === 'go') { if (u.stepPath(dt)) u.task = 'work'; return; }
       const b = u.node; u.working = true; u.flip = b.x < u.x;
+      u.sndT = (u.sndT || 0) - dt; if (u.sndT <= 0) { u.sndT = 0.55; this.sfx('hammer', u, scene); }
       if (!b.done) { b.buildEnd -= dt * 1000; if (Math.random() < dt) scene.fxAt('dust1', b.x + (Math.random() - 0.5) * 60, b.y - 4); }
+      else if (b.upEnd && b.hp >= b.maxHp) { b.upEnd -= dt * 1000; if (Math.random() < dt) scene.fxAt('dust1', b.x + (Math.random() - 0.5) * 60, b.y - 4); }
       else {
         const add = Math.min(b.maxHp - b.hp, 30 * dt);
         u.repairDebt = (u.repairDebt || 0) + add / 25;
@@ -473,8 +485,9 @@ export class Realm {
     if (!this.canPlace(type, cx, cy)) return 'That spot is blocked.';
     if (!this.pay(d.cost)) return 'Not enough resources.';
     const b = this.home.addBuilding(type, cx, cy, { buildEnd: Date.now() + d.time * 1000, buildTotal: d.time, variant: Math.floor(Math.random() * 3) });
-    b.hp = b.maxHp;
+    b.hp = b.maxHp; b.pop = 1;
     this.home.fxAt('dust2', b.x, b.y, { scale: 1.6 });
+    this.sfx('place'); this.shake(3);
     this.reach = reachable(this.home.map, this.door[0], this.door[1]);
     if (this.state.jobs.build === 0 && this.state.pawns > 1 && !this.buildTipShown) { this.buildTipShown = true; this.ui.toast('Tip: assign a pawn to Build in Workers to raise it faster.'); }
     this.save();
@@ -491,32 +504,98 @@ export class Realm {
   }
   trainOptions(b) {
     if (!b.done || b.ruined) return [];
-    return Object.entries(UNITS).filter(([k, u]) => u.from === b.type).map(([k, u]) => ({ key: k, def: u, locked: u.tier > this.state.tier }));
+    return Object.entries(UNITS).filter(([k, u]) => u.from === b.type).map(([k, u]) => ({ key: k, def: u, locked: u.tier > this.state.tier, block: this.trainBlock(b, k) }));
+  }
+  queueCap(b) { return b.type === 'castle' ? 5 : levelEffects(b.type, b.level).queue || 5; }
+  trainTime(b, unit) { const e = levelEffects(b.type, b.level); return Math.round(UNITS[unit].time * (e.speed || 1)); }
+  // Why can't this unit be trained right now? null if it can.
+  trainBlock(b, unit) {
+    const d = UNITS[unit];
+    if (d.tier > this.state.tier) return { code: 'locked', msg: `Requires a ${TIERS[d.tier].name}.` };
+    if (!b.done) return { code: 'building', msg: 'Still under construction.' };
+    if (b.ruined) return { code: 'ruined', msg: 'This building is in ruins. Repair it first.' };
+    if (b.queue.length >= this.queueCap(b)) return { code: 'queue', msg: 'The training queue is full.' };
+    if (d.unique && (this.state.soldiers.some(s => s.type === unit) || this.home.buildings.some(x => x.queue.some(q => q.unit === unit)))) return { code: 'unique', msg: 'There can be only one.' };
+    if (d.pop && this.popUsed() + d.pop > this.popCap()) return { code: 'housing', msg: `No room: ${this.popUsed()} of ${this.popCap()} people. Build or upgrade Houses.` };
+    if (!this.canAfford(d.cost)) return { code: 'cost', msg: 'Not enough resources.' };
+    return null;
   }
   train(b, unit) {
+    const block = this.trainBlock(b, unit);
+    if (block) { if (block.code === 'housing') this.ui.flashPop(); return block.msg; }
     const d = UNITS[unit];
-    if (d.tier > this.state.tier) return `Requires a ${TIERS[d.tier].name}.`;
-    if (b.queue.length >= 5) return 'Queue is full.';
-    if (d.unique && (this.state.soldiers.some(s => s.type === unit) || this.home.buildings.some(x => x.queue.some(q => q.unit === unit)))) return 'There can be only one.';
-    if (d.pop && this.popUsed() + d.pop > this.popCap()) return 'Not enough room. Build more Houses.';
-    if (!this.pay(d.cost)) return 'Not enough resources.';
+    this.pay(d.cost);
+    const t = this.trainTime(b, unit);
     const start = Math.max(Date.now(), b.queue.length ? b.queue[b.queue.length - 1].end : 0);
-    b.queue.push({ unit, end: start + d.time * 1000, total: d.time });
+    b.queue.push({ unit, end: start + t * 1000, total: t });
     this.save();
     return null;
+  }
+  cancelTrain(b, i) {
+    const q = b.queue[i]; if (!q) return;
+    b.queue.splice(i, 1);
+    this.addAll(UNITS[q.unit].cost);
+    // later entries move up
+    let t = Date.now();
+    for (let k = 0; k < b.queue.length; k++) {
+      const e = b.queue[k];
+      if (k < i) { t = e.end; continue; }
+      const started = k === 0 ? Math.min(e.end - e.total * 1000, Date.now()) : t;
+      e.end = Math.max(started, t) + e.total * 1000; t = e.end;
+    }
+    this.save();
+  }
+  // ---- building upgrades
+  upgradeBlock(b) {
+    if (b.type === 'castle') return { msg: '' };
+    const max = maxBuildingLevel(this.state.tier);
+    if (!b.done) return { msg: 'Finish construction first.' };
+    if (b.upEnd) return { msg: 'Already upgrading.' };
+    if (b.ruined) return { msg: 'Repair it first.' };
+    if (b.level >= 5) return { msg: 'Fully upgraded.', max: true };
+    if (b.level >= max) return { msg: `Grow the castle to upgrade further.`, tierCap: true };
+    if (!this.canAfford(upgradeCost(b.type, b.level))) return { msg: 'Not enough resources.' };
+    return null;
+  }
+  upgradeBuilding(b) {
+    const block = this.upgradeBlock(b); if (block) return block.msg;
+    this.pay(upgradeCost(b.type, b.level));
+    b.upTotal = upgradeTime(b.type, b.level); b.upEnd = Date.now() + b.upTotal * 1000;
+    this.home.fxAt('dust2', b.x, b.y, { scale: 1.8 });
+    this.sfx('build');
+    this.save(); return null;
+  }
+  finishBuildingUpgrade(b, quiet) {
+    b.upEnd = 0; b.upTotal = 0; b.level++;
+    const f = b.hp / b.maxHp; b.maxHp = levelHp(b.type, b.level); b.hp = Math.max(b.maxHp * f, b.maxHp * 0.6);
+    b.pop = 1;
+    if (!quiet) { this.ui.toast(`${BUILDINGS[b.type].name} reached level ${b.level}.`, 'gold'); this.home.fxAt('dust2', b.x, b.y, { scale: 2 }); this.sfx('complete', b); }
+    this.log(`${BUILDINGS[b.type].name} upgraded to level ${b.level}.`);
+  }
+  repairCost(b) { return { wood: Math.ceil((b.maxHp - b.hp) / 20) }; }
+  repairNow(b) {
+    if (b.hp >= b.maxHp) return 'Not damaged.';
+    if (!this.pay(this.repairCost(b))) return 'Not enough wood.';
+    b.hp = b.maxHp; this.home.fxAt('dust2', b.x, b.y, { scale: 1.6 }); this.sfx('build'); return null;
   }
   completeTraining(b, q, quiet) {
     const S = this.state;
     S.stats['trained_' + q.unit] = (S.stats['trained_' + q.unit] || 0) + 1;
     if (q.unit === 'pawn') {
-      S.pawns++; this.spawnPawn();
-      if (!quiet) this.ui.toast('A new Pawn joins the realm.');
+      S.pawns++;
+      // put the new pawn on whichever resource is running lowest
+      const busy = S.jobs.wood + S.jobs.gold + S.jobs.meat + S.jobs.build;
+      if (busy < S.pawns) { const low = ['wood', 'gold', 'meat'].sort((a, c) => S.res[a] - S.res[c])[0]; S.jobs[low]++; }
+      this.spawnPawn();
+      if (!quiet) { this.ui.toast('A new Pawn joins the realm.'); this.sfx('ready'); }
       return;
     }
     const rec = this.newSoldier(q.unit);
+    const recruit = levelEffects(b.type, b.level).recruit || 1;
+    if (recruit > 1) { rec.level = recruit; rec.xp = XP_LEVELS[recruit]; }
     const c = this.home.nearestWalkable(b.cx + Math.floor(b.fw / 2), b.cy + b.fh) || this.door;
     this.spawnSoldier(rec, false, { x: center(c[0]), y: center(c[1]) + 8 });
-    if (!quiet) this.ui.toast(`${rec.name} the ${UNITS[q.unit].name} is ready.`);
+    if (!quiet) { this.ui.toast(`${rec.name} the ${UNITS[q.unit].name} is ready.`); this.sfx('ready'); this.home.fxAt('dust1', center(c[0]), center(c[1]) + 8); }
     this.log(`${rec.name} joined as ${/^[AEIOU]/.test(UNITS[q.unit].name) ? 'an' : 'a'} ${UNITS[q.unit].name}.`);
   }
   upgradeCastle() {
@@ -541,7 +620,8 @@ export class Realm {
     this.castle.maxHp = Math.round(TIERS[S.tier].castleHp * (1 + this.bonus().castleHp));
     this.castle.hp = Math.max(this.castle.maxHp * f, this.castle.maxHp * 0.5);
     this.log(`The realm grew into a ${TIERS[S.tier].name}.`);
-    if (!quiet) this.ui.banner(`Your realm is now a ${TIERS[S.tier].name}`, 'New buildings and soldiers are available.');
+    this.castle.pop = 1;
+    if (!quiet) { this.ui.banner(`Your realm is now a ${TIERS[S.tier].name}`, 'New buildings and soldiers are available. Buildings can now be upgraded further.', 'gold'); this.sfx('victory'); }
   }
 
   // ------------------------------------------------------------ offline progress
@@ -579,9 +659,11 @@ export class Realm {
       if (b.buildEnd && now >= b.buildEnd) {
         b.buildEnd = 0; b.buildTotal = 0;
         S.stats['built_' + b.type] = (S.stats['built_' + b.type] || 0) + 1;
-        if (!quiet) { this.ui.toast(`${BUILDINGS[b.type].name} completed.`); h.fxAt('dust2', b.x, b.y, { scale: 1.8 }); }
+        b.pop = 1;
+        if (!quiet) { this.ui.toast(`${BUILDINGS[b.type].name} completed.`); h.fxAt('dust2', b.x, b.y, { scale: 1.8 }); this.sfx('complete'); }
         this.assignJobs();
       }
+      if (b.upEnd && now >= b.upEnd) this.finishBuildingUpgrade(b, quiet);
       while (b.queue.length && now >= b.queue[0].end && b.done) {
         const q = b.queue.shift();
         this.completeTraining(b, q, quiet);
@@ -656,6 +738,7 @@ export class Realm {
         this.raidWarned = true;
         this.pendingRaid = this.planRaid();
         this.ui.banner('Raiders sighted', `${this.pendingRaid.region.name} raiders approach from the ${this.pendingRaid.dir}. They land in 45 seconds.`, 'red');
+        this.sfx('horn');
         this.showBoat(this.pendingRaid);
       }
       if (S.timers.raid <= 0) this.startRaid(this.pendingRaid || this.planRaid());
@@ -674,7 +757,8 @@ export class Realm {
         u.raidId = R.id;
         if (e.flagDuel) e.flagDuel(u);
         R.units.push(u);
-        if (sp.ground) h.fxAt('dust2', u.x, u.y, { scale: 1.6 }); else h.fxAt('splash', center(sp.wx), center(sp.wy) + 20);
+        if (sp.ground) h.fxAt('dust2', u.x, u.y, { scale: 1.6 }); else { h.fxAt('splash', center(sp.wx), center(sp.wy) + 20); this.sfx('splash', u, h); }
+        if (u.def.boss) { this.sfx('roar'); this.shake(6, h); }
       }
     }
     const alive = R.units.filter(u => u.alive && !u.dead);
@@ -719,6 +803,7 @@ export class Realm {
     this.state.timers.raid = 480 + Math.random() * 360;
     if (!this.home.boats.length && plan.spawns[0] && !plan.spawns[0].ground) this.showBoat(plan);
     this.raid = { id: Math.random(), active: true, t: 0, spawnT: 0, queue: plan.queue.slice(), units: [], spawns: plan.spawns, level: plan.level, kind: plan.kind, gap: plan.gap, onEnd: opts.onEnd, title: opts.title || 'Raid', loot: 0, region: plan.region };
+    if (!opts.silent) this.sfx('horn');
     if (!opts.silent) this.ui.banner(opts.title || 'To arms!', opts.text || 'Raiders are landing. Pawns are taking shelter in the castle.', 'red');
     for (const u of this.home.units) if (u.kind === 'pawn') { u.task = null; this.releaseNode(u); }
   }
@@ -730,6 +815,7 @@ export class Realm {
       S.stats.raidsSurvived++;
       const reward = Math.round(R.loot + 20 + R.level * 6);
       this.addRes('gold', reward);
+      this.sfx('victory');
       this.ui.banner(R.kind === 'raid' ? 'Raid repelled' : R.title + ' survived', `The raiders are beaten. You recover ${reward} gold from the field.`, 'blue');
       this.log(`Repelled a ${R.region ? R.region.name : ''} raid. +${reward} gold.`);
     }
@@ -747,6 +833,7 @@ export class Realm {
     for (const r of ['gold', 'wood', 'meat']) { lost[r] = Math.floor(S.res[r] * 0.25); S.res[r] -= lost[r]; }
     S.stats.raidsLost++;
     for (const u of R.units) if (u.alive) { u.leaving = true; u.target = null; }
+    this.sfx('defeat'); this.shake(10);
     this.ui.banner('The castle has fallen', `Raiders plundered ${lost.gold} gold, ${lost.wood} wood and ${lost.meat} meat, then sailed off. The walls will mend.`, 'red');
     this.log(`The castle fell to raiders. Lost a quarter of stores.`);
     R.active = false;
@@ -794,7 +881,7 @@ export class Realm {
     const targets = scene.units.filter(o => o.team === 0 && o.kind === 'soldier' && o.alive && !o.hidden && o.cursed <= 0 && o.type !== 'king' && dist(o.x, o.y, u.x, u.y) < 6.5 * T);
     if (!targets.length) return;
     const t = targets[Math.floor(Math.random() * targets.length)];
-    scene.fxAt('hexTransform', t.x, t.y, {});
+    scene.fxAt('hexTransform', t.x, t.y, {}); this.sfx('hex', t, scene);
     t.cursed = this.state.relics.hexcharm ? 22 : 45;
     t.order = null; t.target = null; t.stop();
     scene.selected.delete(t);
@@ -856,6 +943,7 @@ export class Realm {
     if (up) {
       const f = u.hp / u.maxHp; u.applyStats(); u.hp = Math.min(u.maxHp, u.maxHp * f + u.maxHp * 0.2);
       scene.floatText('Level ' + rec.level, u.x, u.y - 90, '#ffe066');
+      scene.fxAt('healFx', u.x, u.y, {}); this.sfx('levelup', u, scene);
     }
   }
   onBuildingDown(scene, b, src) {
@@ -957,6 +1045,7 @@ export class Realm {
     });
     for (const u of this.home.units) if (u.rec && ids.includes(u.rec.id)) { u.rec.hp = Math.round(u.hp); u.dead = true; this.home.selected.delete(u); }
     this.exp = sc; this.scene = sc;
+    this.sfx('sail');
     this.ui.onSceneChange();
     this.save();
   }
@@ -998,6 +1087,7 @@ export class Realm {
     for (const rec of S.soldiers) if (rec.status === 'away') { rec.status = 'home'; }
     for (const rec of S.soldiers) if (rec.status === 'home' && !this.home.units.some(u => u.rec === rec)) this.spawnSoldier(rec, true);
     this.exp = null; this.scene = this.home;
+    this.sfx(result === 'won' ? 'victory' : result === 'lost' ? 'defeat' : 'sail');
     this.ui.onSceneChange();
     this.ui.expeditionResult(summary);
     this.save();

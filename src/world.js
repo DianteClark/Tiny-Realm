@@ -1,7 +1,7 @@
 // Scenes hold a map plus every live object on it, run the AI and draw it all.
 import { SHEETS, drawSprite, animDuration } from './assets.js';
 import { T, findPath, renderTerrain, foamCells, rng, K_WATER } from './terrain.js';
-import { UNITS, ENEMIES, BUILDINGS, CAMP_STRUCTS, TRAITS } from './data.js';
+import { UNITS, ENEMIES, BUILDINGS, CAMP_STRUCTS, TRAITS, levelEffects } from './data.js';
 
 const WATER = '#47aba9';
 let NEXT_ID = 1;
@@ -161,6 +161,7 @@ export class Building {
     this.buildEnd = opts.buildEnd || 0; this.buildTotal = opts.buildTotal || 0;
     this.queue = opts.queue || [];
     this.atkT = 0; this.fireT = Math.random();
+    this.level = opts.level || 1; this.upEnd = 0; this.upTotal = 0; this.pop = 0;
   }
   get x() { return (this.cx + this.fw / 2) * T; }
   get y() { return (this.cy + this.fh) * T; }
@@ -255,7 +256,7 @@ export class Scene {
     this.sheep.push(s); return s;
   }
   fxAt(key, x, y, opts = {}) { this.fx.push({ key, x, y, t: 0, dur: opts.dur || animDuration(key), scale: opts.scale || 1, flip: opts.flip, follow: opts.follow, alpha: opts.alpha }); }
-  floatText(text, x, y, color = '#fff3c4') { this.texts.push({ text, x, y, t: 0, color }); }
+  floatText(text, x, y, color = '#fff3c4', size = 18) { if (this.texts.length > 60) return; this.texts.push({ text, x, y, t: 0, color, size }); }
 
   nearestWalkable(cx, cy, maxR = 8, pred) {
     for (let r = 0; r <= maxR; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
@@ -294,6 +295,8 @@ export class Scene {
       if (t.alive && t.hp < t.maxHp) {
         t.hp = Math.min(t.maxHp, t.hp + a.dmg);
         this.fxAt('healFx', t.x, t.y, { scale: t.big ? 1.2 : 0.9 });
+        this.game.sfx('heal', t, this);
+        this.floatText('+' + Math.round(a.dmg), t.x, t.bodyY - 26, '#9be37b', 13);
       }
       return;
     }
@@ -306,10 +309,13 @@ export class Scene {
       const tx = t.x, ty = (t.bodyY ?? t.y - 30);
       const arc = d.proj === 'stone' || d.proj === 'bomb' ? 70 : (d.proj === 'arrow' ? 18 : 10);
       const sy = a.y - (a.big ? 60 : 38);
+      this.game.sfx(d.proj === 'stone' ? 'thud' : 'arrow', a, this);
       this.projectiles.push({ key: d.proj, x: a.x, y: sy, sx: a.x, sy, tx, ty, target: t, t: 0, dur: Math.max(0.25, dist(a.x, sy, tx, ty) / (d.proj === 'stone' ? 260 : 460)), arc, dmg, src: a, splash: d.splash ? d.splash * T : 0, team: a.team });
       return;
     }
     this.applyDamage(a, t, dmg);
+    this.game.sfx(a.team === 0 && !a.big ? 'sword' : 'hit', a, this);
+    if (a.big && d.splash) this.game.shake(a.anim === 'troll' ? 7 : 4, this);
     if (d.cleave || d.splash) {
       const r = (d.splash || 1.1) * T;
       for (const o of this.units) if (o !== t && o.team !== a.team && o.alive && !o.hidden && o.kind !== 'pawn' && dist(o.x, o.y, t.x, t.y) < r) this.applyDamage(a, o, dmg * (d.cleave || 0.6));
@@ -318,7 +324,10 @@ export class Scene {
   }
   applyDamage(a, t, dmg) {
     if (!t.alive) return;
+    const before = t.hp;
     t.takeDamage(dmg, a);
+    const done = Math.round(before - Math.max(0, t.hp));
+    if (done > 0 && !(t instanceof Building)) this.floatText(String(done), t.x + (Math.random() - 0.5) * 20, (t.bodyY ?? t.y) - 26, a.team === 0 ? '#ffffff' : '#ff8a80', 13);
   }
   kingAura(u) {
     if (u.type === 'king') return false;
@@ -328,6 +337,8 @@ export class Scene {
   kill(u, src) {
     u.dead = true; u.hp = 0;
     this.selected.delete(u);
+    this.game.sfx(u.big ? 'roar' : 'death', u, this);
+    if (u.big) this.game.shake(u.anim === 'troll' ? 9 : 5, this);
     if (u.anim === 'troll') this.fxAt('troll_dead', u.x, u.y, { flip: u.flip, dur: animDuration('troll_dead') + 1.5 });
     else this.fxAt('dust2', u.x, u.y + 2, { scale: u.big ? 2 : 1.2 });
     this.game.onUnitKilled(this, u, src);
@@ -339,9 +350,10 @@ export class Scene {
       if (o.team === 1 && o.alive && o.campId === victim.campId && !o.target && src.alive) { o.target = src; o.mode = 'hunt'; }
     }
   }
-  onBuildingDown(b, src) { this.fxAt('explosion1', b.x, b.y - 20, { scale: 1.2 }); this.game.onBuildingDown(this, b, src); }
+  onBuildingDown(b, src) { this.fxAt('explosion1', b.x, b.y - 20, { scale: 1.2 }); this.game.sfx('explosion', b, this); this.game.shake(8, this); this.game.onBuildingDown(this, b, src); }
   onStructDown(s, src) {
     this.fxAt('explosion2', s.x, s.y - 30, { scale: 1.3 });
+    this.game.sfx('explosion', s, this); this.game.shake(7, this);
     this.structs = this.structs.filter(o => o !== s); this.placeBlock(s.cells, -1);
     this.game.onStructDown(this, s, src);
   }
@@ -568,17 +580,22 @@ export class Scene {
     if (def) {
       b.atkT -= dt;
       if (b.atkT <= 0) {
+        const L = levelEffects('tower', b.level);
         const lvlBonus = this.map.level(b.cx, b.cy) === 1 ? 1.5 : 0;
-        const range = (def.range + lvlBonus) * T;
-        let best = null, bd = range;
-        for (const u of this.units) if (u.team === 1 && u.alive && !u.duel) { const d = dist(u.x, u.y, b.x, b.y - 20); if (d < bd) { bd = d; best = u; } }
-        if (best) {
-          b.atkT = def.cd;
+        const range = (def.range + lvlBonus + L.range) * T;
+        const foes = [];
+        for (const u of this.units) if (u.team === 1 && u.alive && !u.duel) { const d = dist(u.x, u.y, b.x, b.y - 20); if (d < range) foes.push([d, u]); }
+        foes.sort((a, c) => a[0] - c[0]);
+        if (foes.length) {
+          b.atkT = def.cd * L.cd;
           const B = this.bonus();
-          const dmg = def.dmg * (1 + (this.game.state.tier - 1) * 0.25) * (1 + (B.towerDmg || 0));
-          const sx = b.x, sy = b.y - 150;
-          this.projectiles.push({ key: 'arrow', x: sx, y: sy, sx, sy, tx: best.x, ty: best.bodyY, target: best, t: 0, dur: Math.max(0.2, bd / 480), arc: 12, dmg, src: { team: 0, def: { proj: 'arrow' }, alive: true, tower: true }, splash: 0, team: 0 });
+          const dmg = def.dmg * (1 + (this.game.state.tier - 1) * 0.25) * L.dmg * (1 + (B.towerDmg || 0));
+          for (const [d, foe] of foes.slice(0, L.shots)) {
+            const sx = b.x, sy = b.y - 150;
+            this.projectiles.push({ key: 'arrow', x: sx, y: sy, sx, sy, tx: foe.x, ty: foe.bodyY, target: foe, t: 0, dur: Math.max(0.2, d / 480), arc: 12, dmg, src: { team: 0, def: { proj: 'arrow' }, alive: true, tower: true }, splash: 0, team: 0 });
+          }
           b.shotT = 0.5;
+          this.game.sfx('arrow', b);
         } else b.atkT = 0.3;
       }
       if (b.shotT > 0) b.shotT -= dt;
@@ -611,6 +628,7 @@ export class Scene {
         p.done = true;
         if (p.splash) {
           this.fxAt(p.key === 'bomb' ? 'explosion1' : 'dust2', p.tx, p.ty + 20, { scale: p.key === 'bomb' ? 0.8 : 1.4 });
+          this.game.sfx(p.key === 'bomb' ? 'explosion' : 'thud', { x: p.tx, y: p.ty }, this); this.game.shake(p.key === 'bomb' ? 4 : 3, this);
           for (const u of this.units) if (u.team !== p.team && u.alive && !u.hidden && u.kind !== 'pawn' && dist(u.x, u.bodyY, p.tx, p.ty) < p.splash) this.applyDamage(p.src, u, p.dmg * (u === p.target ? 1 : 0.7));
           for (const s of [...this.structs, ...this.buildings]) if (s.team !== p.team && s.alive && dist(s.x, s.bodyY, p.tx, p.ty) < p.splash + 40) s.takeDamage(p.dmg, p.src);
         } else if (p.target && p.target.alive !== false) {
@@ -734,7 +752,7 @@ export class Scene {
       ctx.restore();
     }
     // overlays: selection, hp bars
-    for (const u of this.selected) if (u.alive) drawSprite(ctx, 'cursorRing', u.x, u.bodyY + 32 * 0.5, 0, { scale: u.big ? 0.85 : 0.6 });
+    for (const u of this.selected) if (u.alive) drawSprite(ctx, 'cursorRing', u.x, u.bodyY + 16, 0, { scale: (u.big ? 0.85 : 0.6) * (1 + Math.sin(this.time * 6) * 0.06) });
     for (const u of this.units) {
       if (!u.alive || u.hidden || u.kind === 'pawn') continue;
       if (u.hp < u.maxHp || this.selected.has(u)) this.bar(ctx, u.x, u.y - (u.big ? 110 : 72), u.big ? 56 : 40, u.hp / u.maxHp, u.team === 0 ? '#6dbb5b' : '#d9534f');
@@ -743,11 +761,18 @@ export class Scene {
     for (const b of [...this.buildings, ...this.structs]) {
       if (b.hp < b.maxHp && b.hp > 0) this.bar(ctx, b.x, b.y - (SHEETS[b.imgKey || b.def.sprite]?.fh || 160) + 30, 70, b.hp / b.maxHp, b.team === 0 ? '#6dbb5b' : '#d9534f');
       if (b.buildEnd && !b.done) this.bar(ctx, b.x, b.y - 40, 70, 1 - (b.buildEnd - Date.now()) / (b.buildTotal * 1000), '#e8c35a');
+      if (b.upEnd) this.bar(ctx, b.x, b.y - 40, 70, 1 - (b.upEnd - Date.now()) / (b.upTotal * 1000), '#a874c9');
+      if (b.level > 1 && b.done) for (let i = 0; i < b.level - 1; i++) {
+        const px = Math.round(b.x - (b.level - 2) * 7 + i * 14), py = Math.round(b.y - 20);
+        ctx.fillStyle = '#2b2b3a'; ctx.fillRect(px - 5, py - 5, 10, 10);
+        ctx.fillStyle = '#e8b93a'; ctx.fillRect(px - 3, py - 3, 6, 6);
+      }
     }
     // floating text
-    ctx.textAlign = 'center'; ctx.font = '18px BoldPixels, monospace';
+    ctx.textAlign = 'center';
     for (const tx of this.texts) {
       const a = 1 - tx.t / 1.4;
+      ctx.font = `${tx.size || 18}px BoldPixels, monospace`;
       ctx.globalAlpha = Math.max(0, a);
       ctx.fillStyle = '#2b2b3a'; ctx.fillText(tx.text, tx.x + 1, tx.y - tx.t * 28 + 1);
       ctx.fillStyle = tx.color; ctx.fillText(tx.text, tx.x, tx.y - tx.t * 28);
@@ -768,7 +793,13 @@ export class Scene {
     const s = SHEETS[b.imgKey]; if (!s || !s.img) return;
     const constructing = !b.done;
     ctx.globalAlpha = constructing ? 0.5 : (b.ruined ? 0.55 : 1);
-    ctx.drawImage(s.img, Math.round(b.x - s.fw / 2), Math.round(b.y - s.fh + 8));
+    if (b.pop > 0) {
+      b.pop = Math.max(0, b.pop - 1 / 30);
+      const k = Math.sin((1 - b.pop) * Math.PI * 3) * b.pop * 0.1;
+      ctx.save(); ctx.translate(b.x, b.y + 8); ctx.scale(1 - k * 0.6, 1 + k);
+      ctx.drawImage(s.img, Math.round(-s.fw / 2), -s.fh);
+      ctx.restore();
+    } else ctx.drawImage(s.img, Math.round(b.x - s.fw / 2), Math.round(b.y - s.fh + 8));
     ctx.globalAlpha = 1;
     if (b.flash > 0) { ctx.globalAlpha = 0.35; ctx.fillStyle = '#fff'; ctx.globalAlpha = 1; }
     if (b.type === 'tower' && b.done && !b.ruined) drawSprite(ctx, b.shotT > 0 ? 'archer_attack' : 'archer_idle', b.x, b.y - 126, b.shotT > 0 ? 0.5 - b.shotT : this.time, {});
@@ -795,7 +826,11 @@ export class Scene {
       }
     } else if (u.kind === 'pawn' && u.working) key = u.animKey('work');
     else key = u.animKey(u.moving ? 'run' : 'idle');
-    if (u.flash > 0) opts.alpha = 0.55;
     drawSprite(ctx, key, u.x, u.y, tt, opts);
+    if (u.flash > 0) { // brighten on hit
+      ctx.globalCompositeOperation = 'lighter';
+      drawSprite(ctx, key, u.x, u.y, tt, { ...opts, alpha: Math.min(0.7, u.flash * 6) });
+      ctx.globalCompositeOperation = 'source-over';
+    }
   }
 }

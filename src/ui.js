@@ -1,9 +1,12 @@
 // HUD, panels and dialogs. Plain DOM styled with the pack's UI art.
 import { SHEETS } from './assets.js';
-import { UNITS, ENEMIES, BUILDINGS, TIERS, TRAITS, RELICS, XP_LEVELS, MAX_LEVEL, islandInfo, renownCost, STORY } from './data.js';
+import { UNITS, ENEMIES, BUILDINGS, TIERS, TRAITS, RELICS, XP_LEVELS, MAX_LEVEL, islandInfo, renownCost, STORY, upgradeCost, upgradeTime, describeLevel, levelEffects } from './data.js';
 import { Unit, Building, Struct, cellOf } from './world.js';
 import { T } from './terrain.js';
 import { MAJOR } from './events.js';
+import { audio } from './audio.js';
+
+export const VERSION = '2.0';
 
 const $ = s => document.querySelector(s);
 const src = k => SHEETS[k] ? encodeURI(SHEETS[k].src) : '';
@@ -38,12 +41,14 @@ export class UI {
     this.tabs.addEventListener('click', e => { const el = e.target.closest('[data-tab]'); if (el) { this.tab = el.dataset.tab; this.renderPanel(); } });
     $('#pills').addEventListener('click', e => { const el = e.target.closest('[data-pill]'); if (el) this.pillAction(el.dataset.pill); });
     $('#hud').classList.remove('hidden');
+    document.addEventListener('click', e => { const b = e.target.closest('button'); if (b && !b.disabled && !b.classList.contains('navbtn')) audio.play('click'); }, true);
   }
 
   // ------------------------------------------------------------ messages
   toast(text, kind = '') {
     const el = document.createElement('div');
     el.className = 'toast paper-dark' + (kind ? ' ' + kind : '');
+    if (kind === 'red') audio.play('error');
     el.textContent = text;
     this.toastsEl.appendChild(el);
     while (this.toastsEl.children.length > 3) this.toastsEl.firstChild.remove();
@@ -94,6 +99,21 @@ export class UI {
         ${Object.values(S.res).some(v => v >= R.storage()) ? '<p>Your stores are full. Upgrade the castle to hold more.</p>' : ''}`;
       this.choice('Welcome back', div, [{ label: 'To work' }]);
     }
+    if (!info.fresh && localStorage.getItem('tinyrealm.seen') !== VERSION) {
+      const div = document.createElement('div');
+      div.innerHTML = `<p style="text-align:left;font-size:14px;line-height:1.4">
+        Music and sound effects, all synthesized live.<br>
+        Upgrade Watchtowers, Houses and training halls up to level 5.<br>
+        Upgraded halls train faster and send out veteran recruits.<br>
+        The castle houses more people, and train buttons now say exactly why they are blocked.<br>
+        Tap a unit in a training queue to cancel it for a full refund.<br>
+        Pay wood to repair damaged buildings instantly.<br>
+        New pawns go straight to work on your scarcest resource.<br>
+        Screen shake, hit flashes, damage numbers, a goal tracker, and smoother camera glide.</p>
+        <p class="muted" style="font-size:12px">Sound starts after your first tap. Volume is in Settings.</p>`;
+      this.choice('Tiny Realm ' + VERSION, div, [{ label: 'Onward' }]);
+    }
+    localStorage.setItem('tinyrealm.seen', VERSION);
     if (R.pendingDaily) {
       const d = R.pendingDaily; R.pendingDaily = null;
       const div = document.createElement('div');
@@ -110,13 +130,20 @@ export class UI {
     if (this.hudT > 0) return;
     this.hudT = 0.25;
     const R = this.R, S = R.state, cap = R.storage();
+    this.prevRes = this.prevRes || { ...S.res };
     for (const r of ['gold', 'wood', 'meat']) {
       const el = document.querySelector(`.res[data-r="${r}"]`);
+      if (S.res[r] > this.prevRes[r] + 0.5) { el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
+      this.prevRes[r] = S.res[r];
       el.querySelector('span').textContent = fmt(S.res[r]);
       el.classList.toggle('full', S.res[r] >= cap);
     }
     document.querySelector('.res[data-r="pop"] span').textContent = `${R.popUsed()}/${R.popCap()}`;
     $('#tierRibbon').textContent = TIERS[S.tier].name + (S.renown ? ` R${S.renown}` : '');
+    const J = S.jobs, idle = Math.max(0, S.pawns - J.wood - J.gold - J.meat - J.build);
+    const badge = document.querySelector('[data-panel="workers"] .badge');
+    if (idle > 0) { if (!badge) document.querySelector('[data-panel="workers"]').insertAdjacentHTML('beforeend', `<b class="badge">${idle}</b>`); else badge.textContent = idle; }
+    else if (badge) badge.remove();
     this.renderPills();
     for (const f of this.live) f();
     if (R.exp) this.renderExpHud();
@@ -132,6 +159,7 @@ export class UI {
     } else if (E.pending) pills.push(['event', 'red', `${MAJOR[E.pending.kind].title} ${time(E.pending.t)}`]);
     else if (!R.exp && S.timers.raid < 120) pills.push(['raidsoon', 'red', `Raid in ${time(S.timers.raid)}`]);
     else if (!R.exp) pills.push(['raidsoon', 'black', `Next raid ${time(S.timers.raid)}`]);
+    if (!R.exp) { const q = R.currentQuest(); pills.push(['quest', 'purple', `Goal: ${q.text} ${Math.min(R.questValue(q.type), q.n)}/${q.n}`]); }
     if (E.merchant) pills.push(['merchant', 'yellow', `Merchant ${time(E.merchant.t)}`]);
     if (E.bees) pills.push(['bees', 'yellow', `Bee swarm`]);
     if (R.home.goldRush > 0) pills.push(['rush', 'yellow', `Gold Rush ${time(R.home.goldRush)}`]);
@@ -142,10 +170,15 @@ export class UI {
   pillAction(k) {
     const R = this.R;
     if (k === 'merchant') this.openPanel('merchant');
+    else if (k === 'quest') this.openPanel('chronicle');
     else if (k === 'raid' && R.raid) { const u = R.raid.units.find(u => u.alive); if (u) this.view.centerOn(u.x, u.y); }
     else if (k === 'bees' && R.events.bees) this.view.centerOn(R.events.bees.x, R.events.bees.y);
     else if (k === 'upgrade') this.openPanel('building', R.castle);
     else if (k === 'raidsoon' || k === 'event') this.toast('Keep soldiers near the castle and towers on high ground.');
+  }
+  flashPop() {
+    const el = document.querySelector('.res[data-r="pop"]');
+    el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
   }
   refreshSel() {
     const sc = this.R.scene;
@@ -275,6 +308,7 @@ export class UI {
   togglePanel(name, arg) { if (this.panel === name && !arg) this.closePanel(); else this.openPanel(name, arg); }
   openPanel(name, arg) {
     if (this.R.exp && !['settings', 'army', 'chronicle'].includes(name)) return;
+    if (this.panel !== name) audio.play('open');
     this.panel = name; this.panelArg = arg; this.tab = null;
     this.panelEl.classList.remove('hidden');
     document.querySelectorAll('.navbtn').forEach(b => b.classList.toggle('on', b.dataset.panel === name));
@@ -282,6 +316,7 @@ export class UI {
     this.body.scrollTop = 0;
   }
   closePanel() {
+    if (this.panel) audio.play('close');
     this.panel = null; this.live = [];
     this.panelEl.classList.add('hidden');
     document.querySelectorAll('.navbtn').forEach(b => b.classList.remove('on'));
@@ -332,6 +367,7 @@ export class UI {
         <button class="tiny-btn red" data-act="job:${k}:-1">-</button><span class="count">${J[k]}</span><button class="tiny-btn" data-act="job:${k}:1">+</button></div>`).join('') +
       `<div class="card"><div class="thumb"><img src="${src('av_h5')}" class="av" alt=""></div><div class="grow"><h3>Train a Pawn</h3><p>New hands for the realm. Trained at the Castle.${q ? ` ${q} in training.` : ''}</p>${this.costHtml(UNITS.pawn.cost)}</div>
         <button class="btn small" data-act="train:${castle.id}:pawn">Train</button></div>
+       <p class="muted" style="text-align:center;font-size:13px">Room: ${R.popUsed()} of ${R.popCap()} people. Houses add room, and upgraded Houses add more.</p>
        <p class="muted" style="font-size:13px;text-align:center">While you are away, assigned pawns keep working at half pace until the stores are full.</p>`;
   }
 
@@ -445,20 +481,45 @@ export class UI {
           <button class="btn small" data-act="upgrade" ${R.canAfford(c) ? '' : 'disabled'}>Raise</button></div>`;
       }
     }
-    if (b.type === 'house') html += `<p style="text-align:center">Adds room for ${BUILDINGS.house.pop} people.</p>`;
-    if (b.type === 'tower') html += `<p style="text-align:center">Damage ${Math.round(BUILDINGS.tower.defense.dmg * (1 + (S.tier - 1) * 0.25))}, range ${BUILDINGS.tower.defense.range + (R.home.map.level(b.cx, b.cy) ? 1.5 : 0)} tiles${R.home.map.level(b.cx, b.cy) ? ' (high ground)' : ''}. Grows stronger with the castle.</p>`;
+    // level and upgrades (2.0)
+    if (b.type !== 'castle' && b.done) {
+      const cur = describeLevel(b.type, b.level);
+      html += `<p class="section-title">Level ${b.level}${cur && b.level > 1 ? ': ' + cur : ''}</p>`;
+      if (b.type === 'tower') {
+        const L = levelEffects('tower', b.level), high = R.home.map.level(b.cx, b.cy) === 1;
+        html += `<p style="text-align:center;font-size:14px">Damage ${Math.round(BUILDINGS.tower.defense.dmg * (1 + (S.tier - 1) * 0.25) * L.dmg)}, range ${(BUILDINGS.tower.defense.range + (high ? 1.5 : 0) + L.range).toFixed(1)} tiles${high ? ' (high ground bonus)' : ''}.</p>`;
+      }
+      if (b.upEnd) {
+        html += `<p class="section-title" id="bupl">Upgrading to level ${b.level + 1}: ${time((b.upEnd - Date.now()) / 1000)}</p>`;
+        this.live.push(() => { const e = $('#bupl'); if (e) { if (!b.upEnd) return this.refresh(); e.textContent = `Upgrading to level ${b.level + 1}: ${time((b.upEnd - Date.now()) / 1000)}`; } });
+      } else if (b.level < 5) {
+        const block = R.upgradeBlock(b);
+        const c = upgradeCost(b.type, b.level);
+        html += `<div class="card"><div class="grow"><h3>Upgrade to level ${b.level + 1}</h3><p>${describeLevel(b.type, b.level + 1)}. Also +30% health. Takes ${time(upgradeTime(b.type, b.level))}.</p>${this.costHtml(c)}${block && block.tierCap ? `<p class="warn">${block.msg}</p>` : ''}</div>
+          <button class="btn small" data-act="bup:${b.id}" ${block ? 'disabled' : ''}>Upgrade</button></div>`;
+      }
+    }
+    if (b.done && b.hp < b.maxHp && !(R.raid && R.raid.active)) {
+      html += `<div class="card light"><div class="grow"><h3>${b.ruined ? 'In ruins' : 'Damaged'}</h3><p>Builders repair for free over time, or pay to fix it now.</p>${this.costHtml(R.repairCost(b))}</div>
+        <button class="btn small" data-act="repair:${b.id}" ${R.canAfford(R.repairCost(b)) ? '' : 'disabled'}>Repair</button></div>`;
+    }
     const opts = R.trainOptions(b);
     if (opts.length) {
-      html += '<p class="section-title">Train</p>';
-      html += opts.map(o => `<div class="card ${o.locked ? 'light' : ''}"><div class="thumb"><img src="${src(UNIT_AV[o.key])}" class="av" alt=""></div>
-        <div class="grow"><h3>${o.def.name}</h3><p>${o.def.desc}</p>${o.locked ? `<p class="muted">Requires a ${TIERS[o.def.tier].name}</p>` : this.costHtml(o.def.cost)}<p class="muted">${o.def.hp} health${o.def.dmg ? ', ' + o.def.dmg + ' damage' : ''}${o.def.heal ? ', heals ' + o.def.heal : ''} - ${o.def.time}s</p></div>
-        <button class="btn small" data-act="train:${b.id}:${o.key}" ${o.locked ? 'disabled' : ''}>Train</button></div>`).join('');
-      html += `<div class="queue" id="bqueue"></div>`;
+      html += `<p class="section-title">Train <span class="muted">(${R.popUsed()} / ${R.popCap()} people)</span></p>`;
+      html += opts.map(o => {
+        const bl = o.block;
+        const label = !bl ? 'Train' : bl.code === 'housing' ? 'No room' : bl.code === 'cost' ? 'Train' : bl.code === 'queue' ? 'Full' : bl.code === 'unique' ? 'Crowned' : 'Train';
+        return `<div class="card ${o.locked ? 'light' : ''}"><div class="thumb"><img src="${src(UNIT_AV[o.key])}" class="av" alt=""></div>
+        <div class="grow"><h3>${o.def.name}</h3><p>${o.def.desc}</p>${o.locked ? `<p class="muted">Requires a ${TIERS[o.def.tier].name}</p>` : this.costHtml(o.def.cost)}<p class="muted">${o.def.hp} health${o.def.dmg ? ', ' + o.def.dmg + ' damage' : ''}${o.def.heal ? ', heals ' + o.def.heal : ''} - ${R.trainTime(b, o.key)}s</p>
+        ${bl && !o.locked && bl.code !== 'cost' ? `<p class="warn">${esc(bl.msg)}</p>` : ''}</div>
+        <button class="btn small ${bl && bl.code === 'housing' ? 'red' : ''}" data-act="train:${b.id}:${o.key}" ${o.locked || (bl && bl.code === 'unique') ? 'disabled' : ''}>${label}</button></div>`;
+      }).join('');
+      html += `<p class="muted" style="text-align:center;font-size:12px">Tap a unit in the queue to cancel it for a full refund.</p><div class="queue" id="bqueue"></div>`;
       const renderQ = () => {
         const e = $('#bqueue'); if (!e) return;
         const now = Date.now();
         const k = b.queue.map(q => q.unit).join();
-        if (e.dataset.k !== k) { e.dataset.k = k; e.innerHTML = b.queue.map(q => `<div class="qi"><img src="${src(UNIT_AV[q.unit])}" alt=""><i></i></div>`).join(''); }
+        if (e.dataset.k !== k) { e.dataset.k = k; e.innerHTML = b.queue.map((q, i) => `<button class="qi" data-act="cancel:${b.id}:${i}"><img src="${src(UNIT_AV[q.unit])}" alt=""><i></i></button>`).join(''); }
         [...e.children].forEach((c, i) => { const q = b.queue[i]; if (!q) return; const st = q.end - q.total * 1000; c.querySelector('i').style.width = Math.max(0, Math.min(100, (now - st) / (q.total * 1000) * 100)) + '%'; });
       };
       this.live.push(renderQ); this.afterRender = renderQ;
@@ -475,7 +536,9 @@ export class UI {
   }
 
   panel_settings() {
-    return `<p class="section-title">Your realm is saved in this browser automatically.</p>
+    const lvl = (key, v) => `<div class="row" style="justify-content:center;gap:4px">${[['Off', 0], ['Low', 0.3], ['Mid', 0.6], ['High', 1]].map(([l, x]) => `<button class="btn small ${Math.abs(audio.settings[key] - x) < 0.05 ? 'on' : ''}" data-act="vol:${key}:${x}">${l}</button>`).join('')}</div>`;
+    return `<p class="section-title">Music</p>${lvl('music')}<p class="section-title">Sound effects</p>${lvl('sfx')}
+      <p class="section-title">Your realm is saved in this browser automatically.</p>
       <button class="btn wide" data-act="export">Export save</button><p></p>
       <textarea id="saveText" placeholder="Paste a save here to import"></textarea><p></p>
       <button class="btn wide" data-act="import">Import save</button>
@@ -483,7 +546,8 @@ export class UI {
       <p style="text-align:center;font-size:13px">Wiping erases your castle, soldiers, relics and every record. This cannot be undone.</p>
       <button class="btn wide red" data-act="wipe">Wipe realm</button>
       <p class="section-title">Credits</p>
-      <p style="text-align:center;font-size:13px">Art: Tiny Swords by Pixel Frog. Font: BoldPixels by YukiPixels (CC BY-SA 4.0).</p>`;
+      <p style="text-align:center;font-size:13px">Art: Tiny Swords by Pixel Frog. Font: BoldPixels by YukiPixels (CC BY-SA 4.0). Music and sound are synthesized in your browser.</p>
+      <p class="muted" style="text-align:center;font-size:12px">Tiny Realm ${VERSION}</p>`;
   }
 
   // ------------------------------------------------------------ actions
@@ -497,6 +561,9 @@ export class UI {
       err(R.train(b, y)); return this.refresh();
     }
     if (k === 'upgrade') { err(R.upgradeCastle()); return this.refresh(); }
+    if (k === 'bup') { err(R.upgradeBuilding(R.home.buildings.find(o => o.id === +x))); return this.refresh(); }
+    if (k === 'repair') { err(R.repairNow(R.home.buildings.find(o => o.id === +x))); return this.refresh(); }
+    if (k === 'cancel') { const b = R.home.buildings.find(o => o.id === +x); R.cancelTrain(b, +y); return this.refresh(); }
     if (k === 'demolish') {
       const b = R.home.buildings.find(o => o.id === +x);
       return this.confirm('Demolish?', `Tear down this ${b.def.name}? You get a quarter of its cost back.`, 'Demolish', () => { R.demolish(b); this.closePanel(); });
@@ -523,6 +590,7 @@ export class UI {
       this.banner(R.exp.islandName, `${R.exp.region.name}, level ${R.exp.level}. Destroy every camp. Tap a soldier or All, then tap the ground or a foe.`, 'blue');
       return;
     }
+    if (k === 'vol') { audio.unlock(); audio.settings[x] = +y; audio.saveSettings(); if (x === 'sfx') audio.play('coin'); return this.refresh(); }
     if (k === 'trade') { err(R.events.trade(+x)); return this.refresh(); }
     if (k === 'export') {
       const t = $('#saveText'); t.value = R.exportSave(); t.select();

@@ -185,3 +185,17 @@ textarea { width: 100%; height: 90px; font-family: monospace; font-size: 11px; b
   #topbar { left: 50%; right: auto; transform: translateX(-50%); width: 560px; }
   #bottombar, #squadbar { left: 50%; right: auto; transform: translateX(-50%); width: 560px; }
 }
+
+/* ---------- 2.0 ---------- */
+.warn { color: #ff8a80 !important; font-size: 12px !important; margin-top: 3px !important; }
+.card.light .warn { color: #b3362f !important; }
+.queue .qi { padding: 0; background: none; cursor: pointer; overflow: hidden; }
+.res.flash { animation: popFlash .9s ease-out; }
+@keyframes popFlash { 0%, 30%, 60% { color: #ff6b5e; transform: scale(1.18); } 15%, 45%, 100% { transform: scale(1); } }
+.res.bump .ic { animation: bump .35s ease-out; }
+@keyframes bump { 40% { transform: scale(1.35) rotate(-8deg); } }
+.navbtn { position: relative; }
+.navbtn .badge { position: absolute; top: -14px; right: -12px; min-width: 22px; height: 22px; padding: 0 5px; border-radius: 11px; background: #d9534f; border: 2px solid #3b2f2a; color: #fff; font-size: 13px; line-height: 18px; text-align: center; font-weight: normal; }
+.pill[data-pill="quest"] { max-width: 62vw; overflow: hidden; text-overflow: ellipsis; display: inline-block; line-height: 25px; }
+.btn, .navbtn, .tiny-btn { transition: transform .06s; }
+.btn:active:not(:disabled), .navbtn:active, .tiny-btn:active { transform: scale(.95); }

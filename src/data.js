@@ -189,3 +189,28 @@ export function endlessQuest(i) {
 export const STORY = {
   intro: 'A small island, three loyal pawns, and a castle with more ambition than walls. The sea is full of monsters. Make this a realm worth defending.',
 };
+
+// ---------- building levels (2.0) ----------
+// Highest level a building can reach at the current castle tier
+export const maxBuildingLevel = tier => Math.min(5, tier + 1);
+export function upgradeCost(type, level) { // cost to go from `level` to `level + 1`
+  const base = BUILDINGS[type].cost || {};
+  const f = 0.9 + level * 0.8;
+  return { wood: Math.round((base.wood || 60) * f), gold: Math.round(((base.gold || 0) + 25) * f + 15 * level) };
+}
+export const upgradeTime = (type, level) => Math.round((BUILDINGS[type].time || 40) * (0.8 + level * 0.7));
+export const levelHp = (type, level) => Math.round(BUILDINGS[type].hp * (1 + 0.3 * (level - 1)));
+export function levelEffects(type, L) {
+  if (type === 'tower') return { dmg: 1 + 0.35 * (L - 1), range: 0.75 * (L - 1), cd: 1 - 0.07 * (L - 1), shots: L >= 4 ? 2 : 1 };
+  if (type === 'house') return { pop: 5 + 3 * (L - 1) };
+  if (type === 'barracks' || type === 'archery' || type === 'monastery') return { speed: 1 - 0.13 * (L - 1), recruit: L, queue: 4 + L };
+  return {};
+}
+export function describeLevel(type, L) {
+  const e = levelEffects(type, L);
+  if (type === 'tower') return `x${e.dmg.toFixed(2)} damage, +${e.range} range, ${Math.round((1 - e.cd) * 100)}% faster${e.shots > 1 ? ', fires 2 arrows' : ''}`;
+  if (type === 'house') return `houses ${e.pop} people`;
+  if (e.recruit) return `trains ${Math.round((1 - e.speed) * 100)}% faster, recruits start at level ${e.recruit}, queue of ${e.queue}`;
+  return '';
+}
+export const castlePop = tier => 6 + tier * 2;

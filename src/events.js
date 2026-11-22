@@ -104,6 +104,7 @@ export class EventDirector {
     plan.level = lvl;
     this.pending = { kind, t: kind === 'minotaur' ? 25 : 75, plan };
     if (plan.spawns[0] && !plan.spawns[0].ground) R.showBoat(plan);
+    R.sfx(kind === 'troll' || kind === 'minotaur' ? 'roar' : 'horn');
     R.ui.banner(ev.title, ev.warn + (kind === 'minotaur' ? '' : ' It begins in about a minute.'), 'red');
     R.log(`${ev.title} began.`);
   }
@@ -223,6 +224,7 @@ export class EventDirector {
         { give: { wood: n }, get: { meat: n } },
       ],
     };
+    R.sfx('bell');
     R.ui.banner('A merchant boat docks', 'Trader Pell will barter for 4 minutes. Tap the Merchant button to trade.', 'gold');
     R.ui.refresh();
   }
@@ -230,7 +232,7 @@ export class EventDirector {
     const R = this.R, M = this.merchant; if (!M) return;
     const o = M.offers[i];
     if (!R.pay(o.give)) return 'Not enough to trade.';
-    R.addAll(o.get);
+    R.addAll(o.get); R.sfx('coin');
     return null;
   }
   endMerchant(sail) {
@@ -246,11 +248,12 @@ export class EventDirector {
     if (!s) return;
     const dx = Math.sign(s.wx - s.lx), dy = Math.sign(s.wy - s.ly);
     h.duck = { x: center(s.wx) + dx * 20, y: center(s.wy) + dy * 20 + 20, t: 0, life: 150, tap: () => this.tapDuck() };
+    R.sfx('quack');
     R.ui.toast('Something small and yellow is bobbing near the shore.');
   }
   tapDuck() {
     const R = this.R, S = R.state;
-    R.home.fxAt('splash', R.home.duck.x, R.home.duck.y + 20);
+    R.home.fxAt('splash', R.home.duck.x, R.home.duck.y + 20); R.sfx('quack'); R.sfx('coin');
     R.home.duck = null;
     if (!S.relics.rubberduck && Math.random() < 0.15) {
       S.relics.rubberduck = true;

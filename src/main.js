@@ -4,6 +4,7 @@ import { Realm } from './game.js';
 import { UI } from './ui.js';
 import { BUILDINGS } from './data.js';
 import { cellOf } from './world.js';
+import { audio } from './audio.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -47,9 +48,15 @@ function zoomAt(sx, sy, factor) {
   cam.x = wx - sx / cam.z; cam.y = wy - sy / cam.z; clampCam();
 }
 
+// ---------------- audio needs a user gesture before it can start (iOS)
+const unlockAudio = () => audio.unlock();
+window.addEventListener('pointerdown', unlockAudio, true);
+window.addEventListener('keydown', unlockAudio, true);
+audio.viewRect = () => ({ x0: cam.x, y0: cam.y, x1: cam.x + vw / cam.z, y1: cam.y + vh / cam.z });
+
 // ---------------- input: drag to pan, pinch / wheel to zoom, tap to act
 const ptrs = new Map();
-let drag = null, pinch = null;
+let drag = null, pinch = null, glide = null;
 canvas.addEventListener('pointerdown', e => {
   canvas.setPointerCapture(e.pointerId);
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -73,7 +80,12 @@ canvas.addEventListener('pointermove', e => {
   if (drag) {
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     if (Math.hypot(dx, dy) > 9) drag.moved = true;
-    if (drag.moved) { cam.x = drag.cx - dx / cam.z; cam.y = drag.cy - dy / cam.z; clampCam(); }
+    if (drag.moved) {
+      const nx = drag.cx - dx / cam.z, ny = drag.cy - dy / cam.z, t = performance.now();
+      const dtm = Math.max(1, t - (drag.lt || t - 16));
+      drag.vx = (nx - cam.x) / dtm; drag.vy = (ny - cam.y) / dtm; drag.lt = t;
+      cam.x = nx; cam.y = ny; clampCam(); glide = null;
+    }
   }
 });
 const endPtr = e => {
@@ -82,6 +94,7 @@ const endPtr = e => {
   if (ptrs.size < 2) pinch = null;
   if (ptrs.size === 0 && drag) {
     if (!drag.moved && e.type === 'pointerup') ui.onTap(cam.x + e.clientX / cam.z, cam.y + e.clientY / cam.z);
+    else if (drag.moved && drag.vx !== undefined && performance.now() - drag.lt < 80) glide = { vx: drag.vx, vy: drag.vy };
     drag = null;
   } else if (ptrs.size === 1) {
     const [p] = [...ptrs.values()];
@@ -126,7 +139,16 @@ function frame(now) {
   if (!realm.state) return; // wiped, reload pending
   realm.update(dt);
   ui.frame(dt);
-  const zc = { x: cam.x, y: cam.y, z: cam.z * dpr };
+  if (glide) {
+    cam.x += glide.vx * dt * 1000; cam.y += glide.vy * dt * 1000; clampCam();
+    const f = Math.pow(0.04, dt); glide.vx *= f; glide.vy *= f;
+    if (Math.hypot(glide.vx, glide.vy) < 0.01) glide = null;
+  }
+  const raidOn = (realm.raid && realm.raid.active) || realm.events.pending || realm.events.active;
+  audio.setMood(realm.exp ? 'voyage' : raidOn ? 'battle' : 'home');
+  let sx = 0, sy = 0;
+  if (realm.shakeAmt > 0.2) { sx = (Math.random() - 0.5) * realm.shakeAmt; sy = (Math.random() - 0.5) * realm.shakeAmt; realm.shakeAmt *= Math.pow(0.002, dt); } else realm.shakeAmt = 0;
+  const zc = { x: cam.x + sx / cam.z, y: cam.y + sy / cam.z, z: cam.z * dpr };
   ctx.imageSmoothingEnabled = false;
   realm.scene.draw(ctx, zc, canvas.width, canvas.height);
   drawGhost();
@@ -146,7 +168,7 @@ async function boot() {
   document.getElementById('loading').classList.add('hidden');
   ui.welcome(info);
   realm.save();
-  window.realm = realm; window.cam = cam; window.view = view; // handy for debugging from the console
+  window.realm = realm; window.cam = cam; window.view = view; window.audio = audio; // handy for debugging from the console
   requestAnimationFrame(t => { last = t; frame(t); });
 }
 
