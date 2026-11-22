@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#47aba9">
+<title>Tiny Realm</title>
+<link rel="icon" href="assets/free/UI Elements/UI Elements/Icons/Icon_06.png">
+<link rel="apple-touch-icon" href="assets/warfare/King/King Avatar/King_Avatar_01.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <canvas id="game"></canvas>
+
+  <div id="hud" class="hidden">
+    <div id="topbar" class="wood">
+      <div class="res" data-r="gold"><i class="ic ic-gold"></i><span>0</span></div>
+      <div class="res" data-r="wood"><i class="ic ic-wood"></i><span>0</span></div>
+      <div class="res" data-r="meat"><i class="ic ic-meat"></i><span>0</span></div>
+      <div class="res" data-r="pop"><i class="ic ic-pop"></i><span>0</span></div>
+      <button id="btnSettings" class="tiny-btn" aria-label="Settings"><i class="ic ic-gear"></i></button>
+    </div>
+    <div id="subbar">
+      <div id="tierRibbon" class="ribbon-small blue">Village</div>
+      <div id="pills"></div>
+    </div>
+    <div id="toasts"></div>
+    <div id="banner" class="hidden"><div class="banner-ribbon"><span></span></div><p></p></div>
+
+    <div id="selbar" class="hidden">
+      <span id="selText"></span>
+      <button class="btn small" id="btnSelAll">All</button>
+      <button class="btn small red" id="btnDesel">Clear</button>
+    </div>
+
+    <div id="placebar" class="hidden">
+      <span id="placeText"></span>
+      <button class="btn small" id="btnPlaceOk">Build here</button>
+      <button class="btn small red" id="btnPlaceCancel">Cancel</button>
+    </div>
+
+    <div id="exphud" class="hidden">
+      <div class="paper-dark exp-info"><b id="expName"></b><span id="expStat"></span></div>
+    </div>
+
+    <nav id="bottombar">
+      <button class="navbtn" data-panel="build"><i class="ic ic-hammer"></i><span>Build</span></button>
+      <button class="navbtn" data-panel="workers"><i class="ic ic-pawn"></i><span>Workers</span></button>
+      <button class="navbtn" data-panel="army"><i class="ic ic-sword"></i><span>Army</span></button>
+      <button class="navbtn" data-panel="voyage"><i class="ic ic-boat"></i><span>Voyage</span></button>
+      <button class="navbtn" data-panel="chronicle"><i class="ic ic-info"></i><span>Chronicle</span></button>
+    </nav>
+    <nav id="squadbar" class="hidden">
+      <div id="squadAvatars"></div>
+      <button class="btn small" id="btnSquadAll">All</button>
+      <button class="btn small red" id="btnRetreat">Retreat</button>
+    </nav>
+
+    <div id="panel" class="hidden">
+      <div class="sheet paper">
+        <div class="sheet-head"><div class="ribbon blue"><span id="panelTitle"></span></div><button class="tiny-btn red close" id="panelClose" aria-label="Close"><i class="ic ic-x"></i></button></div>
+        <div id="panelTabs"></div>
+        <div id="panelBody"></div>
+      </div>
+    </div>
+
+    <div id="modal" class="hidden">
+      <div class="dialog paper">
+        <div class="ribbon blue"><span id="modalTitle"></span></div>
+        <div id="modalBody"></div>
+        <div id="modalBtns"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="loading">
+    <div class="load-box">
+      <h1>Tiny Realm</h1>
+      <div class="bar-big"><div id="loadFill"></div></div>
+      <p id="loadText">Gathering the realm...</p>
+    </div>
+  </div>
+</div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

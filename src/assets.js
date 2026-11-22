@@ -153,7 +153,7 @@ P('hexTransform', E + 'Extra/Hex Shaman Transformation Spell/Hex Shaman_Transfor
 S('cannonBall', E + 'Extra/Cannon/Cannon_Ball.png', 128, 128, 64);
 
 // Enemy structures and vessels
-S('goblinHut', E + 'Extra/Goblin Hut/Goblin Hut.png', 256, 256, 240);
+S('goblinHut', E + 'Extra/Goblin Hut/Goblin Hut.png', 192, 256, 236);
 S('gnomeHut', E + 'Extra/Gnome Buildings/Gnome Hut.png', 0, 0, 0);
 S('gnomeTower', E + 'Extra/Gnome Buildings/Gnome Tower.png', 0, 0, 0);
 S('cave', E + 'Extra/Cave/Cave_Idle.png', 192, 192, 172);
