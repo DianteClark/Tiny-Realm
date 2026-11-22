@@ -13,6 +13,7 @@ import * as Gear from './gear.js';
 import { Challenges } from './challenges.js';
 import { Needs, EXCHANGE } from './needs.js';
 import { CHAPTERS, chapterState } from './campaign.js';
+import { Trade } from './trade.js';
 import { SHEETS } from './assets.js';
 import { audio } from './audio.js';
 import { Environment } from './env.js';
@@ -62,6 +63,7 @@ export class Realm {
     this.orders = new Orders(this);
     this.chal = new Challenges(this);
     this.needs = new Needs(this);
+    this.trade = new Trade(this);
   }
 
   // ------------------------------------------------------------ persistence
@@ -788,6 +790,7 @@ export class Realm {
     for (const b of this.home.buildings) if (b.buildEnd && now >= b.buildEnd) report.done.push(BUILDINGS[b.type].name + ' completed');
     for (const b of this.home.buildings) for (const q of b.queue) if (now >= q.end) report.done.push(UNITS[q.unit].name + ' trained');
     if (S.upgradeEnd && now >= S.upgradeEnd) report.done.push('Castle upgrade finished');
+    { const tg = this.trade.catchUp(); for (const k in tg) report.got[k] += tg[k]; if (tg.gold + tg.wood + tg.meat > 0) report.done.push('Trade boats came and went'); }
     this.tickTimers(true);
     // buildings mend and sheep wander back
     for (const b of this.home.buildings) if (b.done) b.hp = Math.min(b.maxHp, b.hp + b.maxHp * Math.min(1, secs / 1800));
@@ -909,7 +912,7 @@ export class Realm {
     this.env.update(dt);
     this.updateAnnex(dt); // annexed land slam (src/annex.js)
     this.tickTimersT = (this.tickTimersT || 0) - dt;
-    if (this.tickTimersT <= 0) { this.tickTimersT = 0.5; this.tickTimers(false); this.checkDaily(); this.tickTribute(); this.orders.update(); this.chal.update(); this.holidayTick(); }
+    if (this.tickTimersT <= 0) { this.tickTimersT = 0.5; this.tickTimers(false); this.checkDaily(); this.tickTribute(); this.orders.update(); this.chal.update(); this.trade.update(); this.holidayTick(); }
     // sheep breed
     this.sheepT = (this.sheepT || 0) + dt;
     if (this.env.breed() > 0 && this.sheepT > 35 / this.env.breed()) { this.sheepT = 0; if (this.home.sheep.length < this.maxSheep()) this.spawnSheep(); }
@@ -925,6 +928,7 @@ export class Realm {
     }
     this.updateRaid(dt);
     this.needs.update(dt);
+    this.trade.visuals(Date.now());
     if (!this.exp) this.events.update(dt);
     this.questT -= dt;
     if (this.questT <= 0) { this.questT = 1; this.checkQuest(); }

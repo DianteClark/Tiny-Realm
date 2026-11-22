@@ -798,6 +798,7 @@ export class Scene {
     for (const d of this.map.decor) if (d.type !== 'wrock') { const x = center(d.x) + d.ox, y = center(d.y) + d.oy + 16; if (vis(x, y)) list.push({ y, d: () => drawSprite(ctx, (d.type === 'bush' ? 'bush' : 'rock') + d.v, x, y, t + d.t) }); }
     for (const n of this.npcs || []) list.push({ y: n.y, d: () => drawSprite(ctx, n.key, n.x, n.y, this.time, { flip: n.flip }) });
     for (const b of this.boats) if (vis(b.x, b.y)) list.push({ y: b.y - 30, d: () => drawSprite(ctx, b.key, b.x, b.y, b.t, { flip: b.flip }) });
+    for (const b of this.traders || []) if (vis(b.x, b.y)) list.push({ y: b.y - 30, d: () => drawSprite(ctx, b.key, b.x, b.y, b.t, { flip: b.flip, alpha: Math.max(0, Math.min(1, b.alpha)) }) });
     if (this.duck) { const dk = this.duck; list.push({ y: dk.y - 20, d: () => dk.wisp ? drawSprite(ctx, 'hexBolt', dk.x, dk.y - 30 + Math.sin(dk.t * 2) * 10, dk.t, { alpha: 0.85 }) : drawSprite(ctx, 'duck', dk.x, dk.y, 0, { frame: Math.floor(dk.t * 3) % 3, scale: 1.4 }) }); }
     for (const tr of this.trees) {
       const x = center(tr.cx), y = center(tr.cy) + 22;

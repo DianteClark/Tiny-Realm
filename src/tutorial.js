@@ -111,6 +111,9 @@ export const FEATS = [
   { id: 'legend', name: 'The Stuff of Legend', desc: 'Find a legendary piece of gear.', test: S => (S.stats.legendaries || 0) >= 1 },
   { id: 'streak3', name: 'Habit Forming', desc: 'Reach a 3 day challenge streak.', test: S => ((S.chal && S.chal.best) || 0) >= 3 },
   { id: 'streak7', name: 'A Week of Valour', desc: 'Reach a 7 day challenge streak.', test: S => ((S.chal && S.chal.best) || 0) >= 7 },
+  { id: 'trader', name: 'Merchant Prince', desc: 'Bring home 20 trade boats.', test: S => (S.stats.tradeTrips || 0) >= 20 },
+  { id: 'joyful', name: 'A Joyful Realm', desc: 'Welcome 5 newcomers drawn by your happy realm.', test: S => (S.stats.newcomers || 0) >= 5 },
+  { id: 'crown', name: 'The Drowned Crown', desc: 'Finish the story and claim the crown of the Sea Kings.', test: S => !!(S.relics && S.relics.seacrown) },
   { id: 'weekly', name: 'Week Won', desc: 'Complete a weekly challenge.', test: S => (S.stats.weeklyChallenges || 0) >= 1 },
   { id: 'annex', name: 'Land Grabber', desc: 'Annex new land to your island.', test: S => (S.annexed || []).length >= 1 },
 ];

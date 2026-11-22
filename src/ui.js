@@ -11,6 +11,7 @@ import { upcomingHolidays } from './calendar.js';
 import * as Gear from './gear.js';
 import { NEEDS, MOODS, EXCHANGE } from './needs.js';
 import { CHAPTERS, nextChapter, chapterOpen, chapterState } from './campaign.js';
+import { ports } from './trade.js';
 
 export const VERSION = '3.3';
 
@@ -601,6 +602,8 @@ export class UI {
 
   panel_voyage() {
     const R = this.R, S = R.state;
+    this.setTabs([['sail', 'Sail'], ['trade', 'Trade']]);
+    if (this.tab === 'trade') return this.tradeHtml();
     if (R.raid && R.raid.active) return '<p class="section-title">You cannot sail while the realm is under attack.</p>';
     if (R.events.pending) return '<p class="section-title">A great threat approaches. Stay and defend.</p>';
     const home = S.soldiers.filter(s => s.status === 'home');
@@ -639,6 +642,24 @@ export class UI {
     html += `<button class="btn wide" data-act="launch" ${this.squadPick.size && !blocked ? '' : 'disabled'}>Set sail</button>`;
     this.afterRender = () => this.drawChart(target);
     this.live.push(() => this.drawChart(target));
+    return html;
+  }
+  tradeHtml() {
+    const R = this.R, S = R.state, n = R.trade.boats(), C = R.trade.st, now = Date.now();
+    if (!n) return `<p class="section-title">No trade boats</p><div class="card light"><div class="thumb"><img src="${src('b_Market')}" alt=""></div><div class="grow"><p>Build a Market to launch a trade boat. Each Market level adds another boat.</p></div></div>`;
+    let html = `<p class="section-title">Your boats (${n})</p>`;
+    C.slots.slice(0, n).forEach((s, i) => {
+      const p = s.port && R.trade.port(s.port);
+      const line = !p ? 'Idle in the harbour.' : s.waiting ? 'Fighting off pirates at the dock.' : now >= s.back ? 'Waiting offshore for the fighting to end.' : `Sailing to ${p.name}. Back in ${time((s.back - now) / 1000)}.`;
+      html += `<div class="card ${p ? '' : 'light'}"><i class="ic ic-boat" style="width:44px;height:44px"></i><div class="grow"><h3>Boat ${i + 1}</h3><p class="tline" data-slot="${i}">${line}${s.stopAfter ? ' Docking after this trip.' : ''}</p></div>
+        ${p && !s.stopAfter ? `<button class="btn small red" data-act="tstop:${i}">Stop</button>` : ''}</div>`;
+    });
+    const idle = C.slots.slice(0, n).some(s => !s.port);
+    html += `<p class="section-title">Ports</p>` + ports(R).map(p => `<div class="card light"><div class="grow"><h3>${esc(p.name)}</h3><p>${esc(p.sub)}. ${p.mins} minute round trip, ${Math.round(p.risk * 100)}% chance of pirates on the way home.</p>
+      <div class="cost">${Object.entries(p.cargo).map(([k, v]) => `<span><i class="ic ic-${k}"></i>${v}</span>`).join('')}</div></div>
+      <button class="btn small" data-act="tsend:${p.key}" ${idle ? '' : 'disabled'}>Send</button></div>`).join('');
+    html += `<p class="muted" style="text-align:center;font-size:13px">Boats keep sailing their route until stopped, even while you are away. Conquer provinces and rival capitals to open more ports.</p>`;
+    this.live.push(() => document.querySelectorAll('.tline').forEach(el => { const s = C.slots[+el.dataset.slot]; if (s && s.port && s.back && !s.waiting && now < s.back) { const p = R.trade.port(s.port); el.textContent = `Sailing to ${p ? p.name : 'sea'}. Back in ${time((s.back - Date.now()) / 1000)}.${s.stopAfter ? ' Docking after this trip.' : ''}`; } }));
     return html;
   }
   drawChart(target) {
@@ -907,6 +928,8 @@ export class UI {
       return;
     }
     if (k === 'selall') { this.closePanel(); this.selectAll(); return; }
+    if (k === 'tsend') { err(R.trade.send(a.slice(6))); return this.refresh(); }
+    if (k === 'tstop') { R.trade.stop(+x); return this.refresh(); }
     if (k === 'hire') { err(R.hireHero()); return this.refresh(); }
     if (k === 'xchg') { err(R.exchange(x)); return this.refresh(); }
     if (k === 'hero') { const rec = R.state.soldiers.find(s => s.id === +x); if (rec) this.openPanel('hero', rec); return; }
