@@ -1,0 +1,17 @@
+<!doctype html><html><body style="margin:0;background:#47aba9">
+<canvas id="c"></canvas>
+<script type="module">
+import { loadAll, drawSprite } from '../src/assets.js';
+import { generateIsland, renderTerrain, foamCells, rng, T } from '../src/terrain.js';
+await loadAll();
+const seed = +(new URLSearchParams(location.search).get('seed') || 7);
+const m = generateIsland({ w: 44, h: 32, seed, plateaus: 7, reserve: { x: 19, y: 13, w: 5, h: 3 } });
+const tc = renderTerrain(m);
+const c = document.getElementById('c'); c.width = tc.width; c.height = tc.height;
+const x = c.getContext('2d'); x.imageSmoothingEnabled = false;
+x.fillStyle = '#47aba9'; x.fillRect(0, 0, c.width, c.height);
+for (const f of foamCells(m, rng(1))) drawSprite(x, 'foam', f.x * T + 32, f.y * T + 32, f.t);
+x.drawImage(tc, 0, 0);
+for (const d of m.decor) drawSprite(x, d.type === 'bush' ? 'bush' + d.v : d.type === 'rock' ? 'rock' + d.v : 'wrock' + d.v, d.x * T + 32, d.y * T + 48, d.t);
+document.title = 'done';
+</script></body></html>
