@@ -26,7 +26,6 @@ const HOLY = {
   easter: { name: 'Easter Sunday', verse: '"He is not here: for he is risen, as he said." Matthew 28:6', desc: 'Christ is risen. New life across the realm: peace all day, lambs are born, the daily tribute is tripled, and every soldier is healed and blessed with experience.', peace: true, gift: 3, xpGift: 150, lambs: 6, spring: true, glow: true, colour: 'gold' },
   ascension: { name: 'Ascension Day', verse: '"He was taken up; and a cloud received him out of their sight." Acts 1:9', desc: 'Christ ascends. Clear skies over the realm and doubled tribute.', gift: 2, clear: true, colour: 'blue' },
   pentecost: { name: 'Pentecost', verse: '"And they were all filled with the Holy Ghost." Acts 2:4', desc: 'The coming of the Holy Spirit. Every soldier gains experience, and abilities recharge twice as fast today.', gift: 2, xpGift: 80, abilityHaste: true, colour: 'red' },
-  allSaints: { name: "All Saints' Day", verse: '"Precious in the sight of the LORD is the death of his saints." Psalm 116:15', desc: 'The realm remembers its fallen. Living soldiers gain experience in their honour.', xpGift: 60, colour: 'purple' },
 };
 const FESTIVALS = {
   newYear: { name: "New Year's Day", desc: 'Fireworks over the castle at night and a doubled daily tribute.', gift: 2, fireworks: true, colour: 'gold' },
@@ -47,7 +46,6 @@ export function holidayFor(date = new Date()) {
   if (same(date, easter)) return pick('easter', HOLY);
   if (same(date, addDays(easter, 39))) return pick('ascension', HOLY);
   if (same(date, addDays(easter, 49))) return pick('pentecost', HOLY);
-  if (m === 10 && d === 1) return pick('allSaints', HOLY);
   const adv = adventStart(y);
   for (let i = 0; i < 4; i++) if (same(date, addDays(adv, i * 7))) return { ...pick('advent', HOLY), name: `${['First', 'Second', 'Third', 'Fourth'][i]} Sunday of Advent` };
   if (m === 0 && d === 1) return pick('newYear', FESTIVALS);
