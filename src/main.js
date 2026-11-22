@@ -5,6 +5,7 @@ import { UI } from './ui.js';
 import { BUILDINGS } from './data.js';
 import { cellOf } from './world.js';
 import { audio } from './audio.js';
+import { Tutorial, checkFeats } from './tutorial.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -24,6 +25,7 @@ const realm = new Realm(ui);
 
 const view = {
   centerOn(x, y) { cam.x = x - vw / cam.z / 2; cam.y = y - vh / cam.z / 2; clampCam(); },
+  toScreen(x, y) { return { x: (x - cam.x) * cam.z, y: (y - cam.y) * cam.z }; },
   centerCell() { return [cellOf(cam.x + vw / cam.z / 2), cellOf(cam.y + vh / cam.z / 2)]; },
   focusScene() {
     const sc = realm.scene;
@@ -141,12 +143,14 @@ function drawGhost() {
 }
 
 // ---------------- loop
-let last = performance.now();
+let last = performance.now(), tutorial = null, featT = 3;
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   if (!realm.state) return; // wiped, reload pending
   realm.update(dt);
   ui.frame(dt);
+  if (tutorial) tutorial.update(dt);
+  featT -= dt; if (featT <= 0) { featT = 2; checkFeats(realm); }
   if (glide) {
     cam.x += glide.vx * dt * 1000; cam.y += glide.vy * dt * 1000; clampCam();
     const f = Math.pow(0.04, dt); glide.vx *= f; glide.vy *= f;
@@ -175,6 +179,7 @@ async function boot() {
   view.focusScene();
   document.getElementById('loading').classList.add('hidden');
   ui.welcome(info);
+  tutorial = new Tutorial(realm, ui, view); tutorial.start();
   realm.save();
   window.realm = realm; window.cam = cam; window.view = view; window.audio = audio; // handy for debugging from the console
   requestAnimationFrame(t => { last = t; frame(t); });

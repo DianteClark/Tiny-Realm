@@ -210,3 +210,11 @@ body.exp #abilitybar { bottom: calc(var(--safe-bot) + 76px); }
 .ab span { position: relative; }
 #squadbar .btn.small { padding: 0 2px; min-width: 40px; }
 .chart { width: 100%; height: 230px; display: block; border: 6px solid transparent; border-image: url('assets/ui/paper_dark.png') 64 fill / 6px stretch; image-rendering: pixelated; cursor: pointer; }
+
+/* ---------- tutorial ---------- */
+#tut { position: absolute; left: 50%; transform: translateX(-50%); top: calc(var(--safe-top) + 100px); width: min(92vw, 420px); padding: 4px 6px; display: flex; flex-direction: column; align-items: center; gap: 4px; z-index: 4; pointer-events: none; animation: toastIn .3s ease-out; }
+#tut .btn { pointer-events: auto; }
+#tut.low { top: auto; bottom: calc(var(--safe-bot) + 160px); }
+#tut p { margin: 0; font-size: 14px; line-height: 1.3; text-align: center; }
+#tut .btn { min-height: 28px; font-size: 12px; }
+#tutHand { position: fixed; left: 0; top: 0; width: 40px; height: 40px; image-rendering: pixelated; pointer-events: none; z-index: 20; filter: drop-shadow(0 2px 0 rgba(0,0,0,.4)); }

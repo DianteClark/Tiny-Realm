@@ -66,6 +66,7 @@ export class Realm {
     this.buildHome();
     const away = fresh ? 0 : this.applyOffline();
     this.scene = this.home;
+    if (fresh) this.env.t = 684; // a new realm wakes up in the morning
     this.checkDaily();
     return { fresh, away };
   }
@@ -919,6 +920,8 @@ export class Realm {
     const S = this.state;
     if (won) {
       S.stats.raidsSurvived++;
+      if (this.env.isNight) S.stats.nightRaids = (S.stats.nightRaids || 0) + 1;
+      if (this.env.weather === 'storm') S.stats.stormRaids = (S.stats.stormRaids || 0) + 1;
       const reward = Math.round(R.loot + 20 + R.level * 6);
       this.addRes('gold', reward);
       this.sfx('victory');

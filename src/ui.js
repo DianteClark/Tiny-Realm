@@ -6,8 +6,9 @@ import { Unit, Building, Struct, cellOf } from './world.js';
 import { T } from './terrain.js';
 import { MAJOR } from './events.js';
 import { audio } from './audio.js';
+import { FEATS } from './tutorial.js';
 
-export const VERSION = '2.1';
+export const VERSION = '3.0';
 
 const $ = s => document.querySelector(s);
 const src = k => SHEETS[k] ? encodeURI(SHEETS[k].src) : '';
@@ -115,6 +116,13 @@ export class UI {
     if (!info.fresh && localStorage.getItem('tinyrealm.seen') !== VERSION) {
       const div = document.createElement('div');
       div.innerHTML = `<p style="text-align:left;font-size:14px;line-height:1.4">
+        <b>3.0</b><br>
+        Four rival houses now raid you. Conquer their capitals from the new sea chart in Voyage to make them pay tribute.<br>
+        Build walls and gates. Raiders must hack their way through.<br>
+        Every soldier type has a special ability, and squads can march in formations. Expeditions have a 2x speed button.<br>
+        Seasons, weather, and a day and night cycle.<br>
+        27 Feats to earn, listed in the Chronicle.<br>
+        <b>2.x</b><br>
         Music and sound effects, all synthesized live.<br>
         Upgrade Watchtowers, Houses and training halls up to level 5.<br>
         Upgraded halls train faster and send out veteran recruits.<br>
@@ -579,7 +587,11 @@ export class UI {
 
   panel_chronicle() {
     const R = this.R, S = R.state;
-    this.setTabs([['quest', 'Chronicle'], ['realm', 'Realm'], ['log', 'Tales']]);
+    this.setTabs([['quest', 'Chronicle'], ['realm', 'Realm'], ['feats', 'Feats'], ['log', 'Tales']]);
+    if (this.tab === 'feats') {
+      const F = S.feats || {}, n = FEATS.filter(f => F[f.id]).length;
+      return `<p class="section-title">${n} of ${FEATS.length} feats</p>` + FEATS.map(f => `<div class="card ${F[f.id] ? '' : 'light'}"><i class="ic ic-shield" style="${F[f.id] ? '' : 'filter:grayscale(1);opacity:.45'}"></i><div class="grow"><h3>${f.name}</h3><p>${f.desc}${F[f.id] ? ' Earned ' + ago(F[f.id]) + '.' : ''}</p></div></div>`).join('');
+    }
     if (this.tab === 'realm') {
       const days = Math.floor((Date.now() - S.created) / 86400000) + 1;
       const rows = [['Realm day', days], ['Castle', TIERS[S.tier].name], ['Renown', S.renown], ['Daily streak', S.daily.streak], ['Islands cleared', S.cleared], ['Raids repelled', S.stats.raidsSurvived], ['Raids lost', S.stats.raidsLost], ['Great events survived', S.stats.eventsSurvived], ['Monsters slain', S.stats.kills], ['Trolls slain', S.stats.trollsSlain], ['Soldiers fallen', S.fallen.length], ['Gold gathered', fmt(S.stats.gold || 0)], ['Wood gathered', fmt(S.stats.wood || 0)], ['Meat gathered', fmt(S.stats.meat || 0)], ['Storage cap', fmt(R.storage())]];
