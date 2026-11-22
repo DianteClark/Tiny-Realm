@@ -145,7 +145,8 @@ export class Realm {
         const k = map.kindAt(x + ox, y + oy);
         if (k === K_WATER || map.block[map.i(x + ox, y + oy)] || map.stairAt(x + ox, y + oy)) return false;
       }
-      return map.ground(x, y) && !map.stairAt(x, y) && !map.isCliff(x, y + 1) && !map.stairAt(x, y + 1);
+      for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) if (map.stairAt(x + ox, y + oy)) return false;
+      return map.ground(x, y) && !map.isCliff(x, y + 1);
     };
     const nearCastle = (x, y, d) => Math.abs(x - (CASTLE.x + 2)) < d + 2 && Math.abs(y - (CASTLE.y + 1)) < d;
     const treeSpots = [];
@@ -162,6 +163,21 @@ export class Realm {
         const x = fx + r.int(-3, 3), y = fy + r.int(-3, 3);
         if (free(x, y) && !nearCastle(x, y, 5) && !treeSpots.some(t => t.x === x && t.y === y)) { treeSpots.push({ x, y, f: fx }); map.block[map.i(x, y)]++; }
       }
+    }
+    // drop any tree that seals off walkable ground (plateaus, nooks) from the castle
+    const door0 = h.nearestWalkable(CASTLE.x + 2, CASTLE.y + 2);
+    for (let pass = 0; pass < 4; pass++) {
+      const re = reachable(map, door0[0], door0[1]);
+      const sealed = (x, y) => map.walkable(x, y) && !re[map.i(x, y)];
+      const keep = [];
+      let removed = 0;
+      for (const t of treeSpots) {
+        let bad = false;
+        for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) if (sealed(t.x + ox, t.y + oy)) bad = true;
+        if (bad) { map.block[map.i(t.x, t.y)]--; removed++; } else keep.push(t);
+      }
+      treeSpots.length = 0; treeSpots.push(...keep);
+      if (!removed) break;
     }
     for (const t of treeSpots) map.block[map.i(t.x, t.y)]--;
     // validate: every tree must leave the castle reachable (avoid sealing paths)
