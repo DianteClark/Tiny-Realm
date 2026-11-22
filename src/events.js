@@ -244,7 +244,7 @@ export class EventDirector {
     else if (id === 'fragment') {
       S.fragments = (S.fragments || 0) + 1;
       if (S.fragments >= 3) {
-        const unowned = Object.keys(RELICS).filter(k => !S.relics[k]);
+        const unowned = Object.keys(RELICS).filter(k => !S.relics[k] && !['seacrown', 'harvestsickle', 'frostheart', 'springbloom', 'sunstone', 'moonstone'].includes(k));
         if (unowned.length) { const k = unowned[Math.floor(Math.random() * unowned.length)]; S.relics[k] = true; S.fragments -= 3; R.ui.banner('Relic forged', `${RELICS[k].name}: ${RELICS[k].desc}`, 'gold'); R.sfx('levelup'); }
       } else R.ui.toast(`You hold ${S.fragments} of 3 fragments.`);
     } else if (id === 'sellsword') {

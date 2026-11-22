@@ -138,7 +138,8 @@ img, .ic { image-rendering: pixelated; }
 .sheet-head .close { position: absolute; right: -10px; top: 4px; }
 #panelBody { overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 2px 6px; flex: 1; }
 #panelTabs { display: flex; gap: 4px; margin-bottom: 6px; }
-#panelTabs .btn { flex: 1; }
+#panelTabs .btn { flex: 1 1 0; min-width: 0; padding-left: 0; padding-right: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#panelTabs:has(.btn:nth-child(5)) .btn { font-size: 11px; }
 .dialog { width: min(92vw, 440px); max-height: 86vh; overflow-y: auto; display: flex; flex-direction: column; align-items: center; animation: sheetUp .2s ease-out; }
 .dialog .ribbon { margin-top: -6px; }
 #modalBody { font-size: 15px; line-height: 1.35; margin: 6px 0 10px; text-align: center; width: 100%; }
@@ -288,3 +289,4 @@ body.exp #abilitybar { bottom: calc(var(--safe-bot) + 124px); }
 .decree .good { color: #4f8f3a; } .card:not(.light).decree .good { color: #9be37b; }
 .decree .bad { color: #b3362f; } .card:not(.light).decree .bad { color: #ff9d93; }
 .other-laws { margin: 0 0 6px; font-size: 13px; } .other-laws summary { cursor: pointer; text-align: center; opacity: .8; margin-bottom: 6px; }
+.card.season { background: linear-gradient(135deg, #5a4a6e, #3f4a5c); border-color: #2e2840; }

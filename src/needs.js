@@ -33,6 +33,7 @@ export function happiness(R) {
   if (hol) { parts.push([hol.name, 10]); h += 10; }
   if (R.env.weather === 'storm') { parts.push(['Storm', -5]); h -= 5; }
   if (R.events.market) { parts.push(['Night Market', 3]); h += 3; }
+  if (S.relics.springbloom) { parts.push(['Spring Bloom', 10]); h += 10; }
   const dec = R.decrees && R.decrees.active();
   if (dec && dec.fx.mood) { parts.push([dec.name, dec.fx.mood]); h += dec.fx.mood; }
   h = Math.max(0, Math.min(100, h));

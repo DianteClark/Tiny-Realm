@@ -15,6 +15,7 @@ import { Needs, EXCHANGE } from './needs.js';
 import { CHAPTERS, chapterState } from './campaign.js';
 import { Trade } from './trade.js';
 import { Decrees, DECREES } from './decrees.js';
+import { Seasonal } from './seasonal.js';
 import { SHEETS } from './assets.js';
 import { audio } from './audio.js';
 import { Environment } from './env.js';
@@ -66,6 +67,7 @@ export class Realm {
     this.needs = new Needs(this);
     this.trade = new Trade(this);
     this.decrees = new Decrees(this);
+    this.seasonal = new Seasonal(this);
   }
 
   // ------------------------------------------------------------ persistence
@@ -128,12 +130,12 @@ export class Realm {
     const R = this.state.relics, rn = this.state.renown, P = this.provinceBonus();
     const b = {
       hp: (R.minotaurhorn ? 0.1 : 0) + (R.seacrown ? 0.1 : 0) + rn * RENOWN_BONUS.power,
-      dmg: rn * RENOWN_BONUS.power + (R.seacrown ? 0.1 : 0),
+      dmg: rn * RENOWN_BONUS.power + (R.seacrown ? 0.1 : 0) + (R.sunstone ? 0.08 : 0),
       meleeDmg: R.trolltusk ? 0.1 : 0,
       rangedDmg: R.sharktooth ? 0.1 : 0,
       atkSpeed: R.pandabelt ? 0.05 : 0,
-      towerDmg: R.boneidol ? 0.25 : 0,
-      gather: rn * RENOWN_BONUS.gather + (R.rubberduck ? 0.05 : 0) + (R.seacrown ? 0.1 : 0) + (this.needs && this.home ? this.needs.gatherBonus() : 0),
+      towerDmg: (R.boneidol ? 0.25 : 0) + (R.frostheart ? 0.2 : 0),
+      gather: (R.harvestsickle ? 0.08 : 0) + rn * RENOWN_BONUS.gather + (R.rubberduck ? 0.05 : 0) + (R.seacrown ? 0.1 : 0) + (this.needs && this.home ? this.needs.gatherBonus() : 0),
       gold: R.goldenacorn ? 0.1 : 0,
       wood: R.bearpelt ? 0.1 : 0,
       castleHp: R.turtleshell ? 0.2 : 0,
@@ -1019,7 +1021,7 @@ export class Realm {
     this.env.update(dt);
     this.updateAnnex(dt); // annexed land slam (src/annex.js)
     this.tickTimersT = (this.tickTimersT || 0) - dt;
-    if (this.tickTimersT <= 0) { this.tickTimersT = 0.5; this.tickTimers(false); this.checkDaily(); this.tickTribute(); this.orders.update(); this.chal.update(); this.trade.update(); this.holidayTick(); this.rescueT = (this.rescueT || 0) - 0.5; if (this.rescueT <= 0 && !this.exp) { this.rescueT = 4; this.rescueTrapped(); } }
+    if (this.tickTimersT <= 0) { this.tickTimersT = 0.5; this.tickTimers(false); this.checkDaily(); this.tickTribute(); this.orders.update(); this.chal.update(); this.trade.update(); this.seasonal.update(); this.holidayTick(); this.rescueT = (this.rescueT || 0) - 0.5; if (this.rescueT <= 0 && !this.exp) { this.rescueT = 4; this.rescueTrapped(); } }
     // sheep breed
     this.sheepT = (this.sheepT || 0) + dt;
     if (this.env.breed() > 0 && this.sheepT > 35 / this.env.breed()) { this.sheepT = 0; if (this.home.sheep.length < this.maxSheep()) this.spawnSheep(); }
@@ -1517,7 +1519,7 @@ export class Realm {
         this.log(`${rv.name} bent the knee. ${rv.ruler} will pay tribute.`);
       } else if (sc.bounty) {
         S.daily.bounty = todayStr();
-        const unowned = Object.keys(RELICS).filter(k => !S.relics[k] && !['trolltusk', 'minotaurhorn', 'bearpelt', 'pandabelt', 'turtleshell', 'rubberduck'].includes(k));
+        const unowned = Object.keys(RELICS).filter(k => !S.relics[k] && !['trolltusk', 'minotaurhorn', 'bearpelt', 'pandabelt', 'turtleshell', 'rubberduck', ...['seacrown', 'harvestsickle', 'frostheart', 'springbloom', 'sunstone', 'moonstone']].includes(k));
         if (unowned.length && Math.random() < 0.35) { const k = unowned[Math.floor(Math.random() * unowned.length)]; S.relics[k] = true; summary.relic = k; }
       } else if (sc.abyss) {
         const A = S.abyss, fl = sc.abyss;
@@ -1527,6 +1529,7 @@ export class Realm {
         if (sc.info.boss) summary.gear.push(this.dropGear(lv + 4, { quiet: true, min: fl >= 15 ? 3 : 2, from: sc.islandName }));
         for (const u of survivors) u.hp = Math.min(u.maxHp, u.hp + u.maxHp * 0.25); // a short rest between floors
         if (fl >= (S.stats.abyssBest || 0)) S.stats.abyssBest = fl;
+        S.stats.abyssFloors = (S.stats.abyssFloors || 0) + 1;
         this.log(`Cleared floor ${fl} of the Abyss.`);
       } else if (sc.story >= 0) {
         const st = chapterState(S), ch = CHAPTERS[sc.story];

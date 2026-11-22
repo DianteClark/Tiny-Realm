@@ -13,6 +13,7 @@ import { NEEDS, MOODS, EXCHANGE } from './needs.js';
 import { CHAPTERS, nextChapter, chapterOpen, chapterState } from './campaign.js';
 import { ports } from './trade.js';
 import { DECREES } from './decrees.js';
+import { SHOP, SEASON_EVENTS } from './seasonal.js';
 
 export const VERSION = '3.4';
 
@@ -237,6 +238,7 @@ export class UI {
     if (R.home.goldRush > 0) N.push(['rush', 'gold', 'ic-gold', `Gold Rush ${time(R.home.goldRush)}`]);
     if (S.upgradeEnd) N.push(['upgrade', 'blue', 'ic-hammer', `Castle grows ${time((S.upgradeEnd - Date.now()) / 1000)}`]);
     if (!R.exp && S.orders) { const o = S.orders.list, d = o.filter(x => x.done).length; if (d < o.length) N.push(['orders', S.orders.kind === 'night' ? 'purple' : 'gold', 'ic-sword', `${S.orders.kind === 'night' ? 'Night' : 'Day'} orders ${d}/${o.length}`]); }
+    if (!R.exp && R.seasonal.bossReady() && !R.seasonal.summonBlock()) N.push(['season', 'purple', 'ic-sword', `${R.seasonal.ev.boss.title} awaits`]);
     if (!R.exp && !R.decrees.D.pick) N.push(['decree', 'purple', 'ic-info', 'Choose this week\'s royal decree']);
     if (!R.exp && R.needs.get().mood.key === 'unhappy') N.push(['mood', 'red', 'ic-pawn', 'Your people are unhappy']);
     if (!R.exp && R.chal.C.day && !R.chal.C.day.done) { const c = R.chal.C.day; N.push(['chal', 'gold', 'ic-shield', `Daily: ${c.text}${c.n > 1 ? ` ${Math.floor(c.have)}/${c.n}` : ''}`]); }
@@ -266,6 +268,7 @@ export class UI {
     else if (k === 'quest' || k === 'orders' || k === 'chal') this.openPanel('chronicle');
     else if (k === 'mood') this.openPanel('workers');
     else if (k === 'decree') this.openPanel('chronicle');
+    else if (k === 'season') { this.openPanel('chronicle'); this.tab = 'season'; this.renderPanel(); }
     else if (k === 'market') this.openPanel('nightmarket');
     else if (k === 'holiday') { const h = R.holiday(); if (h) this.banner(h.name, (h.verse ? h.verse + ' ' : '') + h.desc, h.colour || 'gold'); }
     else if (k === 'env') { const e = R.env; this.toast(`${e.season.name}: ${e.season.desc}${e.weather !== 'clear' ? ' ' + e.w.name + ': ' + e.w.desc : ''}`); }
@@ -764,7 +767,8 @@ export class UI {
 
   panel_chronicle() {
     const R = this.R, S = R.state;
-    this.setTabs([['quest', 'Chronicle'], ['realm', 'Realm'], ['feats', 'Feats'], ['log', 'Tales']]);
+    this.setTabs([['quest', 'Goals'], ['season', 'Season'], ['realm', 'Realm'], ['feats', 'Feats'], ['log', 'Tales']]);
+    if (this.tab === 'season') return this.seasonHtml();
     if (this.tab === 'feats') {
       const F = S.feats || {}, n = FEATS.filter(f => F[f.id]).length;
       return `<p class="section-title">${n} of ${FEATS.length} feats</p>` + FEATS.map(f => `<div class="card ${F[f.id] ? '' : 'light'}"><i class="ic ic-shield" style="${F[f.id] ? '' : 'filter:grayscale(1);opacity:.45'}"></i><div class="grow"><h3>${f.name}</h3><p>${f.desc}${F[f.id] ? ' Earned ' + ago(F[f.id]) + '.' : ''}</p></div></div>`).join('');
@@ -801,6 +805,22 @@ export class UI {
       <div class="card light"><div class="grow"><p>Relics found: ${relicsOwned} of ${Object.keys(RELICS).length}. Great events like the Troll Breakout hold the rarest.</p></div></div>`;
   }
 
+  seasonHtml() {
+    const R = this.R, S = R.state, Z = R.seasonal, ev = Z.ev, st = Z.st;
+    const days = Math.max(1, Math.ceil(Z.endsIn() / 86400000));
+    let html = `<div class="card season"><div class="grow"><h3>${ev.name}</h3><p>${esc(ev.blurb)}</p><p class="muted">${R.env.season.name} event, ${days} day${days === 1 ? '' : 's'} left. Tokens: <b>${st.tokens}</b></p></div></div>`;
+    html += `<p class="section-title">Weekly boss</p><div class="card light"><div class="grow"><h3>${ev.boss.title}</h3><p>${esc(ev.boss.text)} Beat it for 5 tokens and epic gear.</p>${Z.bossReady() ? '' : '<p class="muted">Beaten or fled this week. It returns on Monday.</p>'}</div>
+      ${Z.bossReady() ? `<button class="btn small red" data-act="sboss" ${Z.summonBlock() ? 'disabled' : ''}>Summon</button>` : ''}</div>`;
+    html += `<p class="section-title">Season tasks (4 tokens each)</p>` + st.tasks.map((t, i) => `<div class="card ${t.done ? '' : 'light'}"><i class="ic ${t.done ? 'ic-shield' : 'ic-sword'}"></i><div class="grow"><h3>${esc(ev.tasks[i].text(t.n))}</h3><p>${t.done ? 'Done.' : `${Math.floor(t.have || 0)} / ${t.n}`}</p>${t.done ? '' : `<div class="xpbar"><i style="width:${Math.min(100, (t.have || 0) / t.n * 100)}%"></i></div>`}</div></div>`).join('');
+    const rel = RELICS[ev.relic];
+    const item = (id, title, desc, extra = '') => { const cost = Z.price(id), dis = st.tokens < cost || extra; return `<div class="card light"><div class="grow"><h3>${title}</h3><p>${desc}</p>${extra ? `<p class="muted">${extra}</p>` : ''}</div><button class="btn small" data-act="sbuy:${id}" ${dis ? 'disabled' : ''}>${cost} tokens</button></div>`; };
+    html += `<p class="section-title">Season shop</p>` +
+      item('relic', rel.name, `A relic found only in ${ev.name}: ${rel.desc}.`, S.relics[ev.relic] ? 'Already yours.' : '') +
+      item('legend', 'Seasonal legendary', 'A legendary piece forged for the season.', st.bought.legend ? 'One per season.' : '') +
+      item('chest', 'Epic war chest', 'A piece of epic gear or better.') +
+      item('bundle', 'Fair goods', `${200 + S.tier * 120} each of gold, wood and meat.`);
+    return html + '<p class="muted" style="text-align:center;font-size:12px">Tokens and tasks reset when the season changes. Spend them before it ends.</p>';
+  }
   decreeHtml() {
     const R = this.R, D = R.decrees.D, a = R.decrees.active();
     const opt = k => { const d = DECREES[k], on = D.pick === k; return `<div class="card ${on ? '' : 'light'} decree"><div class="grow"><h3>${on ? '<span class="rank">In force</span> ' : ''}${d.name}</h3><p class="good">${d.good}.</p><p class="bad">${d.bad}.</p></div>
@@ -965,6 +985,8 @@ export class UI {
       return;
     }
     if (k === 'selall') { this.closePanel(); this.selectAll(); return; }
+    if (k === 'sboss') { err(R.seasonal.summon()); this.closePanel(); return; }
+    if (k === 'sbuy') { err(R.seasonal.buy(x)); return this.refresh(); }
     if (k === 'decree') { const D = R.decrees.D; if (D.pick && D.pick !== x) return this.confirm('Change the law?', `Replace ${DECREES[D.pick].name} with ${DECREES[x].name} for ${R.decrees.changeCost().gold} gold? You can only change it once this week.`, 'Change', () => { err(R.decrees.choose(x)); this.refresh(); }); err(R.decrees.choose(x)); return this.refresh(); }
     if (k === 'tsend') { err(R.trade.send(a.slice(6))); return this.refresh(); }
     if (k === 'tstop') { R.trade.stop(+x); return this.refresh(); }
