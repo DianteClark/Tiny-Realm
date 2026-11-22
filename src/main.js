@@ -117,6 +117,14 @@ window.addEventListener('keydown', e => {
 function drawGhost() {
   const p = ui.place; if (!p) return;
   const d = BUILDINGS[p.type];
+  if (d.wall) {
+    const z = cam.z * dpr;
+    ctx.setTransform(z, 0, 0, z, Math.round(-cam.x * z), Math.round(-cam.y * z));
+    const cells = p.line ? (p.a ? realm.wallLine(p.a, p.b) : []) : (p.cx != null ? [[p.cx, p.cy]] : []);
+    for (const [x, y] of cells) { ctx.fillStyle = realm.canPlaceWall(x, y, p.type) ? 'rgba(109,187,91,0.5)' : 'rgba(217,83,79,0.5)'; ctx.fillRect(x * T + 4, y * T + 4, T - 8, T - 8); }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    return;
+  }
   const ok = realm.canPlace(p.type, p.cx, p.cy);
   const z = cam.z * dpr;
   ctx.setTransform(z, 0, 0, z, Math.round(-cam.x * z), Math.round(-cam.y * z));

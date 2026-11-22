@@ -174,6 +174,7 @@ S('icon_gold', F + 'UI Elements/UI Elements/Icons/Icon_03.png', 64, 64, 0);
 S('icon_meat', F + 'UI Elements/UI Elements/Icons/Icon_04.png', 64, 64, 0);
 S('icon_sword', F + 'UI Elements/UI Elements/Icons/Icon_05.png', 64, 64, 0);
 S('icon_shield', F + 'UI Elements/UI Elements/Icons/Icon_06.png', 64, 64, 0);
+S('fence', E + 'Extra/Wooden Fence/Wooden Fence_64x64 tile.png', 64, 64, 64, { frames: 1 });
 S('cursorRing', F + 'UI Elements/UI Elements/Cursors/Cursor_04.png', 128, 128, 64);
 
 export const SHEETS = sheets;

@@ -53,6 +53,8 @@ export const BUILDINGS = {
   barracks: { name: 'Barracks', img: 'b_Barracks', fw: 3, fh: 2, hp: 600, cost: { wood: 80, gold: 30 }, time: 45, desc: 'Trains Warriors, Lancers, Swordsmen, Berserkers and Horsemen.' },
   archery: { name: 'Archery Range', img: 'b_Archery', fw: 3, fh: 2, hp: 550, cost: { wood: 90, gold: 30 }, time: 45, desc: 'Trains Archers and builds Catapults.' },
   monastery: { name: 'Monastery', img: 'b_Monastery', fw: 3, fh: 2, hp: 600, cost: { wood: 120, gold: 80 }, time: 70, desc: 'Trains Monks who heal your soldiers.' },
+  wall: { name: 'Wooden Wall', img: 'fence', fw: 1, fh: 1, hp: 260, cost: { wood: 6 }, time: 3, wall: true, desc: 'Fence lines that raiders must hack through. Drag out a line to build many at once.' },
+  gate: { name: 'Gate', img: 'fence', fw: 1, fh: 1, hp: 450, cost: { wood: 20 }, time: 6, wall: true, gate: true, desc: 'A gap your people walk through. Swings shut whenever foes come close. Place it on a wall to convert it.' },
   tower: { name: 'Watchtower', img: 'b_Tower', fw: 2, fh: 1, hp: 700, cost: { wood: 100, gold: 40 }, time: 60, defense: { dmg: 12, range: 5.5, cd: 1.4 }, desc: 'A posted archer shoots raiders. Higher ground gives longer range.' },
 };
 

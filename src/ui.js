@@ -15,7 +15,7 @@ const fmt = n => n >= 10000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1) + 'k' : St
 const time = s => { s = Math.max(0, Math.ceil(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return h ? `${h}h ${m}m` : `${m}:${String(x).padStart(2, '0')}`; };
 const ago = t => { const s = (Date.now() - t) / 1000; return s < 60 ? 'just now' : s < 3600 ? Math.floor(s / 60) + 'm ago' : s < 86400 ? Math.floor(s / 3600) + 'h ago' : Math.floor(s / 86400) + 'd ago'; };
 const UNIT_AV = { pawn: 'av_h5', warrior: 'av_h1', archer: 'av_h3', lancer: 'av_h2', monk: 'av_h4', swordsman: 'av_swordsman1', berserker: 'av_berserker1', horseman: 'av_horseman1', catapult: 'av_catapult1', king: 'av_king1' };
-const BLD_IMG = { castle: 'b_Castle', house: 'b_House1', barracks: 'b_Barracks', archery: 'b_Archery', monastery: 'b_Monastery', tower: 'b_Tower' };
+const BLD_IMG = { wall: 'fence', gate: 'fence', castle: 'b_Castle', house: 'b_House1', barracks: 'b_Barracks', archery: 'b_Archery', monastery: 'b_Monastery', tower: 'b_Tower' };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 export class UI {
@@ -338,6 +338,14 @@ export class UI {
   // ------------------------------------------------------------ placement
   startPlace(type) {
     this.closePanel();
+    if (BUILDINGS[type].wall) {
+      this.place = { type, line: type === 'wall', a: null, b: null, cx: null, cy: null };
+      $('#placebar').classList.remove('hidden'); $('#placeText').textContent = BUILDINGS[type].name;
+      $('#bottombar').classList.add('hidden');
+      this.R.scene.selected.clear(); this.refreshSel();
+      this.toast(type === 'wall' ? 'Tap where the wall starts, then tap where it ends.' : 'Tap a spot, or an existing wall to turn it into a gate.');
+      return;
+    }
     const c = this.view.centerCell();
     this.place = { type, cx: c[0] - Math.floor(BUILDINGS[type].fw / 2), cy: c[1] - BUILDINGS[type].fh + 1 };
     $('#placebar').classList.remove('hidden');
@@ -348,11 +356,25 @@ export class UI {
   }
   movePlace(wx, wy) {
     const d = BUILDINGS[this.place.type];
+    if (d.wall) {
+      const c = [cellOf(wx), cellOf(wy)], p = this.place;
+      if (p.line) { if (!p.a || p.b && p.done) { p.a = c; p.b = c; p.done = false; } else { p.b = c; p.done = true; } }
+      else { p.cx = c[0]; p.cy = c[1]; }
+      return;
+    }
     this.place.cx = cellOf(wx) - Math.floor(d.fw / 2);
     this.place.cy = cellOf(wy) - d.fh + 1;
   }
   confirmPlace() {
     const p = this.place; if (!p) return;
+    if (BUILDINGS[p.type].wall) {
+      const cells = p.line ? (p.a ? this.R.wallLine(p.a, p.b) : []) : (p.cx != null ? [[p.cx, p.cy]] : []);
+      if (!cells.length) { this.toast('Tap the map first.'); return; }
+      const err = this.R.placeWalls(p.type, cells);
+      if (err) { this.toast(err, 'red'); return; }
+      if (p.line) { p.a = null; p.b = null; this.toast('Wall raised. Tap again for another line, or Cancel when done.'); } else this.cancelPlace();
+      return;
+    }
     const err = this.R.placeBuilding(p.type, p.cx, p.cy);
     if (err) { this.toast(err, 'red'); return; }
     this.cancelPlace();
@@ -540,8 +562,12 @@ export class UI {
           <button class="btn small" data-act="upgrade" ${R.canAfford(c) ? '' : 'disabled'}>Raise</button></div>`;
       }
     }
+    if (b.def.gate) {
+      html += `<div class="card"><div class="grow"><h3>${b.hold ? 'Held shut' : 'Automatic'}</h3><p>${b.hold ? 'The gate stays closed until you open it.' : 'Opens for your people, slams shut when foes come within 4 tiles.'}</p></div>
+        <button class="btn small" data-act="gate:${b.id}">${b.hold ? 'Automatic' : 'Hold shut'}</button></div>`;
+    }
     // level and upgrades (2.0)
-    if (b.type !== 'castle' && b.done) {
+    if (b.type !== 'castle' && b.done && !b.def.wall) {
       const cur = describeLevel(b.type, b.level);
       html += `<p class="section-title">Level ${b.level}${cur && b.level > 1 ? ': ' + cur : ''}</p>`;
       if (b.type === 'tower') {
@@ -620,6 +646,7 @@ export class UI {
       err(R.train(b, y)); return this.refresh();
     }
     if (k === 'upgrade') { err(R.upgradeCastle()); return this.refresh(); }
+    if (k === 'gate') { const b = R.home.buildings.find(o => o.id === +x); b.hold = !b.hold; b.gateT = 0; return this.refresh(); }
     if (k === 'bup') { err(R.upgradeBuilding(R.home.buildings.find(o => o.id === +x))); return this.refresh(); }
     if (k === 'repair') { err(R.repairNow(R.home.buildings.find(o => o.id === +x))); return this.refresh(); }
     if (k === 'cancel') { const b = R.home.buildings.find(o => o.id === +x); R.cancelTrain(b, +y); return this.refresh(); }

@@ -182,6 +182,7 @@ export class Building {
     if (this.hp <= 0) this.scene.onBuildingDown(this, src);
   }
   hitTest(wx, wy) {
+    if (this.def.wall) return wx >= this.cx * T && wx < (this.cx + 1) * T && wy >= this.cy * T - 10 && wy < (this.cy + 1) * T;
     const s = SHEETS[this.imgKey]; const w = s.fw, h = s.fh;
     return wx >= this.x - w / 2 + 8 && wx <= this.x + w / 2 - 8 && wy >= this.y - h + 40 && wy <= this.y + 6;
   }
@@ -239,9 +240,11 @@ export class Scene {
   placeBlock(cells, d) { for (const [x, y] of cells) if (this.map.in(x, y)) this.map.block[this.map.i(x, y)] += d; }
   addBuilding(type, cx, cy, opts) {
     const b = new Building(this, type, cx, cy, opts);
-    this.buildings.push(b); this.placeBlock(b.cells(), 1); return b;
+    this.buildings.push(b); this.placeBlock(b.cells(), 1);
+    if (b.def.wall) this.wallMap = null;
+    return b;
   }
-  removeBuilding(b) { this.buildings = this.buildings.filter(o => o !== b); this.placeBlock(b.cells(), -1); }
+  removeBuilding(b) { this.buildings = this.buildings.filter(o => o !== b); if (!(b.def.gate && b.open)) this.placeBlock(b.cells(), -1); if (b.def.wall) this.wallMap = null; }
   addStruct(type, cx, cy, campId, level) {
     const s = new Struct(this, type, cx, cy, campId, level);
     this.structs.push(s); const cells = []; for (let y = cy; y < cy + s.fh; y++) for (let x = cx; x < cx + s.fw; x++) cells.push([x, y]);
@@ -447,7 +450,14 @@ export class Scene {
         const reach = Math.max(1, Math.floor(r / T));
         ok = u.setPath(t.x, t.y, (x, y) => Math.max(Math.abs(x - tcx), Math.abs(y - tcy)) <= Math.min(reach, 1) || (reach > 1 && Math.hypot(x - tcx, y - tcy) <= reach - 0.5));
       }
-      if (!ok) { u.giveUp = 2.5; u.target = null; u.stop(); return; }
+      if (!ok) {
+        // raiders who can't reach their target hack through the nearest wall instead
+        if (u.team === 1 && !u.flying && this.walls().size && !(t.def && t.def.wall)) {
+          const w = this.game.breachTarget(this, u);
+          if (w) { u.target = w; u.pathT = 0; return; }
+        }
+        u.giveUp = 2.5; u.target = null; u.stop(); return;
+      }
     }
     u.stepPath(dt);
   }
@@ -585,8 +595,24 @@ export class Scene {
     if (u.flying || (this.map.walkable(cellOf(nx), cellOf(ny)) && this.map.level(cellOf(nx), cellOf(ny)) === this.map.level(cellOf(u.x), cellOf(u.y)))) { u.x = nx; u.y = ny; }
   }
 
+  refreshWalls() { this.wallMap = new Map(); for (const b of this.buildings) if (b.def.wall) this.wallMap.set(b.cx + ',' + b.cy, b); }
+  updateGate(b, dt) {
+    b.gateT = (b.gateT || 0) - dt;
+    if (b.gateT > 0) return;
+    b.gateT = 0.3;
+    const x = (b.cx + 0.5) * T, y = (b.cy + 0.5) * T;
+    const foeNear = this.units.some(u => u.team === 1 && u.alive && !u.flying && dist(u.x, u.y, x, y) < 4 * T);
+    const shut = foeNear || b.hold;
+    const want = !shut && b.done && !b.ruined;
+    if (want !== !!b.open) {
+      b.open = want;
+      this.placeBlock([[b.cx, b.cy]], want ? -1 : 1);
+      if (this.game.sfx) this.game.sfx(want ? 'close' : 'thud', b, this);
+    }
+  }
   updateBuilding(b, dt) {
     if (b.flash > 0) b.flash -= dt;
+    if (b.def.gate) this.updateGate(b, dt);
     b.fireT += dt;
     if (!b.done || b.ruined) return;
     const def = b.def.defense;
@@ -835,7 +861,31 @@ export class Scene {
     ctx.fillStyle = '#5a4636'; ctx.fillRect(Math.round(x - w / 2), Math.round(y), w, 5);
     ctx.fillStyle = color; ctx.fillRect(Math.round(x - w / 2), Math.round(y), Math.round(w * frac), 5);
   }
+  walls() { if (!this.wallMap) this.refreshWalls(); return this.wallMap; }
+  wallAt(x, y) { return this.walls().get(x + ',' + y) || null; }
+  drawWall(ctx, b) {
+    const s = SHEETS.fence; if (!s || !s.img) return;
+    const n = (dx, dy) => !!this.wallAt(b.cx + dx, b.cy + dy);
+    const L = n(-1, 0), R = n(1, 0), U = n(0, -1), D = n(0, 1);
+    let c = [1, 0];
+    if (b.def.gate && b.open) return this.drawGateOpen(ctx, b, L || R);
+    if (L && R) c = [1, 0]; else if (U && D) c = [0, 1];
+    else if (R && D) c = [0, 0]; else if (L && D) c = [3, 0]; else if (U && R) c = [0, 2]; else if (U && L) c = [3, 2];
+    else if (L) c = [1, 2]; else if (R) c = [2, 2]; else if (U || D) c = [0, 1]; else c = [2, 2];
+    ctx.globalAlpha = b.done ? 1 : 0.5;
+    ctx.drawImage(s.img, c[0] * T, c[1] * T, T, T, b.cx * T, b.cy * T, T, T);
+    if (b.def.gate) { ctx.fillStyle = '#8c5a2b'; ctx.fillRect(b.cx * T + 8, b.cy * T + 24, 48, 6); ctx.fillStyle = '#3b2f2a'; ctx.fillRect(b.cx * T + 8, b.cy * T + 30, 48, 2); }
+    ctx.globalAlpha = 1;
+    if (b.flash > 0) b.flash -= 1 / 60;
+  }
+  drawGateOpen(ctx, b, horizontal) {
+    // an open gate: two posts with the doors swung back
+    const s = SHEETS.fence, x = b.cx * T, y = b.cy * T;
+    ctx.drawImage(s.img, 1 * T, 2 * T, 28, T, x, y, 28, T);
+    ctx.drawImage(s.img, 2 * T + 36, 2 * T, 28, T, x + 36, y, 28, T);
+  }
   drawBuilding(ctx, b) {
+    if (b.def.wall) return this.drawWall(ctx, b);
     const s = SHEETS[b.imgKey]; if (!s || !s.img) return;
     const constructing = !b.done;
     ctx.globalAlpha = constructing ? 0.5 : (b.ruined ? 0.55 : 1);

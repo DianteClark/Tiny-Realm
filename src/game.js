@@ -462,7 +462,51 @@ export class Realm {
   }
 
   // ------------------------------------------------------------ building, training, upgrades
-  limitFor(type) { return this.tierDef.limits[type] ?? 99; }
+  limitFor(type) {
+    if (type === 'wall') return 30 + this.state.tier * 30;
+    if (type === 'gate') return 1 + this.state.tier;
+    return this.tierDef.limits[type] ?? 99;
+  }
+  // ---- walls and gates (3.0)
+  canPlaceWall(x, y, type = 'wall') {
+    const m = this.home.map, h = this.home;
+    if (type === 'gate') { const w = h.wallAt(x, y); if (w && w.type === 'wall') return true; }
+    if (!m.ground(x, y) || m.stairAt(x, y) || m.block[m.i(x, y)]) return false;
+    if (m.isCliff(x, y + 1) && false) return false;
+    if (h.units.some(u => u.alive && !u.hidden && cellOf(u.x) === x && cellOf(u.y) === y && u.kind !== 'pawn' && u.team === 1)) return false;
+    return true;
+  }
+  wallLine(a, b) {
+    const cells = [];
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    if (Math.abs(dx) >= Math.abs(dy)) { const s = Math.sign(dx) || 1; for (let x = a[0]; x !== b[0] + s; x += s) cells.push([x, a[1]]); }
+    else { const s = Math.sign(dy) || 1; for (let y = a[1]; y !== b[1] + s; y += s) cells.push([a[0], y]); }
+    return cells.slice(0, 40);
+  }
+  placeWalls(type, cells) {
+    const d = BUILDINGS[type];
+    let n = 0, blocked = 0;
+    for (const [x, y] of cells) {
+      if (this.countOf(type) >= this.limitFor(type)) { this.ui.toast('Your castle must grow before you can build more of these.', 'red'); break; }
+      if (!this.canPlaceWall(x, y, type)) { blocked++; continue; }
+      if (!this.canAfford(d.cost)) { this.ui.toast('Ran out of wood.', 'red'); break; }
+      this.pay(d.cost);
+      const old = this.home.wallAt(x, y);
+      if (old) this.home.removeBuilding(old);
+      const b = this.home.addBuilding(type, x, y, { buildEnd: Date.now() + d.time * 1000, buildTotal: d.time });
+      b.pop = 1; n++;
+    }
+    this.home.wallMap = null;
+    this.reach = reachable(this.home.map, this.door[0], this.door[1]);
+    if (n) { this.sfx('place'); this.home.fxAt('dust2', center(cells[0][0]), center(cells[0][1]) + 20); }
+    this.save();
+    return n ? null : (blocked ? 'That spot is blocked.' : 'Nothing was built.');
+  }
+  breachTarget(scene, u) {
+    let best = null, bd = 1e9;
+    for (const w of scene.walls().values()) { if (!w.alive) continue; const d = u.distTo(w) + (w.def.gate ? -30 : 0); if (d < bd) { bd = d; best = w; } }
+    return best;
+  }
   countOf(type) { return this.home.buildings.filter(b => b.type === type).length; }
   canPlace(type, cx, cy) {
     const d = BUILDINGS[type], m = this.home.map;
@@ -869,7 +913,7 @@ export class Realm {
   }
   raidTarget(scene, u) {
     if (scene !== this.home) return null;
-    const bs = scene.buildings.filter(b => !b.ruined && b.done);
+    const bs = scene.buildings.filter(b => !b.ruined && b.done && !b.def.wall);
     let best = this.castle.alive ? this.castle : null, bd = best ? u.distTo(best) * (u.def.burn ? 1.6 : 1) : 1e9;
     for (const b of bs) { const d = u.distTo(b) * (u.def.burn ? 0.6 : 1); if (d < bd && (d < 7 * T || u.def.burn)) { bd = d; best = b; } }
     return best;
@@ -972,6 +1016,11 @@ export class Realm {
   }
   onBuildingDown(scene, b, src) {
     if (b === this.castle) { this.loseRaid(); return; }
+    if (b.def.wall) { // fences splinter and are gone
+      scene.removeBuilding(b); scene.fxAt('dust2', b.x, b.y);
+      this.reach = reachable(scene.map, this.door[0], this.door[1]);
+      return;
+    }
     this.ui.toast(`Your ${BUILDINGS[b.type].name} is in ruins. Builders can restore it.`, 'red');
   }
   onStructDown(scene, s) {
