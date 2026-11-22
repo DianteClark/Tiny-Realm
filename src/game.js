@@ -13,6 +13,7 @@ import { SHEETS } from './assets.js';
 import { audio } from './audio.js';
 import { Environment } from './env.js';
 import { Orders } from './orders.js';
+import { holidayFor, moonPhase } from './calendar.js';
 
 const SAVE_KEY = 'tinyrealm.save.v1';
 // The home map is a big sea; the starting island (BASE_W x BASE_H) sits in the middle at BASE_X,BASE_Y
@@ -336,7 +337,8 @@ export class Realm {
       if (u.stepPath(dt)) { u.hidden = true; u.task = null; u.carry = null; }
       return;
     }
-    if (u.hidden) { u.hidden = false; const c = scene.nearestWalkable(this.door[0], this.door[1]); u.x = center(c[0]) + (Math.random() - 0.5) * 30; u.y = center(c[1]) + 8; u.stop(); }
+    if (u.hidden && u.sleeping && this.env.isNight && (u.job === 'idle' || !u.job)) return;
+    if (u.hidden) { u.hidden = false; u.sleeping = false; const c = scene.nearestWalkable(this.door[0], this.door[1]); u.x = center(c[0]) + (Math.random() - 0.5) * 30; u.y = center(c[1]) + 8; u.stop(); }
     if (u.stung > 0) { u.stung -= dt; }
     const gb = this.bonus();
     // carrying: walk to the nearest drop-off
@@ -375,7 +377,7 @@ export class Realm {
         if (!u.setPath(center(u.node.cx), center(u.node.cy), scene.adjacentGoal([[u.node.cx, u.node.cy]]))) { u.node.tried = u.id; this.releaseNode(u); return; }
         u.task = 'go';
       }
-      if (u.task === 'go') { if (u.stepPath(dt)) { u.task = 'work'; u.workT = job === 'wood' ? 3.2 : 3.6; } return; }
+      if (u.task === 'go') { if (u.stepPath(dt)) { u.task = 'work'; u.workT = (job === 'wood' ? 3.2 : 3.6) * this.nightPace(u); } return; }
       if (u.task === 'work') {
         u.working = true; u.flip = center(u.node.cx) < u.x;
         if (job === 'wood' && Math.random() < dt * 2) u.node.shake = 0.2;
@@ -385,7 +387,8 @@ export class Realm {
         if (u.workT <= 0) {
           u.working = false;
           const take = job === 'wood' ? Math.min(5, u.node.wood) : Math.min(5, u.node.amount);
-          let n = take * (1 + gb.gather + (job === 'gold' ? gb.gold : gb.wood) + this.env.gather(job));
+          const hol = this.holiday();
+          let n = take * (1 + gb.gather + (job === 'gold' ? gb.gold : gb.wood) + this.env.gather(job) + ((hol && hol.gather) || 0));
           if (job === 'gold' && scene.goldRush > 0) n *= 2;
           if (job === 'wood') { u.node.wood -= take; if (u.node.wood <= 0) { u.node.regrow = Date.now() + 180000; this.releaseNode(u); } }
           else {
@@ -419,7 +422,8 @@ export class Realm {
           u.working = false; s.caught = true; scene.fxAt('dust1', s.x, s.y); this.sfx('baa', s, scene);
           scene.sheep = scene.sheep.filter(o => o !== s);
           this.releaseNode(u);
-          u.carry = 'Meat'; u.carryN = Math.round(8 * (1 + gb.gather + (gb.meat || 0) + this.env.gather('meat'))); u.task = null;
+          const holm = this.holiday();
+          u.carry = 'Meat'; u.carryN = Math.round(8 * (1 + gb.gather + (gb.meat || 0) + this.env.gather('meat') + ((holm && (holm.meat || holm.gather)) || 0))); u.task = null;
         }
       }
       return;
@@ -449,8 +453,21 @@ export class Realm {
     }
     this.idleWander(scene, u, dt);
   }
+  // after dark, pawns far from a lit lantern work at a sleepy pace
+  nightPace(u) {
+    if (!this.env.isNight) return 1;
+    for (const b of this.home.buildings) if (b.def.lantern && b.done && !b.ruined && Math.hypot(b.x - u.x, b.y - u.y) < 5 * T) return 1;
+    return 1.6;
+  }
   idleWander(scene, u, dt) {
     u.working = false;
+    // idle pawns go to bed at night
+    if (this.env.isNight && scene === this.home) {
+      if (u.task !== 'sleep') { u.task = 'sleep'; const homes = this.dropoffs(); let best = this.castle, bd = 1e9; for (const b of homes) { const d = dist(u.x, u.y, b.x, b.y); if (d < bd) { bd = d; best = b; } } u.bed = best; u.setPath(best.x, best.y, scene.adjacentGoal(best.cells())); }
+      if (u.stepPath(dt)) { u.hidden = true; u.sleeping = true; }
+      return;
+    }
+    if (u.task === 'sleep') u.task = null;
     if (u.path && u.path.length) { u.stepPath(dt); return; }
     u.moving = false;
     u.wanderT = (u.wanderT || Math.random() * 4) - dt;
@@ -468,14 +485,16 @@ export class Realm {
 
   // ------------------------------------------------------------ building, training, upgrades
   limitFor(type) {
+    if (type === 'lantern') return 4 + this.state.tier * 4;
     if (type === 'wall') return 30 + this.state.tier * 30;
     if (type === 'gate') return 1 + this.state.tier;
     return this.tierDef.limits[type] ?? 99;
   }
   // ---- walls and gates (3.0)
-  canPlaceWall(x, y, type = 'wall') {
+  canPlaceWall(x, y, type = 'wall') { // also used for lantern posts
     const m = this.home.map, h = this.home;
     if (type === 'gate') { const w = h.wallAt(x, y); if (w && w.type === 'wall') return true; }
+    if (type === 'lantern' && h.buildings.some(b => b.def.lantern && Math.abs(b.cx - x) + Math.abs(b.cy - y) < 3)) return false;
     if (!m.ground(x, y) || m.stairAt(x, y) || m.block[m.i(x, y)]) return false;
     for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) if (!m.isLand(x + ox, y + oy)) return false; // coasts stay free for new land
     if (h.units.some(u => u.alive && !u.hidden && cellOf(u.x) === x && cellOf(u.y) === y && u.kind !== 'pawn' && u.team === 1)) return false;
@@ -527,7 +546,7 @@ export class Realm {
     // building art is taller than its footprint: keep the drawn areas from overlapping
     const vis = (t, x, y) => {
       const dd = BUILDINGS[t]; const s = SHEETS[dd.img || dd.imgs[0]];
-      const extra = Math.max(0, Math.ceil(((s && s.fh) || 192) / T) - dd.fh - 1);
+      const extra = Math.max(0, Math.ceil((((s && s.fh) || 192) - 20) / T) - dd.fh); // rows of art above the footprint
       return { x0: x, x1: x + dd.fw - 1, y0: y - extra, y1: y + dd.fh - 1 };
     };
     const me = vis(type, cx, cy);
@@ -785,6 +804,29 @@ export class Realm {
     }
   }
 
+  // ------------------------------------------------------------ holidays and the moon
+  holiday() {
+    const now = Date.now();
+    if (!this._hol || now - this._hol.t > 60000) this._hol = { t: now, h: holidayFor(new Date(now + (this.env.offset || 0) * 3600000)) };
+    return this._hol.h;
+  }
+  moon() { return moonPhase(Date.now() + (this.env.offset || 0) * 3600000); }
+  holidayTick() {
+    const S = this.state, h = this.holiday(); if (!h) return;
+    const tag = todayStr() + ':' + h.key;
+    if (S.holidayDone === tag) return;
+    S.holidayDone = tag;
+    S.holidaysSeen = S.holidaysSeen || {}; S.holidaysSeen[h.key] = (S.holidaysSeen[h.key] || 0) + 1;
+    this.ui.banner(h.name, (h.verse ? h.verse + ' ' : '') + h.desc, h.colour || 'gold');
+    this.sfx(h.solemn ? 'bell' : 'victory');
+    this.log(`${h.name} was kept in the realm.`);
+    const soldiers = this.home.units.filter(u => u.rec && u.alive);
+    if (h.xpGift) for (const u of soldiers) { this.grantXp(this.home, u, h.xpGift); u.hp = u.maxHp; this.home.fxAt('healFx', u.x, u.y); }
+    if (h.feast) for (const u of soldiers) u.hp = u.maxHp;
+    if (h.lambs) for (let i = 0; i < h.lambs; i++) this.spawnSheep();
+    if (h.merchant && !this.events.merchant) this.events.startMerchant();
+  }
+
   // ------------------------------------------------------------ daily
   checkDaily() {
     const D = this.state.daily, today = todayStr();
@@ -792,7 +834,8 @@ export class Realm {
     const y = new Date(); y.setDate(y.getDate() - 1);
     D.streak = D.last === todayStr(y) ? D.streak + 1 : 1;
     D.last = today;
-    const mult = 1 + Math.min(D.streak - 1, 6) * 0.25;
+    const hol = holidayFor(new Date());
+    const mult = (1 + Math.min(D.streak - 1, 6) * 0.25) * ((hol && hol.gift) || 1);
     const base = 40 + this.state.tier * 40;
     const gift = { gold: Math.round(base * mult), wood: Math.round(base * mult), meat: Math.round(base * 0.8 * mult) };
     for (const k in gift) gift[k] = this.addRes(k, gift[k]);
@@ -807,7 +850,7 @@ export class Realm {
     this.env.update(dt);
     this.updateAnnex(dt); // annexed land slam (src/annex.js)
     this.tickTimersT = (this.tickTimersT || 0) - dt;
-    if (this.tickTimersT <= 0) { this.tickTimersT = 0.5; this.tickTimers(false); this.checkDaily(); this.tickTribute(); this.orders.update(); }
+    if (this.tickTimersT <= 0) { this.tickTimersT = 0.5; this.tickTimers(false); this.checkDaily(); this.tickTribute(); this.orders.update(); this.holidayTick(); }
     // sheep breed
     this.sheepT = (this.sheepT || 0) + dt;
     if (this.env.breed() > 0 && this.sheepT > 35 / this.env.breed()) { this.sheepT = 0; if (this.home.sheep.length < this.maxSheep()) this.spawnSheep(); }
@@ -835,6 +878,8 @@ export class Realm {
     if (!this.raid) {
       if (this.exp) return;
       if (this.events.blocking) return;
+      const hol = this.holiday();
+      if (hol && hol.peace && !this.raidWarned) { S.timers.raid = Math.max(S.timers.raid, 90); return; } // holy days are days of peace
       S.timers.raid -= dt;
       if (S.timers.raid <= 45 && !this.raidWarned) {
         this.raidWarned = true;
@@ -898,6 +943,7 @@ export class Realm {
       let b = budget, i = 0;
       const enemies = region.rival ? rivalRoster(region.rival, this.rivalLevel(region.rival)) : region.enemies.filter(k => !ENEMIES[k].boss && !(ENEMIES[k].caster && S.tier < 3) && (ENEMIES[k].minLevel || 0) <= level + 1);
       if (S.tier >= 2 && !region.rival && Math.random() < 0.35) queue.push({ type: 'thief', si: 0 });
+      if (this.env.isNight && this.moon().dark) { queue.push({ type: 'thief', si: 1 }, { type: 'thief', si: 2 }); } // a thieves' moon
       const night = this.env.isNight && !region.rival;
       while (b > 0 && i < 40) {
         let k = enemies[Math.floor(Math.random() * enemies.length)];
@@ -1047,7 +1093,8 @@ export class Realm {
   }
   grantXp(scene, u, xp) {
     const rec = u.rec; if (!rec || rec.level >= MAX_LEVEL) return;
-    rec.xp += xp * ((u.xpMul || 1) + this.env.xpMul() + (this.bonus().xp || 0));
+    const holx = this.holiday();
+    rec.xp += xp * ((u.xpMul || 1) + this.env.xpMul() + (this.bonus().xp || 0) + ((holx && holx.xp) || 0));
     let up = false;
     while (rec.level < MAX_LEVEL && rec.xp >= XP_LEVELS[rec.level + 1]) {
       rec.level++; up = true;

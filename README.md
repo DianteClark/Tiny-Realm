@@ -60,7 +60,7 @@ Import, and Wipe Realm to start over.
 - **Hero abilities and formations**: every soldier type has an ability on a
   cooldown (Shield Wall, Volley, Charge, Blessing, Whirlwind, Bloodrage,
   Trample, Firestone, Rally); squads march Loose, Line, Wedge or Column.
-- **Seasons, weather, day and night**: seasons follow the calendar, weather
+- **Seasons, weather, day and night**: seasons follow the real calendar (winter is December to February), weather
   changes range and sight, nights glow with torchlight.
 - **Feats and tutorial**: 27 achievements, and a guided first session.
 

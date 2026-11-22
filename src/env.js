@@ -1,7 +1,7 @@
 // Seasons, weather and the day/night cycle.
 // Time of day follows the player's real clock: dawn and dusk come at real
 // hours (later sunsets in summer, longer nights in winter). Seasons follow the
-// calendar (two real days each) and weather rolls every few minutes.
+// real calendar (winter is December to February) and weather rolls every few minutes.
 import { drawSprite } from './assets.js';
 import { T } from './terrain.js';
 
@@ -25,7 +25,8 @@ export class Environment {
     this.weather = 'clear'; this.weatherT = 120 + Math.random() * 180;
     this.drops = []; this.flash = 0; this.lightT = 6;
   }
-  get season() { return SEASONS[Math.floor(Date.now() / 86400000 / 2) % 4]; }
+  // northern-hemisphere meteorological seasons from the real date
+  get season() { const m = new Date(Date.now() + (this.offset || 0) * 3600000).getMonth(); return SEASONS[[3, 3, 0, 0, 0, 1, 1, 1, 2, 2, 2, 3][m]]; }
   get w() { return WEATHER[this.weather]; }
   // real local time in hours (0..24). this.offset lets tests fake the clock.
   get hour() { const d = new Date(Date.now() + (this.offset || 0) * 3600000); return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600; }
@@ -65,6 +66,8 @@ export class Environment {
     }
   }
   roll() {
+    const hol = this.R.holiday && this.R.holiday();
+    if (hol && (hol.clear || hol.key === 'easter')) { this.weather = 'clear'; this.weatherT = 300; return; }
     const s = this.season.key;
     const table = s === 'winter' ? { clear: 3, cloudy: 3, fog: 2, storm: 1 } : s === 'autumn' ? { clear: 3, cloudy: 2, rain: 3, fog: 2, storm: 1 } : s === 'spring' ? { clear: 4, cloudy: 2, rain: 3, storm: 1 } : { clear: 6, cloudy: 2, rain: 1, storm: 1 };
     let n = Object.values(table).reduce((a, b) => a + b, 0) * Math.random();
@@ -85,11 +88,22 @@ export class Environment {
 
   // world-space extras: torches and window glow at night
   drawWorld(ctx, scene) {
-    const n = this.night; if (n <= 0.05 || scene.kind !== 'home') return;
+    const hol = this.R.holiday(), n = this.night;
+    if (scene.kind === 'home' && hol && hol.glow && n > 0.05) { // a star over the castle on holy nights
+      const c = this.R.castle, x = c.x, y = c.y - 260;
+      const g = ctx.createRadialGradient(x, y, 2, x, y, 120);
+      g.addColorStop(0, `rgba(255,240,170,${0.9 * n})`); g.addColorStop(0.15, `rgba(255,220,120,${0.35 * n})`); g.addColorStop(1, 'rgba(255,220,120,0)');
+      ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = g; ctx.fillRect(x - 120, y - 120, 240, 240); ctx.globalCompositeOperation = 'source-over';
+    }
+    if (scene.kind === 'home' && hol && hol.fireworks && n > 0.5) {
+      this.fwT = (this.fwT || 0) - 1 / 60;
+      if (this.fwT <= 0) { this.fwT = 0.8 + Math.random() * 1.6; const c = this.R.castle; scene.fxAt(Math.random() < 0.5 ? 'explosion1' : 'explosion2', c.x + (Math.random() - 0.5) * 500, c.y - 250 - Math.random() * 200, { scale: 0.6 + Math.random() * 0.6 }); this.R.sfx('thud'); }
+    }
+    if (n <= 0.05 || scene.kind !== 'home') return;
     ctx.globalCompositeOperation = 'lighter';
     for (const b of scene.buildings) {
-      if (!b.done || b.ruined || b.def.wall) continue;
-      const r = b.type === 'castle' ? 170 : 90;
+      if (!b.done || b.ruined || (b.def.wall && !b.def.lantern)) continue;
+      const r = b.type === 'castle' ? 170 : b.def.lantern ? 5 * 64 : 90;
       const g = ctx.createRadialGradient(b.x, b.y - 40, 4, b.x, b.y - 40, r);
       g.addColorStop(0, `rgba(255,190,90,${0.28 * n})`); g.addColorStop(1, 'rgba(255,190,90,0)');
       ctx.fillStyle = g; ctx.fillRect(b.x - r, b.y - 40 - r, r * 2, r * 2);
@@ -103,12 +117,18 @@ export class Environment {
   // screen-space: darkness, tints, rain, snow, leaves, fog, lightning
   drawScreen(ctx, vw, vh, scene, cam) {
     const n = scene.kind === 'home' ? this.night : 0;
-    if (n > 0) { ctx.fillStyle = `rgba(20,24,70,${0.36 * n})`; ctx.fillRect(0, 0, vw, vh); }
+    const moon = this.R.moon(), hol = this.R.holiday();
+    if (n > 0) {
+      const k = moon.full ? 0.72 : moon.dark ? 1.25 : 1;
+      ctx.fillStyle = moon.full ? `rgba(40,55,110,${0.36 * n * k})` : `rgba(20,24,70,${0.36 * n * k})`; ctx.fillRect(0, 0, vw, vh);
+      if (moon.full) { ctx.fillStyle = `rgba(200,215,255,${0.05 * n})`; ctx.fillRect(0, 0, vw, vh); }
+    }
     if (this.season.tint) { ctx.fillStyle = this.season.tint; ctx.fillRect(0, 0, vw, vh); }
     const w = this.w;
     if (w.rain || w.storm) { ctx.fillStyle = `rgba(30,50,80,${0.08 * (w.rain || 1)})`; ctx.fillRect(0, 0, vw, vh); }
-    const want = w.rain ? 120 * w.rain : this.season.snow ? 90 : this.season.leaves ? 26 : 0;
-    const kind = w.rain ? 'rain' : this.season.snow ? 'snow' : this.season.leaves ? 'leaf' : null;
+    const snow = this.season.snow || (hol && hol.snow);
+    const want = w.rain ? 120 * w.rain : snow ? 90 : this.season.leaves ? 26 : 0;
+    const kind = w.rain ? 'rain' : snow ? 'snow' : this.season.leaves ? 'leaf' : null;
     while (this.drops.length < want) this.drops.push({ x: Math.random() * vw, y: Math.random() * vh, v: 0.6 + Math.random() * 0.8, p: Math.random() * 6 });
     if (this.drops.length > want) this.drops.length = want;
     const s = vw / 400;
@@ -130,5 +150,5 @@ export class Environment {
     if (w.fog) { ctx.fillStyle = 'rgba(220,230,235,0.22)'; ctx.fillRect(0, 0, vw, vh); }
     if (this.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${0.5 * this.flash})`; ctx.fillRect(0, 0, vw, vh); }
   }
-  label() { return `${this.clock()} ${this.season.name}${this.weather !== 'clear' ? ', ' + this.w.name : ''}`; }
+  label() { const m = this.R.moon(); return `${this.clock()} ${this.season.name}${this.weather !== 'clear' ? ', ' + this.w.name : ''}${this.isNight ? ', ' + m.name : ''}`; }
 }

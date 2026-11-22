@@ -80,12 +80,20 @@ img, .ic { image-rendering: pixelated; }
 .res span { overflow: hidden; text-overflow: ellipsis; }
 .res.full span { color: #ffd36b; }
 .res .ic { width: 24px; height: 24px; }
-#subbar { position: absolute; top: calc(var(--safe-top) + 62px); left: 8px; right: 8px; display: flex; align-items: flex-start; gap: 6px; pointer-events: none; }
-#tierRibbon { flex: none; }
+#subbar { position: absolute; top: calc(var(--safe-top) + 60px); left: 8px; right: 8px; display: flex; flex-direction: column; align-items: stretch; gap: 4px; pointer-events: none; }
 #subbar > * { pointer-events: auto; }
-#pills { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; }
-#pills::-webkit-scrollbar { display: none; }
-#pills .pill { flex: none; }
+#statusbar { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; padding: 0 4px; min-height: 34px; font-size: 13px; white-space: nowrap; }
+#statusbar .st { overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+#statusbar .st-tier { color: #ffe9a8; }
+#statusbar .st-env { text-align: center; opacity: .92; }
+#statusbar .st-raid.hot { color: #ff8a80; animation: hotPulse 1s ease-in-out infinite; }
+@keyframes hotPulse { 50% { opacity: .55; } }
+#pills { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.chip { display: flex; align-items: center; gap: 5px; max-width: min(66vw, 360px); padding: 0 6px 0 2px; min-height: 28px; font-size: 12px; cursor: pointer; border: 7px solid transparent; border-image: url('assets/ui/paper.png') 64 fill / 7px stretch; background: linear-gradient(#eee1c6, #eee1c6) center / calc(100% - 6px) calc(100% - 6px) no-repeat; color: var(--ink); box-shadow: inset 3px 0 0 var(--accent, #4a90c0); }
+.chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip .ic { width: 18px; height: 18px; }
+.chip.gold { --accent: #e8b93a; } .chip.purple { --accent: #8f5fb5; } .chip.red { --accent: #d9534f; } .chip.blue { --accent: #4a90c0; }
+.chip.more { color: var(--ink-soft); box-shadow: none; }
 .pill { cursor: pointer; }
 
 #toasts { position: absolute; left: 10px; right: 10px; bottom: calc(var(--safe-bot) + 96px); display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
@@ -218,3 +226,16 @@ body.exp #abilitybar { bottom: calc(var(--safe-bot) + 76px); }
 #tut p { margin: 0; font-size: 14px; line-height: 1.3; text-align: center; }
 #tut .btn { min-height: 28px; font-size: 12px; }
 #tutHand { position: fixed; left: 0; top: 0; width: 40px; height: 40px; image-rendering: pixelated; pointer-events: none; z-index: 20; filter: drop-shadow(0 2px 0 rgba(0,0,0,.4)); }
+
+/* fill behind every 9-slice frame so sub-pixel seams show the frame's own colour */
+.paper, #selbar, #placebar, .card.light { background: linear-gradient(#eee1c6, #eee1c6) center / calc(100% - 10px) calc(100% - 10px) no-repeat; }
+.paper-dark, .card, .sq, .queue .qi { background: linear-gradient(#525b66, #525b66) center / calc(100% - 6px) calc(100% - 6px) no-repeat; }
+.card.light { background: linear-gradient(#eee1c6, #eee1c6) center / calc(100% - 6px) calc(100% - 6px) no-repeat; }
+.btn, .navbtn { background: linear-gradient(#41919d, #41919d) center / calc(100% - 6px) calc(100% - 6px) no-repeat; }
+.btn:active, .btn.on, .navbtn:active, .navbtn.on { background-image: linear-gradient(#4a6982, #4a6982); }
+.btn.red, .ab { background: linear-gradient(#f65555, #f65555) center / calc(100% - 6px) calc(100% - 6px) no-repeat; }
+.btn.red:active, .ab:active { background-image: linear-gradient(#ba4954, #ba4954); }
+.btn:disabled { background-image: linear-gradient(#41919d, #41919d); }
+.wood { background: linear-gradient(#a47658, #a47658) center / calc(100% - 16px) calc(100% - 16px) no-repeat; }
+.sq.sel { background-image: linear-gradient(#4a6982, #4a6982); }
+#statusbar.night { color: #dfe6ff; }

@@ -1,6 +1,6 @@
 // Realm events: major threats that replace a raid, and smaller happenings.
 import { T } from './terrain.js';
-import { REGIONS, UNITS, TIERS, COMMON_TRAITS, TRAITS, RELICS, FIRST_NAMES, EPITHETS } from './data.js';
+import { REGIONS, UNITS, TIERS, COMMON_TRAITS, TRAITS, RELICS, FIRST_NAMES, EPITHETS, XP_LEVELS } from './data.js';
 import { cellOf } from './world.js';
 
 const center = c => c * T + T / 2;
@@ -28,6 +28,11 @@ export const MAJOR = {
     warn: 'A Hex Shaman and her imps have landed. Her spells turn soldiers into sheep. Strike her down to lift the curse.',
     ok: S => S.tier >= 2 && S.stats.raidsSurvived >= 1,
   },
+  moonhunt: {
+    title: 'The Moonlit Hunt',
+    warn: 'The full moon rises. The Moonhide Bear wakes in the deep woods and leads its pack of spiders and snakes toward the light of your castle.',
+    ok: (S, R) => false, // only triggered by the full moon
+  },
   minotaur: {
     title: "The Minotaur's Challenge",
     warn: 'A Minotaur wades ashore and bellows for a champion. Answer with your best fighter, or face its fury.',
@@ -50,10 +55,20 @@ export class EventDirector {
     S.timers.minor -= dt;
     if (S.timers.minor <= 0 && !R.raid) { S.timers.minor = 150 + Math.random() * 180; this.minor(); }
     const majorAllowed = S.tier >= 2 || S.stats.raidsSurvived >= 3;
-    if (majorAllowed && !R.raid && !this.blocking && !R.pendingRaid) {
+    const hol0 = R.holiday();
+    if (majorAllowed && !R.raid && !this.blocking && !R.pendingRaid && !(hol0 && hol0.peace)) {
       S.timers.major -= dt;
       if (S.timers.major <= 0) { S.timers.major = 1500 + Math.random() * 900; this.major(); }
     }
+    // the full moon summons the Moonlit Hunt once per lunar month
+    const moon = R.moon(), hol = R.holiday();
+    if (R.env.isNight && moon.full && S.tier >= 2 && !R.raid && !this.blocking && !(hol && hol.peace)) {
+      const huntId = Math.floor((Date.now() - Date.UTC(2000, 0, 6)) / (29.530588853 * 86400000));
+      if (S.lastHunt !== huntId) { S.lastHunt = huntId; this.announce('moonhunt'); }
+    }
+    // the night market opens at dusk and packs up at dawn
+    if (R.env.isNight && !R.exp) { if (!this.market || this.market.period !== R.env.period) this.openMarket(); }
+    else if (this.market) this.closeMarket();
     if (this.pending) {
       this.pending.t -= dt;
       if (this.pending.kind === 'bones') h.tint = Math.min(1, h.tint + dt * 0.3);
@@ -100,6 +115,8 @@ export class EventDirector {
       plan = R.planRaid('hex', { region: regionBy('crypt'), units: ['shaman', 'imp', 'imp', 'imp', 'skull', 'imp', 'skull'] });
     } else if (kind === 'minotaur') {
       plan = R.planRaid('minotaur', { region: regionBy('badlands'), units: ['minotaur'] });
+    } else if (kind === 'moonhunt') {
+      plan = R.planRaid('moonhunt', { region: regionBy('badlands'), units: ['moonbear', 'spider', 'snake', 'spider', 'snake', 'spider', ...(S.tier >= 3 ? ['bear', 'spider', 'snake'] : [])], gap: 0.9 });
     }
     plan.level = lvl;
     this.pending = { kind, t: kind === 'minotaur' ? 25 : 75, plan };
@@ -136,7 +153,7 @@ export class EventDirector {
         }
       };
     } else {
-      R.startRaid(plan, { title: ev.title, text: kind === 'troll' ? 'The trolls are ashore. Their clubs can flatten a house.' : kind === 'armada' ? 'Sharks spill onto every beach.' : 'The shaman begins to chant.', onEnd });
+      R.startRaid(plan, { title: ev.title, text: kind === 'troll' ? 'The trolls are ashore. Their clubs can flatten a house.' : kind === 'armada' ? 'Sharks spill onto every beach.' : kind === 'moonhunt' ? 'The Moonhide Bear is ashore.' : 'The shaman begins to chant.', onEnd });
     }
   }
   askChampion(act) {
@@ -181,6 +198,7 @@ export class EventDirector {
     else if (kind === 'armada') { R.addAll({ gold: g, wood: g }); give('sharktooth'); }
     else if (kind === 'bones') { R.addAll({ gold: g, wood: g * 0.5 }); give('boneidol'); }
     else if (kind === 'hex') { R.addAll({ gold: g * 1.2 }); give('hexcharm'); }
+    else if (kind === 'moonhunt') { R.addAll({ gold: g * 1.5, meat: g }); give('moonstone'); S.stats.moonHunts = (S.stats.moonHunts || 0) + 1; }
     else if (kind === 'minotaur') {
       if (act.duelLost) return;
       R.addAll({ gold: g * (act.duelWon ? 2 : 1), meat: g });
@@ -189,11 +207,62 @@ export class EventDirector {
     if (relic) R.ui.banner('Relic claimed', `${RELICS[relic].name}: ${RELICS[relic].desc}`, 'gold');
   }
 
+  // ------------------------------------------------------------ night market
+  openMarket() {
+    const R = this.R, S = R.state, h = R.home, T0 = S.tier;
+    this.closeMarket();
+    const c = h.nearestWalkable(R.door[0] + 3, R.door[1] + 1, 6) || R.door;
+    const npc = { key: 'thief_idle', x: c[0] * T + 32, y: c[1] * T + 40, flip: true, tap: () => R.ui.openPanel('nightmarket') };
+    h.npcs = [npc];
+    let seed = 0; for (const ch of R.env.period + S.seed) seed = (seed * 33 + ch.charCodeAt(0)) >>> 0;
+    const types = Object.keys(UNITS).filter(k => k !== 'pawn' && !UNITS[k].unique && UNITS[k].tier <= Math.min(5, T0 + 1));
+    const type = types[seed % types.length];
+    const offers = [
+      { id: 'fragment', name: 'Relic Fragment', desc: `A shard of something old. Gather 3 to forge a relic you do not have. You hold ${S.fragments || 0}.`, cost: { gold: 220 * T0 } },
+      { id: 'sellsword', name: `Moonlit ${UNITS[type].name}`, desc: `A level ${4 + T0} ${UNITS[type].name} with three traits, no questions asked.`, cost: { gold: (UNITS[type].cost.gold || 30) * 3 + 120 * T0 }, type },
+      { id: 'draught', name: "Soldier's Draught", desc: 'A bitter brew. One soldier at home gains a full level.', cost: { gold: 140 * T0, meat: 60 * T0 } },
+      { id: 'timber', name: 'Smuggled Timber', desc: 'Wood of doubtful origin, cheap.', cost: { gold: 90 * T0 }, get: { wood: 260 * T0 } },
+    ];
+    this.market = { period: R.env.period, npc, offers, bought: {} };
+    if (S.tier >= 1) R.ui.toast('A hooded trader has set up a Night Market by the castle. Tap them to see their wares.');
+  }
+  closeMarket() { if (this.market) { this.R.home.npcs = []; this.market = null; } }
+  buy(id) {
+    const R = this.R, S = R.state, M = this.market; if (!M) return 'The market has closed.';
+    const o = M.offers.find(x => x.id === id); if (!o) return;
+    if (M.bought[id]) return 'Sold out for tonight.';
+    if (id === 'sellsword' && R.popUsed() + UNITS[o.type].pop > R.popCap()) return 'No room. Build more Houses.';
+    if (id === 'draught' && !S.soldiers.some(s => s.status === 'home' && s.level < 10)) return 'No soldier at home can drink it.';
+    if (!R.pay(o.cost)) return 'Not enough to pay.';
+    M.bought[id] = true; R.sfx('coin');
+    S.stats.marketBuys = (S.stats.marketBuys || 0) + 1;
+    if (id === 'fragment') {
+      S.fragments = (S.fragments || 0) + 1;
+      if (S.fragments >= 3) {
+        const unowned = Object.keys(RELICS).filter(k => !S.relics[k]);
+        if (unowned.length) { const k = unowned[Math.floor(Math.random() * unowned.length)]; S.relics[k] = true; S.fragments -= 3; R.ui.banner('Relic forged', `${RELICS[k].name}: ${RELICS[k].desc}`, 'gold'); R.sfx('levelup'); }
+      } else R.ui.toast(`You hold ${S.fragments} of 3 fragments.`);
+    } else if (id === 'sellsword') {
+      const rec = R.newSoldier(o.type); rec.level = 4 + S.tier; rec.xp = XP_LEVELS[rec.level];
+      while (rec.traits.length < 3) { const t = COMMON_TRAITS[Math.floor(Math.random() * COMMON_TRAITS.length)]; if (!rec.traits.includes(t)) rec.traits.push(t); }
+      R.spawnSoldier(rec, false, { x: M.npc.x, y: M.npc.y }); R.ui.toast(`${rec.name} slips out of the shadows to join you.`);
+    } else if (id === 'draught') {
+      const recs = S.soldiers.filter(s => s.status === 'home' && s.level < 10).sort((a, b) => b.level - a.level);
+      const rec = recs[0]; const u = R.home.units.find(x => x.rec === rec);
+      rec.xp = Math.max(rec.xp, XP_LEVELS[rec.level + 1]);
+      if (u) R.grantXp(R.home, u, 0.01); else rec.level++;
+      R.ui.toast(`${rec.name} drinks the draught and grows stronger.`);
+    } else if (o.get) R.addAll(o.get);
+    return null;
+  }
+
   // ------------------------------------------------------------ minor
   minor(force) {
     const R = this.R, S = R.state;
-    const night = R.env.isNight;
-    const opts = night ? ['goldrush', 'wisp', 'wisp', 'lambs'] : ['goldrush', 'merchant', 'duck', 'lambs', 'bees'];
+    const night = R.env.isNight, hol = R.holiday();
+    let opts = night ? ['goldrush', 'wisp', 'wisp', 'lambs'] : ['goldrush', 'merchant', 'duck', 'lambs', 'bees'];
+    if (hol && hol.peace) opts = opts.filter(k => k !== 'bees');
+    if (hol && hol.solemn) opts = ['lambs'];
     if (S.tier >= 1 && S.stats.raidsSurvived >= 1) opts.push('mercenary', 'mercenary');
     const k = force || pick(opts);
     if (k === 'goldrush') {

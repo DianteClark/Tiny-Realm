@@ -102,6 +102,11 @@ export const FEATS = [
   { id: 'storm', name: 'Storm Breaker', desc: 'Repel a raid during a storm.', test: S => (S.stats.stormRaids || 0) >= 1 },
   { id: 'orders10', name: 'Round the Clock', desc: 'Complete 10 day or night orders.', test: S => (S.stats.ordersDone || 0) >= 10 },
   { id: 'wisp', name: 'Wisp Catcher', desc: 'Slay 25 night creatures.', test: S => (S.stats.nightKills || 0) >= 25 },
+  { id: 'christmas', name: 'Keeping Christmas', desc: 'Be in your realm on Christmas Day.', test: S => !!(S.holidaysSeen || {}).christmas },
+  { id: 'easter', name: 'He Is Risen', desc: 'Be in your realm on Easter Sunday.', test: S => !!(S.holidaysSeen || {}).easter },
+  { id: 'advent', name: 'Watchful Waiting', desc: 'Keep all four Sundays of Advent.', test: S => ((S.holidaysSeen || {}).advent || 0) >= 4 },
+  { id: 'moonhunt', name: 'Moonhide', desc: 'Survive the Moonlit Hunt.', test: S => (S.stats.moonHunts || 0) >= 1 },
+  { id: 'market', name: 'Shady Dealings', desc: 'Buy something at the Night Market.', test: S => (S.stats.marketBuys || 0) >= 1 },
   { id: 'annex', name: 'Land Grabber', desc: 'Annex new land to your island.', test: S => (S.annexed || []).length >= 1 },
 ];
 export function checkFeats(R) {

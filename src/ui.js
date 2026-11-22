@@ -7,8 +7,9 @@ import { T } from './terrain.js';
 import { MAJOR } from './events.js';
 import { audio } from './audio.js';
 import { FEATS } from './tutorial.js';
+import { upcomingHolidays } from './calendar.js';
 
-export const VERSION = '3.1';
+export const VERSION = '3.2';
 
 const $ = s => document.querySelector(s);
 const src = k => SHEETS[k] ? encodeURI(SHEETS[k].src) : '';
@@ -16,7 +17,7 @@ const fmt = n => n >= 10000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1) + 'k' : St
 const time = s => { s = Math.max(0, Math.ceil(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return h ? `${h}h ${m}m` : `${m}:${String(x).padStart(2, '0')}`; };
 const ago = t => { const s = (Date.now() - t) / 1000; return s < 60 ? 'just now' : s < 3600 ? Math.floor(s / 60) + 'm ago' : s < 86400 ? Math.floor(s / 3600) + 'h ago' : Math.floor(s / 86400) + 'd ago'; };
 const UNIT_AV = { pawn: 'av_h5', warrior: 'av_h1', archer: 'av_h3', lancer: 'av_h2', monk: 'av_h4', swordsman: 'av_swordsman1', berserker: 'av_berserker1', horseman: 'av_horseman1', catapult: 'av_catapult1', king: 'av_king1' };
-const BLD_IMG = { wall: 'fence', gate: 'fence', castle: 'b_Castle', house: 'b_House1', barracks: 'b_Barracks', archery: 'b_Archery', monastery: 'b_Monastery', tower: 'b_Tower' };
+const BLD_IMG = { lantern: 'fire1', wall: 'fence', gate: 'fence', castle: 'b_Castle', house: 'b_House1', barracks: 'b_Barracks', archery: 'b_Archery', monastery: 'b_Monastery', tower: 'b_Tower' };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 export class UI {
@@ -53,7 +54,7 @@ export class UI {
     $('#btnPlaceCancel').onclick = () => this.cancelPlace();
     this.body.addEventListener('click', e => { const el = e.target.closest('[data-act]'); if (el && !el.disabled) this.act(el.dataset.act, el); });
     this.tabs.addEventListener('click', e => { const el = e.target.closest('[data-tab]'); if (el) { this.tab = el.dataset.tab; this.renderPanel(); } });
-    $('#pills').addEventListener('click', e => { const el = e.target.closest('[data-pill]'); if (el) this.pillAction(el.dataset.pill); });
+    $('#subbar').addEventListener('click', e => { const el = e.target.closest('[data-pill]'); if (el) this.pillAction(el.dataset.pill); });
     $('#hud').classList.remove('hidden');
     document.addEventListener('click', e => { const b = e.target.closest('button'); if (b && !b.disabled && !b.classList.contains('navbtn')) audio.play('click'); }, true);
   }
@@ -116,6 +117,11 @@ export class UI {
     if (!info.fresh && localStorage.getItem('tinyrealm.seen') !== VERSION) {
       const div = document.createElement('div');
       div.innerHTML = `<p style="text-align:left;font-size:14px;line-height:1.4">
+        <b>3.2</b><br>
+        Seasons now follow the real calendar. A cleaner status strip and notice list replace the scrolling ribbons.<br>
+        Holy days follow the real calendar: Advent, Christmas Eve and Christmas, Epiphany, Palm Sunday, Good Friday, Easter, Ascension and Pentecost, plus New Year, Thanksgiving and summer festivals. Holy days bring peace, gifts and blessings.<br>
+        The real moon: brighter full-moon nights, darker new moons with extra thieves, and the Moonlit Hunt once a month.<br>
+        A Night Market opens after dark. Pawns sleep at night: build Lantern Posts to keep them working.<br>
         <b>3.1</b><br>
         The realm now runs on your real clock. Night falls at dusk where you are: torches are lit, night raids bring skeletons, bats and imps and pay 50% more, and wisps drift over the island.<br>
         Day and Night Orders: two new objectives at every dawn and dusk.<br>
@@ -166,7 +172,8 @@ export class UI {
       el.classList.toggle('full', S.res[r] >= cap);
     }
     document.querySelector('.res[data-r="pop"] span').textContent = `${R.popUsed()}/${R.popCap()}`;
-    $('#tierRibbon').textContent = TIERS[S.tier].name + (S.renown ? ` R${S.renown}` : '');
+    const tierTxt = TIERS[S.tier].name + (S.renown ? ` R${S.renown}` : '');
+    if ($('#tierRibbon').textContent !== tierTxt) $('#tierRibbon').textContent = tierTxt;
     const J = S.jobs, idle = Math.max(0, S.pawns - J.wood - J.gold - J.meat - J.build);
     const badge = document.querySelector('[data-panel="workers"] .badge');
     if (idle > 0) { if (!badge) document.querySelector('[data-panel="workers"]').insertAdjacentHTML('beforeend', `<b class="badge">${idle}</b>`); else badge.textContent = idle; }
@@ -179,27 +186,43 @@ export class UI {
   }
   renderPills() {
     const R = this.R, S = R.state, E = R.events;
-    const pills = [];
-    if (R.raid && R.raid.active) {
-      const n = R.raid.units.filter(u => u.alive).length + R.raid.queue.length;
-      pills.push(['raid', 'red', `${R.raid.title}: ${n} foes`]);
-    } else if (E.pending) pills.push(['event', 'red', `${MAJOR[E.pending.kind].title} ${time(E.pending.t)}`]);
-    else if (!R.exp && S.timers.raid < 120) pills.push(['raidsoon', 'red', `Raid in ${time(S.timers.raid)}`]);
-    else if (!R.exp) pills.push(['raidsoon', 'black', `Next raid ${time(S.timers.raid)}`]);
-    pills.push(['env', R.env.isNight ? 'black' : 'blue', R.env.label()]);
-    if (!R.exp && S.orders) { const o = S.orders.list; pills.push(['orders', S.orders.kind === 'night' ? 'purple' : 'yellow', `${S.orders.kind === 'night' ? 'Night' : 'Day'} orders ${o.filter(x => x.done).length}/${o.length}`]); }
-    if (!R.exp) { const q = R.currentQuest(); pills.push(['quest', 'purple', `Goal: ${q.text} ${Math.min(R.questValue(q.type), q.n)}/${q.n}`]); }
-    if (E.merchant) pills.push(['merchant', 'yellow', `Merchant ${time(E.merchant.t)}`]);
-    if (E.bees) pills.push(['bees', 'yellow', `Bee swarm`]);
-    if (R.home.goldRush > 0) pills.push(['rush', 'yellow', `Gold Rush ${time(R.home.goldRush)}`]);
-    if (S.upgradeEnd) pills.push(['upgrade', 'purple', `Castle ${time((S.upgradeEnd - Date.now()) / 1000)}`]);
-    const html = pills.map(([k, c, t]) => `<div class="ribbon-small ${c} pill" data-pill="${k}">${esc(t)}</div>`).join('');
+    // status strip: tier, clock and sky, raid timer
+    let raidText, raidHot = false, raidKey = 'raidsoon';
+    if (R.raid && R.raid.active) { const n = R.raid.units.filter(u => u.alive).length + R.raid.queue.length; raidText = `${R.raid.title}: ${n} foes`; raidHot = true; raidKey = 'raid'; }
+    else if (E.pending) { raidText = `${MAJOR[E.pending.kind].title} ${time(E.pending.t)}`; raidHot = true; raidKey = 'event'; }
+    else if (R.exp) raidText = 'At sea';
+    else { const hol = R.holiday(); raidText = hol && hol.peace ? 'Peace today' : `Raid in ${time(S.timers.raid)}`; raidHot = !(hol && hol.peace) && S.timers.raid < 120; }
+    const env = R.env.label();
+    const sKey = raidText + '|' + raidHot + '|' + env;
+    if (sKey !== this.stKey) {
+      this.stKey = sKey;
+      $('#stEnv').textContent = env;
+      const r = $('#stRaid'); r.textContent = raidText; r.classList.toggle('hot', raidHot); r.dataset.pill = raidKey;
+      document.getElementById('statusbar').classList.toggle('night', R.env.isNight);
+    }
+    // notices: only what needs attention, newest-relevant first
+    const N = [];
+    const hol = R.holiday();
+    if (hol) N.push(['holiday', 'gold', 'ic-shield', hol.name]);
+    if (E.market && !R.exp) N.push(['market', 'purple', 'ic-gold', 'Night Market is open']);
+    if (E.merchant) N.push(['merchant', 'gold', 'ic-gold', `Merchant ${time(E.merchant.t)}`]);
+    if (E.bees) N.push(['bees', 'red', 'ic-x', 'Bee swarm in the forest']);
+    if (R.home.goldRush > 0) N.push(['rush', 'gold', 'ic-gold', `Gold Rush ${time(R.home.goldRush)}`]);
+    if (S.upgradeEnd) N.push(['upgrade', 'blue', 'ic-hammer', `Castle grows ${time((S.upgradeEnd - Date.now()) / 1000)}`]);
+    if (!R.exp && S.orders) { const o = S.orders.list, d = o.filter(x => x.done).length; if (d < o.length) N.push(['orders', S.orders.kind === 'night' ? 'purple' : 'gold', 'ic-sword', `${S.orders.kind === 'night' ? 'Night' : 'Day'} orders ${d}/${o.length}`]); }
+    if (!R.exp) { const q = R.currentQuest(); N.push(['quest', 'blue', 'ic-info', `${q.text} ${Math.min(R.questValue(q.type), q.n)}/${q.n}`]); }
+    const max = this.noticesOpen ? N.length : 3;
+    let html = N.slice(0, max).map(([k, c, ic, t]) => `<div class="chip ${c}" data-pill="${k}"><i class="ic ${ic}"></i><span>${esc(t)}</span></div>`).join('');
+    if (N.length > 3) html += `<div class="chip more" data-pill="more"><span>${this.noticesOpen ? 'Show less' : `+${N.length - 3} more`}</span></div>`;
     if (html !== this.pillsHtml) { $('#pills').innerHTML = html; this.pillsHtml = html; }
   }
   pillAction(k) {
     const R = this.R;
+    if (k === 'more') { this.noticesOpen = !this.noticesOpen; this.pillsHtml = null; return; }
     if (k === 'merchant') this.openPanel('merchant');
     else if (k === 'quest' || k === 'orders') this.openPanel('chronicle');
+    else if (k === 'market') this.openPanel('nightmarket');
+    else if (k === 'holiday') { const h = R.holiday(); if (h) this.banner(h.name, (h.verse ? h.verse + ' ' : '') + h.desc, h.colour || 'gold'); }
     else if (k === 'env') { const e = R.env; this.toast(`${e.season.name}: ${e.season.desc}${e.weather !== 'clear' ? ' ' + e.w.name + ': ' + e.w.desc : ''}`); }
     else if (k === 'raid' && R.raid) { const u = R.raid.units.find(u => u.alive); if (u) this.view.centerOn(u.x, u.y); }
     else if (k === 'bees' && R.events.bees) this.view.centerOn(R.events.bees.x, R.events.bees.y);
@@ -354,12 +377,12 @@ export class UI {
   // ------------------------------------------------------------ placement
   startPlace(type) {
     this.closePanel();
-    if (BUILDINGS[type].wall) {
+    if (BUILDINGS[type].wall || BUILDINGS[type].lantern) {
       this.place = { type, line: type === 'wall', a: null, b: null, cx: null, cy: null };
       $('#placebar').classList.remove('hidden'); $('#placeText').textContent = BUILDINGS[type].name;
       $('#bottombar').classList.add('hidden');
       this.R.scene.selected.clear(); this.refreshSel();
-      this.toast(type === 'wall' ? 'Tap where the wall starts, then tap where it ends.' : 'Tap a spot, or an existing wall to turn it into a gate.');
+      this.toast(type === 'wall' ? 'Tap where the wall starts, then tap where it ends.' : type === 'lantern' ? 'Tap a spot near your woodcutters and miners.' : 'Tap a spot, or an existing wall to turn it into a gate.');
       return;
     }
     const c = this.view.centerCell();
@@ -372,7 +395,7 @@ export class UI {
   }
   movePlace(wx, wy) {
     const d = BUILDINGS[this.place.type];
-    if (d.wall) {
+    if (d.wall || d.lantern) {
       const c = [cellOf(wx), cellOf(wy)], p = this.place;
       if (p.line) { if (!p.a || p.b && p.done) { p.a = c; p.b = c; p.done = false; } else { p.b = c; p.done = true; } }
       else { p.cx = c[0]; p.cy = c[1]; }
@@ -383,7 +406,7 @@ export class UI {
   }
   confirmPlace() {
     const p = this.place; if (!p) return;
-    if (BUILDINGS[p.type].wall) {
+    if (BUILDINGS[p.type].wall || BUILDINGS[p.type].lantern) {
       const cells = p.line ? (p.a ? this.R.wallLine(p.a, p.b) : []) : (p.cx != null ? [[p.cx, p.cy]] : []);
       if (!cells.length) { this.toast('Tap the map first.'); return; }
       const err = this.R.placeWalls(p.type, cells);
@@ -405,6 +428,7 @@ export class UI {
   togglePanel(name, arg) { if (this.panel === name && !arg) this.closePanel(); else this.openPanel(name, arg); }
   openPanel(name, arg) {
     if (this.R.exp && !['settings', 'army', 'chronicle'].includes(name)) return;
+    if (name === 'nightmarket' && !this.R.events.market) return this.toast('The Night Market only opens after dark.');
     if (this.panel !== name) audio.play('open');
     this.panel = name; this.panelArg = arg; this.tab = null;
     this.panelEl.classList.remove('hidden');
@@ -431,7 +455,7 @@ export class UI {
   renderPanel() {
     this.live = [];
     const p = this.panel;
-    const titles = { build: 'Build', workers: 'Workers', army: 'Army', voyage: 'Voyage', chronicle: 'Chronicle', settings: 'Settings', merchant: 'Merchant', building: '' };
+    const titles = { nightmarket: 'Night Market', build: 'Build', workers: 'Workers', army: 'Army', voyage: 'Voyage', chronicle: 'Chronicle', settings: 'Settings', merchant: 'Merchant', building: '' };
     $('#panelTitle').textContent = p === 'building' ? (this.panelArg.def.name) : titles[p];
     this.setTabs(null);
     const fn = this['panel_' + p];
@@ -605,7 +629,10 @@ export class UI {
         return `<div class="card light"><div class="thumb"><img src="${src('b' + r.key + '_Castle')}" alt=""></div><div class="grow"><h3>${r.name}</h3><p>${!open ? 'Unknown waters. Grow your realm to meet them.' : st.subjugated ? `Your vassal. Pays ${R.tributeRate(r.key).gold} gold and ${R.tributeRate(r.key).wood} wood per hour.` : `At war. Level ${R.rivalLevel(r.key)}, ${st.raids} raids so far. Conquer their capital from Voyage.`}</p></div></div>`; }).join('');
       const prov = (S.annexed || []).map(a => provinceOf(a.region));
       const provHtml = prov.length ? prov.map(p => `<div class="card light"><div class="grow"><h3>${p.name}</h3><p>${p.desc}</p></div></div>`).join('') : '<p style="text-align:center;font-size:13px">Conquer boss islands and rival capitals to annex their land. Each province adds a lasting bonus.</p>';
-      return `<div class="stat-grid">${rows.map(([a, b]) => `<span>${a}</span><span>${b}</span>`).join('')}</div><p class="section-title">Provinces</p>${provHtml}<p class="section-title">Rival houses</p>${rv}`;
+      const moon = R.moon();
+      const hols = upcomingHolidays(5).map(h => `<div class="card light"><div class="grow"><h3>${h.name}</h3><p>${h.date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}. ${esc(h.desc)}</p></div></div>`).join('');
+      const moonHtml = `<div class="card"><div class="grow"><h3>${moon.name}</h3><p>${moon.full ? 'Full moon tonight: the Moonlit Hunt stirs.' : moon.dark ? "A thieves' moon: dark nights bring extra thieves." : `Full moon in about ${Math.round(((29.53 / 2) - moon.age + 29.53) % 29.53)} days.`}</p></div></div>`;
+      return `<div class="stat-grid">${rows.map(([a, b]) => `<span>${a}</span><span>${b}</span>`).join('')}</div><p class="section-title">The moon</p>${moonHtml}<p class="section-title">Holy days and festivals</p>${hols}<p class="section-title">Provinces</p>${provHtml}<p class="section-title">Rival houses</p>${rv}`;
     }
     if (this.tab === 'log') {
       if (!S.log.length) return '<p class="section-title">Your tale has yet to be told.</p>';
@@ -703,6 +730,13 @@ export class UI {
     return html;
   }
 
+  panel_nightmarket() {
+    const E = this.R.events, M = E.market;
+    if (!M) return '<p class="section-title">The trader has slipped away. Come back after dark.</p>';
+    return `<p class="section-title">"Quiet now. Everything has a price."</p>` + M.offers.map(o => `<div class="card ${M.bought[o.id] ? 'light' : ''}"><div class="thumb"><img src="${src(o.id === 'sellsword' ? UNIT_AV[o.type] : 'av_thief')}" class="av" alt=""></div>
+      <div class="grow"><h3>${esc(o.name)}</h3><p>${esc(o.desc)}</p>${this.costHtml(o.cost)}${o.get ? '<p class="muted">You receive ' + Object.entries(o.get).map(([k, v]) => v + ' ' + k).join(', ') + '</p>' : ''}</div>
+      <button class="btn small" data-act="buy:${o.id}" ${M.bought[o.id] || !this.R.canAfford(o.cost) ? 'disabled' : ''}>${M.bought[o.id] ? 'Sold' : 'Buy'}</button></div>`).join('');
+  }
   panel_merchant() {
     const E = this.R.events, M = E.merchant;
     if (!M) return '<p class="section-title">The merchant has sailed away.</p>';
@@ -768,6 +802,7 @@ export class UI {
       return;
     }
     if (k === 'vol') { audio.unlock(); audio.settings[x] = +y; audio.saveSettings(); if (x === 'sfx') audio.play('coin'); return this.refresh(); }
+    if (k === 'buy') { err(R.events.buy(x)); return this.refresh(); }
     if (k === 'trade') { err(R.events.trade(+x)); return this.refresh(); }
     if (k === 'export') {
       const t = $('#saveText'); t.value = R.exportSave(); t.select();

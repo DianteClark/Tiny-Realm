@@ -184,7 +184,7 @@ export class Building {
     if (this.hp <= 0) this.scene.onBuildingDown(this, src);
   }
   hitTest(wx, wy) {
-    if (this.def.wall) return wx >= this.cx * T && wx < (this.cx + 1) * T && wy >= this.cy * T - 10 && wy < (this.cy + 1) * T;
+    if (this.def.wall || this.def.lantern) return wx >= this.cx * T && wx < (this.cx + 1) * T && wy >= this.cy * T - 10 && wy < (this.cy + 1) * T;
     const s = SHEETS[this.imgKey]; const w = s.fw, h = s.fh;
     return wx >= this.x - w / 2 + 8 && wx <= this.x + w / 2 - 8 && wy >= this.y - h + 40 && wy <= this.y + 6;
   }
@@ -315,6 +315,7 @@ export class Scene {
     if (t.big && a.bigDmg) dmg *= 1 + a.bigDmg;
     if (a.team === 0 && a.scene.kingAura(a)) dmg *= 1.15;
     if (a.buff('rally')) dmg *= 1.25;
+    if (a.team === 0 && this.game.state.relics.moonstone && this.game.env.isNight) dmg *= 1.15;
     if (a.charges > 0) { dmg *= 2; a.charges--; }
     if (d.proj) {
       const tx = t.x, ty = (t.bodyY ?? t.y - 30);
@@ -398,7 +399,7 @@ export class Scene {
     if (u.flash > 0) u.flash -= dt;
     if (u.atkT > 0) u.atkT -= dt;
     if (u.cursed > 0) { u.cursed -= dt; if (u.cursed <= 0) this.fxAt('dust1', u.x, u.y); }
-    if (u.abT > 0) u.abT -= dt;
+    if (u.abT > 0) { const hol = this.game.holiday && this.game.holiday(); u.abT -= dt * (hol && hol.abilityHaste ? 2 : 1); }
     for (const k in u.buffs) if (u.buffs[k] > 0) u.buffs[k] -= dt;
     if (u.buff('trample')) for (const o of this.units) if (o.team !== u.team && o.alive && !o.hidden && o.kind !== 'pawn' && !u.trampled.has(o) && dist(o.x, o.y, u.x, u.y) < 36) { u.trampled.add(o); this.applyDamage(u, o, u.dmg * 1.5); this.fxAt('dust1', o.x, o.y); this.game.sfx('hit', o, this); }
     for (const f of this.fires || []) if (f.t > 0 && u.team !== 0 && dist(f.x, f.y, u.x, u.y) < 64) { u.burnT = (u.burnT || 0) - dt; if (u.burnT <= 0) { u.burnT = 0.5; this.applyDamage(f.src, u, 6); } }
@@ -759,6 +760,7 @@ export class Scene {
     }
     if (best) return best;
     if (this.duck && dist(wx, wy, this.duck.x, this.duck.y - 10) < 40) return this.duck;
+    for (const n of this.npcs || []) if (dist(wx, wy, n.x, n.y - 30) < 40) return n;
     for (const s of this.structs) if (s.hitTest(wx, wy)) return s;
     for (const b of [...this.buildings].sort((a, c) => c.y - a.y)) if (b.hitTest(wx, wy)) return b;
     return null;
@@ -785,6 +787,7 @@ export class Scene {
     // y-sorted objects
     const list = [];
     for (const d of this.map.decor) if (d.type !== 'wrock') { const x = center(d.x) + d.ox, y = center(d.y) + d.oy + 16; if (vis(x, y)) list.push({ y, d: () => drawSprite(ctx, (d.type === 'bush' ? 'bush' : 'rock') + d.v, x, y, t + d.t) }); }
+    for (const n of this.npcs || []) list.push({ y: n.y, d: () => drawSprite(ctx, n.key, n.x, n.y, this.time, { flip: n.flip }) });
     for (const b of this.boats) if (vis(b.x, b.y)) list.push({ y: b.y - 30, d: () => drawSprite(ctx, b.key, b.x, b.y, b.t, { flip: b.flip }) });
     if (this.duck) { const dk = this.duck; list.push({ y: dk.y - 20, d: () => dk.wisp ? drawSprite(ctx, 'hexBolt', dk.x, dk.y - 30 + Math.sin(dk.t * 2) * 10, dk.t, { alpha: 0.85 }) : drawSprite(ctx, 'duck', dk.x, dk.y, 0, { frame: Math.floor(dk.t * 3) % 3, scale: 1.4 }) }); }
     for (const tr of this.trees) {
@@ -899,7 +902,15 @@ export class Scene {
     ctx.drawImage(s.img, 1 * T, 2 * T, 28, T, x, y, 28, T);
     ctx.drawImage(s.img, 2 * T + 36, 2 * T, 28, T, x + 36, y, 28, T);
   }
+  drawLantern(ctx, b) {
+    const s = SHEETS.fence; if (!s || !s.img) return;
+    ctx.globalAlpha = b.done ? 1 : 0.5;
+    ctx.drawImage(s.img, 2 * T + 18, 2 * T, 28, T, b.cx * T + 18, b.cy * T, 28, T); // a lone fence post
+    ctx.globalAlpha = 1;
+    if (this.game.env.night > 0.05 && b.done) drawSprite(ctx, 'fire1', b.cx * T + 32, b.cy * T + 26, this.time + b.id * 0.37, { alpha: this.game.env.night });
+  }
   drawBuilding(ctx, b) {
+    if (b.def.lantern) return this.drawLantern(ctx, b);
     if (b.def.wall) return this.drawWall(ctx, b);
     const s = SHEETS[b.imgKey]; if (!s || !s.img) return;
     const constructing = !b.done;
@@ -935,9 +946,11 @@ export class Scene {
         const dy = (u.atkTarget.y ?? u.atkTarget.y) - u.y, dx = Math.abs((u.atkTarget.x ?? 0) - u.x);
         if (dy < -dx * 0.8) key = 'lancer_attack_up'; else if (dy > dx * 0.8) key = 'lancer_attack_down';
       }
+      if (u.def.scale) opts.scale = u.def.scale;
     } else if (u.buff('shield') && !u.moving && (u.anim === 'warrior' || u.anim === 'lancer')) key = u.anim + '_guard';
     else if (u.kind === 'pawn' && u.working) key = u.animKey('work');
     else key = u.animKey(u.moving ? 'run' : 'idle');
+    if (u.def.scale) opts.scale = u.def.scale;
     drawSprite(ctx, key, u.x, u.y, tt, opts);
     if (u.buff('rage') || u.buff('rally') || u.buff('charge') || u.buff('trample')) { // glow while buffed
       ctx.globalCompositeOperation = 'lighter';

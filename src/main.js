@@ -119,7 +119,7 @@ window.addEventListener('keydown', e => {
 function drawGhost() {
   const p = ui.place; if (!p) return;
   const d = BUILDINGS[p.type];
-  if (d.wall) {
+  if (d.wall || d.lantern) {
     const z = cam.z * dpr;
     ctx.setTransform(z, 0, 0, z, Math.round(-cam.x * z), Math.round(-cam.y * z));
     const cells = p.line ? (p.a ? realm.wallLine(p.a, p.b) : []) : (p.cx != null ? [[p.cx, p.cy]] : []);

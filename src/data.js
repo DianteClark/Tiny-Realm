@@ -55,6 +55,7 @@ export const BUILDINGS = {
   monastery: { name: 'Monastery', img: 'b_Monastery', fw: 3, fh: 2, hp: 600, cost: { wood: 120, gold: 80 }, time: 70, desc: 'Trains Monks who heal your soldiers.' },
   wall: { name: 'Wooden Wall', img: 'fence', fw: 1, fh: 1, hp: 260, cost: { wood: 6 }, time: 3, wall: true, desc: 'Fence lines that raiders must hack through. Drag out a line to build many at once.' },
   gate: { name: 'Gate', img: 'fence', fw: 1, fh: 1, hp: 450, cost: { wood: 20 }, time: 6, wall: true, gate: true, desc: 'A gap your people walk through. Swings shut whenever foes come close. Place it on a wall to convert it.' },
+  lantern: { name: 'Lantern Post', img: 'fence', fw: 1, fh: 1, hp: 120, cost: { wood: 20, gold: 10 }, time: 5, lantern: true, desc: 'Lights up the night. Pawns within 5 tiles keep working at full pace after dark.' },
   tower: { name: 'Watchtower', img: 'b_Tower', fw: 2, fh: 1, hp: 700, cost: { wood: 100, gold: 40 }, time: 60, defense: { dmg: 12, range: 5.5, cd: 1.4 }, desc: 'A posted archer shoots raiders. Higher ground gives longer range.' },
 };
 
@@ -109,6 +110,7 @@ export const RELICS = {
   bearpelt: { name: 'Bear Pelt', desc: '+10% wood gathered' },
   pandabelt: { name: 'Panda Sash', desc: 'Soldiers attack 5% faster' },
   turtleshell: { name: 'Turtle Shell', desc: 'Castle has 20% more health' },
+  moonstone: { name: 'Moonstone', desc: 'Soldiers deal 15% more damage at night' },
 };
 
 // ---------- expedition regions ----------
@@ -282,3 +284,6 @@ export function provinceOf(label) {
 }
 // night creatures join raids after dark
 export const NIGHT_CREATURES = ['skull', 'bat', 'imp', 'skull', 'bat'];
+
+// the full-moon beast: the Bear sprite, drawn larger
+ENEMIES.moonbear = { ...ENEMIES.bear, name: 'Moonhide Bear', hp: 1300, dmg: 36, cd: 1.6, boss: true, big: true, splash: 1.1, anim: 'bear', scale: 1.5, cost: 20, xp: 160, gold: 160 };
