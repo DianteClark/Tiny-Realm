@@ -634,7 +634,12 @@ export class UI {
       const i = +target.slice(6), ch = CHAPTERS[i];
       if (i !== nextChapter(S)) target = this.voyageTarget = 'frontier';
     }
-    if (target.startsWith('story:')) {
+    if (target === 'abyss' && S.tier < 3) target = this.voyageTarget = 'frontier';
+    if (target === 'abyss') {
+      const A = S.abyss || { depth: 1, best: 0 };
+      title = `The Abyss, floor ${A.depth || 1}`; sub = `Deepest floor reached: ${A.best || 0}`; av = 'av_skull';
+      desc = 'Monsters from every shore, a boss every fifth floor. After each floor, press on with your survivors or come home. Each floor deeper pays more; going home ends the run.';
+    } else if (target.startsWith('story:')) {
       const i = +target.slice(6), ch = CHAPTERS[i], open = chapterOpen(S, i);
       title = `Chapter ${i + 1}: ${ch.name}`; sub = `The Drowned Crown - Level ${ch.level}${ch.boss ? ' - Boss: ' + ENEMIES[ch.boss].name : ''}`;
       desc = open ? ch.intro : `Clear ${ch.need} frontier islands to reach it. You have cleared ${S.cleared}.`;
@@ -720,6 +725,15 @@ export class UI {
       if (st.subjugated) { c.fillStyle = '#4a90c0'; c.fillRect(x - 22, y + 20, 44, 10); c.fillStyle = '#fff'; c.font = '9px BoldPixels, monospace'; c.textAlign = 'center'; c.fillText('VASSAL', x, y + 28); }
       if (open && !st.subjugated) nodes.push({ k: 'rival:' + rv.key, x, y, r: 26 });
     });
+    // the Abyss: a dark isle in the top-left corner (Stronghold and up)
+    {
+      const ax = 28, ay = 28, open = S.tier >= 3;
+      isle(ax, ay, 34, SHEETS.tiles2.img, open ? 1 : 0.5);
+      img('av_skull', ax, ay - 4, 34);
+      if (!open) img('cloud6', ax, ay, 56);
+      else nodes.push({ k: 'abyss', x: ax, y: ay, r: 22 });
+      if (open && S.abyss && S.abyss.best) { c.fillStyle = '#ffe9a8'; c.font = '9px BoldPixels, monospace'; c.textAlign = 'center'; c.fillText('BEST ' + S.abyss.best, ax, ay + 26); c.textAlign = 'left'; }
+    }
     // The Drowned Crown: a row of story islands along the bottom
     {
       const nx = nextChapter(S), y0 = H - 30, x0 = 26, step = (W - 104) / (CHAPTERS.length - 1);
@@ -969,7 +983,7 @@ export class UI {
     if (k === 'launch') {
       const ids = [...this.squadPick];
       const vt = this.voyageTarget || 'frontier';
-      const bounty = vt === 'bounty' ? true : (vt.startsWith('rival:') || vt.startsWith('story:')) ? vt : false;
+      const bounty = vt === 'bounty' ? true : (vt.startsWith('rival:') || vt.startsWith('story:') || vt === 'abyss') ? vt : false;
       this.squadPick.clear();
       R.startExpedition(R.state.frontier, ids, bounty);
       this.banner(R.exp.islandName, `${R.exp.region.name}, level ${R.exp.level}. Destroy every camp. Tap a soldier or All, then tap the ground or a foe.`, 'blue');
@@ -1007,6 +1021,15 @@ export class UI {
         ${s.annexed ? `<p>The conquered land will join your island when you return${s.province ? `, a ${s.province.name} province: ${s.province.desc}` : ''}.</p>` : ''}
         ${s.relic ? `<p>Relic found: <b>${RELICS[s.relic].name}</b>. ${RELICS[s.relic].desc}</p>` : ''}
         ${(s.gear || []).length ? `<p>Gear found: ${s.gear.map(g => `<b style="color:${Gear.RARITY[g.rarity].color}">${esc(g.name)}</b>`).join(', ')}. Equip it from Army.</p>` : ''}<p class="muted">Survivors: ${s.survivors.map(esc).join(', ') || 'none'}</p>`;
+      if (s.abyss) {
+        const R = this.R, next = s.abyss + 1, ids = (s.survivorIds || []).filter(id => R.state.soldiers.some(r => r.id === id));
+        div.innerHTML += `<p>Floor ${next}${next % 5 === 0 ? ' holds a boss' : ' waits below'}. Your squad has rested a little. Press on, or come home and end the run.</p>`;
+        this.choice(`Floor ${s.abyss} cleared`, div, [
+          { label: `Descend to floor ${next}`, fn: () => { if (!ids.length) return; R.startExpedition(R.state.frontier, ids, 'abyss'); this.banner(R.exp.islandName, next % 5 === 0 ? 'Something large stirs on this floor.' : 'Clear every monster to go deeper.', 'red'); } },
+          { label: 'Return home', cls: 'red', fn: () => { R.abyssHome(); this.toast(`The run ends on floor ${s.abyss}.`); } },
+        ]);
+        return;
+      }
       if (s.story >= 0 && s.story != null) {
         const ch = CHAPTERS[s.story], nx = CHAPTERS[s.story + 1];
         div.innerHTML = `<p style="font-style:italic">${esc(ch.outro)}</p>` + div.innerHTML + (nx ? `<p class="muted">Next: Chapter ${s.story + 2}, ${esc(nx.name)}.</p>` : '<p><b>The Drowned Crown is complete.</b></p>');
