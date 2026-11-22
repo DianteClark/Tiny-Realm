@@ -1,14 +1,15 @@
 // Seasons, weather and the day/night cycle.
-// Seasons follow the real calendar (each lasts two real days), weather rolls
-// every few minutes, and a full day passes every 12 minutes of play.
+// Time of day follows the player's real clock: dawn and dusk come at real
+// hours (later sunsets in summer, longer nights in winter). Seasons follow the
+// calendar (two real days each) and weather rolls every few minutes.
 import { drawSprite } from './assets.js';
 import { T } from './terrain.js';
 
 export const SEASONS = [
-  { key: 'spring', name: 'Spring', desc: 'Lambs are born twice as fast. +10% meat.', meat: 0.1, breed: 2, tint: null },
-  { key: 'summer', name: 'Summer', desc: 'Long days. +15% gold.', gold: 0.15, day: 1.25, tint: 'rgba(255,220,120,0.06)' },
-  { key: 'autumn', name: 'Autumn', desc: 'Falling leaves. +20% wood.', wood: 0.2, tint: 'rgba(230,140,60,0.08)', leaves: true },
-  { key: 'winter', name: 'Winter', desc: 'Cold hands: -20% wood, no lambs. Soldiers gain +20% experience.', wood: -0.2, breed: 0, xp: 0.2, day: 0.8, tint: 'rgba(150,190,255,0.12)', snow: true },
+  { key: 'spring', name: 'Spring', desc: 'Lambs are born twice as fast. +10% meat.', meat: 0.1, breed: 2, tint: null, dawn: 6, dusk: 20, colors: [1, 3, 2] },
+  { key: 'summer', name: 'Summer', desc: 'Long days. +15% gold.', gold: 0.15, tint: 'rgba(255,220,120,0.06)', dawn: 5, dusk: 21, colors: [3, 1, 2] },
+  { key: 'autumn', name: 'Autumn', desc: 'Falling leaves. +20% wood.', wood: 0.2, tint: 'rgba(230,140,60,0.05)', leaves: true, dawn: 6.5, dusk: 19, colors: [4, 2, 1] },
+  { key: 'winter', name: 'Winter', desc: 'Cold hands: -20% wood, no lambs. Soldiers gain +20% experience.', wood: -0.2, breed: 0, xp: 0.2, tint: 'rgba(150,190,255,0.08)', snow: true, dawn: 7, dusk: 18, colors: [2, 5, 3] },
 ];
 export const WEATHER = {
   clear: { name: 'Clear', desc: '' },
@@ -17,28 +18,44 @@ export const WEATHER = {
   storm: { name: 'Storm', desc: 'Lightning and heavy rain. Archers lose 25% range.', rain: 2, range: -0.25, clouds: 8, lightning: true },
   fog: { name: 'Fog', desc: 'Thick fog. Everyone spots foes later.', fog: true, aggro: -0.25 },
 };
-const DAY_LEN = 720; // seconds per full day
 
 export class Environment {
   constructor(realm) {
     this.R = realm;
-    this.t = (Date.now() / 1000) % DAY_LEN;
     this.weather = 'clear'; this.weatherT = 120 + Math.random() * 180;
     this.drops = []; this.flash = 0; this.lightT = 6;
   }
   get season() { return SEASONS[Math.floor(Date.now() / 86400000 / 2) % 4]; }
   get w() { return WEATHER[this.weather]; }
-  // 0 = midnight, 0.5 = noon
-  get phase() { return ((this.t / DAY_LEN) + 0.35) % 1; }
+  // real local time in hours (0..24). this.offset lets tests fake the clock.
+  get hour() { const d = new Date(Date.now() + (this.offset || 0) * 3600000); return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600; }
+  get phase() { return this.hour / 24; } // 0 = midnight, 0.5 = noon
+  // 0 = full day, 1 = full night, with 45-minute dawn and dusk
   get night() {
-    const p = this.phase, dl = 0.22 * (this.season.day || 1); // daylight half-width around noon
-    const d = Math.abs(p - 0.5);
-    if (d < dl) return 0;
-    return Math.min(1, (d - dl) / 0.08);
+    const h = this.hour, s = this.season, ramp = 0.75;
+    if (h >= s.dawn + ramp && h <= s.dusk) return 0;
+    if (h > s.dusk && h < s.dusk + ramp) return (h - s.dusk) / ramp;
+    if (h >= s.dawn && h < s.dawn + ramp) return 1 - (h - s.dawn) / ramp;
+    return 1;
   }
+  get period() { const d = new Date(Date.now() + (this.offset || 0) * 3600000); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}-${this.isNight ? 'night' : 'day'}`; }
+  clock() { const d = new Date(Date.now() + (this.offset || 0) * 3600000); return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); }
   get isNight() { return this.night > 0.5; }
   update(dt) {
-    this.t = (this.t + dt) % DAY_LEN;
+    // seasons recolour the home island's grass
+    const sk = this.season.key;
+    if (sk !== this.appliedSeason && this.R.home) {
+      this.appliedSeason = sk;
+      const m = this.R.home.map, c = this.season.colors;
+      if (m.colors.join() !== c.join()) { m.colors = c.slice(); if (this.R.home.terrain.invalidate) this.R.home.terrain.invalidate(); }
+    }
+    // dawn and dusk announcements
+    const n = this.isNight;
+    if (this.wasNight !== undefined && n !== this.wasNight) {
+      this.R.ui.banner(n ? 'Night falls' : 'Dawn breaks', n ? 'Torches are lit. Night creatures prowl, raids hit harder and pay more. New night orders are posted.' : 'The sun is up. New day orders are posted.', n ? 'purple' : 'gold');
+      this.R.sfx(n ? 'hex' : 'bell');
+    }
+    this.wasNight = n;
     this.weatherT -= dt;
     if (this.weatherT <= 0) this.roll();
     if (this.flash > 0) this.flash -= dt * 3;
@@ -86,7 +103,7 @@ export class Environment {
   // screen-space: darkness, tints, rain, snow, leaves, fog, lightning
   drawScreen(ctx, vw, vh, scene, cam) {
     const n = scene.kind === 'home' ? this.night : 0;
-    if (n > 0) { ctx.fillStyle = `rgba(20,24,70,${0.42 * n})`; ctx.fillRect(0, 0, vw, vh); }
+    if (n > 0) { ctx.fillStyle = `rgba(20,24,70,${0.36 * n})`; ctx.fillRect(0, 0, vw, vh); }
     if (this.season.tint) { ctx.fillStyle = this.season.tint; ctx.fillRect(0, 0, vw, vh); }
     const w = this.w;
     if (w.rain || w.storm) { ctx.fillStyle = `rgba(30,50,80,${0.08 * (w.rain || 1)})`; ctx.fillRect(0, 0, vw, vh); }
@@ -113,5 +130,5 @@ export class Environment {
     if (w.fog) { ctx.fillStyle = 'rgba(220,230,235,0.22)'; ctx.fillRect(0, 0, vw, vh); }
     if (this.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${0.5 * this.flash})`; ctx.fillRect(0, 0, vw, vh); }
   }
-  label() { return `${this.season.name}${this.weather !== 'clear' ? ', ' + this.w.name : ''}${this.isNight ? ', Night' : ''}`; }
+  label() { return `${this.clock()} ${this.season.name}${this.weather !== 'clear' ? ', ' + this.w.name : ''}`; }
 }

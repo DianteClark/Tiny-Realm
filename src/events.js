@@ -21,7 +21,7 @@ export const MAJOR = {
   bones: {
     title: 'The Night of Bones',
     warn: 'The sky turns the colour of old wine. Something is stirring under the grass of your island.',
-    ok: S => S.tier >= 2,
+    ok: (S, R) => S.tier >= 2 && R.env.isNight,
   },
   hex: {
     title: "The Hex Shaman's Curse",
@@ -192,7 +192,8 @@ export class EventDirector {
   // ------------------------------------------------------------ minor
   minor(force) {
     const R = this.R, S = R.state;
-    const opts = ['goldrush', 'merchant', 'duck', 'lambs', 'bees'];
+    const night = R.env.isNight;
+    const opts = night ? ['goldrush', 'wisp', 'wisp', 'lambs'] : ['goldrush', 'merchant', 'duck', 'lambs', 'bees'];
     if (S.tier >= 1 && S.stats.raidsSurvived >= 1) opts.push('mercenary', 'mercenary');
     const k = force || pick(opts);
     if (k === 'goldrush') {
@@ -205,6 +206,7 @@ export class EventDirector {
       R.ui.toast('Lambing season. Three new sheep join the flock.');
     } else if (k === 'mercenary') this.offerMercenary();
     else if (k === 'bees') this.startBees();
+    else if (k === 'wisp') this.spawnWisp();
   }
   startMerchant() {
     const R = this.R;
@@ -250,6 +252,26 @@ export class EventDirector {
     h.duck = { x: center(s.wx) + dx * 20, y: center(s.wy) + dy * 20 + 20, t: 0, life: 150, tap: () => this.tapDuck() };
     R.sfx('quack');
     R.ui.toast('Something small and yellow is bobbing near the shore.');
+  }
+  spawnWisp() {
+    const R = this.R, h = R.home, m = h.map;
+    for (let k = 0; k < 60; k++) {
+      const x = 3 + Math.floor(Math.random() * (m.w - 6)), y = 3 + Math.floor(Math.random() * (m.h - 6));
+      if (!m.walkable(x, y) || !R.reach[m.i(x, y)]) continue;
+      h.duck = { key: 'hexBolt', wisp: true, x: x * T + 32, y: y * T + 32, t: 0, life: 120, tap: () => this.tapWisp() };
+      R.ui.toast('A pale wisp drifts over the island. Catch it before dawn.');
+      R.sfx('hex');
+      return;
+    }
+  }
+  tapWisp() {
+    const R = this.R, S = R.state, h = R.home, d = h.duck;
+    h.fxAt('hexBoom', d.x, d.y + 20); h.duck = null; R.sfx('levelup');
+    const soldiers = h.units.filter(u => u.rec && u.alive);
+    if (soldiers.length && Math.random() < 0.5) {
+      for (const u of soldiers) R.grantXp(h, u, 20 + S.tier * 10);
+      R.ui.toast('The wisp bursts into light. Every soldier at home feels wiser.', 'gold');
+    } else { const g = Math.round((80 + Math.random() * 120) * S.tier); R.addRes('gold', g); R.ui.toast(`The wisp leaves behind ${g} gold.`, 'gold'); }
   }
   tapDuck() {
     const R = this.R, S = R.state;

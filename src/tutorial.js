@@ -100,6 +100,8 @@ export const FEATS = [
   { id: 'streak7', name: 'Faithful', desc: 'Visit 7 days in a row.', test: S => S.daily.streak >= 7 },
   { id: 'night', name: 'Night Watch', desc: 'Repel a raid at night.', test: S => (S.stats.nightRaids || 0) >= 1 },
   { id: 'storm', name: 'Storm Breaker', desc: 'Repel a raid during a storm.', test: S => (S.stats.stormRaids || 0) >= 1 },
+  { id: 'orders10', name: 'Round the Clock', desc: 'Complete 10 day or night orders.', test: S => (S.stats.ordersDone || 0) >= 10 },
+  { id: 'wisp', name: 'Wisp Catcher', desc: 'Slay 25 night creatures.', test: S => (S.stats.nightKills || 0) >= 25 },
   { id: 'annex', name: 'Land Grabber', desc: 'Annex new land to your island.', test: S => (S.annexed || []).length >= 1 },
 ];
 export function checkFeats(R) {

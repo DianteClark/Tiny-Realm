@@ -6,12 +6,13 @@ import {
   UNITS, ENEMIES, BUILDINGS, TIERS, TRAITS, COMMON_TRAITS, XP_LEVELS, MAX_LEVEL, RELICS, REGIONS,
   islandInfo, FIRST_NAMES, EPITHETS, QUESTS, endlessQuest, renownCost, RENOWN_BONUS,
   maxBuildingLevel, upgradeCost, upgradeTime, levelHp, levelEffects, castlePop,
-  RIVALS, rivalDef, rivalRoster, CAMP_STRUCTS,
+  RIVALS, rivalDef, rivalRoster, CAMP_STRUCTS, PROVINCES, provinceOf, NIGHT_CREATURES,
 } from './data.js';
 import { EventDirector } from './events.js';
 import { SHEETS } from './assets.js';
 import { audio } from './audio.js';
 import { Environment } from './env.js';
+import { Orders } from './orders.js';
 
 const SAVE_KEY = 'tinyrealm.save.v1';
 // The home map is a big sea; the starting island (BASE_W x BASE_H) sits in the middle at BASE_X,BASE_Y
@@ -52,6 +53,7 @@ export class Realm {
     this.raid = null; this.saveT = 0; this.questT = 0; this.regenT = 0;
     this.events = new EventDirector(this);
     this.env = new Environment(this);
+    this.orders = new Orders(this);
   }
 
   // ------------------------------------------------------------ persistence
@@ -71,7 +73,6 @@ export class Realm {
     this.buildHome();
     const away = fresh ? 0 : this.applyOffline();
     this.scene = this.home;
-    if (fresh) this.env.t = 684; // a new realm wakes up in the morning
     this.checkDaily();
     return { fresh, away };
   }
@@ -104,9 +105,14 @@ export class Realm {
   shake(n, scene) { if (scene && scene !== this.scene) return; this.shakeAmt = Math.min(14, Math.max(this.shakeAmt || 0, n)); }
 
   // ------------------------------------------------------------ bonuses
+  provinceBonus() {
+    const out = {};
+    for (const a of this.state.annexed || []) { const b = provinceOf(a.region).bonus; for (const k in b) out[k] = (out[k] || 0) + b[k]; }
+    return out;
+  }
   bonus() {
-    const R = this.state.relics, rn = this.state.renown;
-    return {
+    const R = this.state.relics, rn = this.state.renown, P = this.provinceBonus();
+    const b = {
       hp: (R.minotaurhorn ? 0.1 : 0) + rn * RENOWN_BONUS.power,
       dmg: rn * RENOWN_BONUS.power,
       meleeDmg: R.trolltusk ? 0.1 : 0,
@@ -118,6 +124,8 @@ export class Realm {
       wood: R.bearpelt ? 0.1 : 0,
       castleHp: R.turtleshell ? 0.2 : 0,
     };
+    for (const k in P) b[k] = (b[k] || 0) + P[k];
+    return b;
   }
   get tierDef() { return TIERS[this.state.tier]; }
   storage() { return this.tierDef.storage + this.state.renown * 2000; }
@@ -411,7 +419,7 @@ export class Realm {
           u.working = false; s.caught = true; scene.fxAt('dust1', s.x, s.y); this.sfx('baa', s, scene);
           scene.sheep = scene.sheep.filter(o => o !== s);
           this.releaseNode(u);
-          u.carry = 'Meat'; u.carryN = Math.round(8 * (1 + gb.gather + this.env.gather('meat'))); u.task = null;
+          u.carry = 'Meat'; u.carryN = Math.round(8 * (1 + gb.gather + (gb.meat || 0) + this.env.gather('meat'))); u.task = null;
         }
       }
       return;
@@ -634,6 +642,7 @@ export class Realm {
   }
   finishBuildingUpgrade(b, quiet) {
     b.upEnd = 0; b.upTotal = 0; b.level++;
+    this.state.stats.upgrades = (this.state.stats.upgrades || 0) + 1;
     const f = b.hp / b.maxHp; b.maxHp = levelHp(b.type, b.level); b.hp = Math.max(b.maxHp * f, b.maxHp * 0.6);
     b.pop = 1;
     if (!quiet) { this.ui.toast(`${BUILDINGS[b.type].name} reached level ${b.level}.`, 'gold'); this.home.fxAt('dust2', b.x, b.y, { scale: 2 }); this.sfx('complete', b); }
@@ -798,7 +807,7 @@ export class Realm {
     this.env.update(dt);
     this.updateAnnex(dt); // annexed land slam (src/annex.js)
     this.tickTimersT = (this.tickTimersT || 0) - dt;
-    if (this.tickTimersT <= 0) { this.tickTimersT = 0.5; this.tickTimers(false); this.checkDaily(); this.tickTribute(); }
+    if (this.tickTimersT <= 0) { this.tickTimersT = 0.5; this.tickTimers(false); this.checkDaily(); this.tickTribute(); this.orders.update(); }
     // sheep breed
     this.sheepT = (this.sheepT || 0) + dt;
     if (this.env.breed() > 0 && this.sheepT > 35 / this.env.breed()) { this.sheepT = 0; if (this.home.sheep.length < this.maxSheep()) this.spawnSheep(); }
@@ -830,7 +839,7 @@ export class Realm {
       if (S.timers.raid <= 45 && !this.raidWarned) {
         this.raidWarned = true;
         this.pendingRaid = this.planRaid();
-        this.ui.banner('Raiders sighted', `${this.pendingRaid.region.name} raiders approach from the ${this.pendingRaid.dir}. They land in 45 seconds.`, 'red');
+        this.ui.banner(this.pendingRaid.night ? 'Raiders in the dark' : 'Raiders sighted', `${this.pendingRaid.region.name} raiders approach from the ${this.pendingRaid.dir}${this.pendingRaid.night ? ' under cover of darkness, with night creatures among them' : ''}. They land in 45 seconds.`, 'red');
         this.sfx('horn');
         this.showBoat(this.pendingRaid);
       }
@@ -889,13 +898,16 @@ export class Realm {
       let b = budget, i = 0;
       const enemies = region.rival ? rivalRoster(region.rival, this.rivalLevel(region.rival)) : region.enemies.filter(k => !ENEMIES[k].boss && !(ENEMIES[k].caster && S.tier < 3) && (ENEMIES[k].minLevel || 0) <= level + 1);
       if (S.tier >= 2 && !region.rival && Math.random() < 0.35) queue.push({ type: 'thief', si: 0 });
+      const night = this.env.isNight && !region.rival;
       while (b > 0 && i < 40) {
-        const k = enemies[Math.floor(Math.random() * enemies.length)];
+        let k = enemies[Math.floor(Math.random() * enemies.length)];
+        if (night && Math.random() < 0.5) k = NIGHT_CREATURES[Math.floor(Math.random() * NIGHT_CREATURES.length)];
+        if (night && S.tier >= 3 && i === 3) k = 'shaman';
         queue.push({ type: k, si: i++ });
         b -= ENEMIES[k].cost;
       }
     }
-    return { kind, region, level, spawns, queue, dir, gap: opts.gap };
+    return { kind, region, level, spawns, queue, dir, gap: opts.gap, night: this.env.isNight };
   }
   showBoat(plan) {
     this.home.boats = plan.spawns.map(s => ({ key: plan.region.key === 'reef' ? 'seahorse' : 'boat', x: center(s.wx), y: center(s.wy) + (plan.region.key === 'reef' ? 30 : 46), t: 0, flip: s.wx > s.lx }));
@@ -917,7 +929,7 @@ export class Realm {
       S.stats.raidsSurvived++;
       if (this.env.isNight) S.stats.nightRaids = (S.stats.nightRaids || 0) + 1;
       if (this.env.weather === 'storm') S.stats.stormRaids = (S.stats.stormRaids || 0) + 1;
-      const reward = Math.round(R.loot + 20 + R.level * 6);
+      const reward = Math.round((R.loot + 20 + R.level * 6) * (this.env.isNight ? 1.5 : 1));
       this.addRes('gold', reward);
       this.sfx('victory');
       this.ui.banner(R.kind === 'raid' ? 'Raid repelled' : R.title + ' survived', `The raiders are beaten. You recover ${reward} gold from the field.`, 'blue');
@@ -997,6 +1009,8 @@ export class Realm {
     const S = this.state;
     if (u.team === 1) {
       S.stats.kills++;
+      if (['skull', 'bat', 'imp', 'shaman'].includes(u.type) && this.env.isNight) S.stats.nightKills = (S.stats.nightKills || 0) + 1;
+      if (src && src.tower) S.stats.towerKills = (S.stats.towerKills || 0) + 1;
       if (u.type === 'troll') S.stats.trollsSlain++;
       if (u.loot) { this.addRes('gold', u.loot); scene.floatText('+' + u.loot + ' gold', u.x, u.y - 60, '#ffe066'); this.ui.toast('Stolen gold recovered.'); }
       if (this.raid && u.raidId === this.raid.id) this.raid.loot += u.def.gold * (1 + (u.level - 1) * 0.1);
@@ -1033,7 +1047,7 @@ export class Realm {
   }
   grantXp(scene, u, xp) {
     const rec = u.rec; if (!rec || rec.level >= MAX_LEVEL) return;
-    rec.xp += xp * ((u.xpMul || 1) + this.env.xpMul());
+    rec.xp += xp * ((u.xpMul || 1) + this.env.xpMul() + (this.bonus().xp || 0));
     let up = false;
     while (rec.level < MAX_LEVEL && rec.xp >= XP_LEVELS[rec.level + 1]) {
       rec.level++; up = true;
@@ -1210,10 +1224,12 @@ export class Realm {
         const unowned = Object.keys(RELICS).filter(k => !S.relics[k] && !['trolltusk', 'minotaurhorn', 'bearpelt', 'pandabelt', 'turtleshell', 'rubberduck'].includes(k));
         if (unowned.length && Math.random() < 0.35) { const k = unowned[Math.floor(Math.random() * unowned.length)]; S.relics[k] = true; summary.relic = k; }
       } else if (!sc.rival && sc.n === S.frontier) { S.frontier++; S.cleared = Math.max(S.cleared, sc.n); }
+      S.stats.voyagesWon = (S.stats.voyagesWon || 0) + 1;
       for (const u of survivors) this.grantXp(sc, u, 15 + lv * 2);
       // conquered land joins the realm: rival capitals and boss islands slam into your coast
       if ((sc.rival || (sc.info.boss && !sc.bounty)) && this.canAnnex()) {
-        const rec = this.annex({ region: sc.rival ? rivalDef(sc.rival).name : sc.region.name, size: sc.rival ? 3 : 2 });
+        const rec = this.annex({ region: sc.rival ? 'rival' : sc.region.key, size: sc.rival ? 3 : 2 });
+        if (rec) summary.province = provinceOf(sc.rival ? 'rival' : sc.region.key);
         if (rec) summary.annexed = true;
       }
       this.log(`Cleared ${sc.islandName}${summary.relic ? ' and claimed the ' + RELICS[summary.relic].name : ''}.`);

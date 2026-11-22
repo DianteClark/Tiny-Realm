@@ -1,6 +1,6 @@
 // HUD, panels and dialogs. Plain DOM styled with the pack's UI art.
 import { SHEETS } from './assets.js';
-import { UNITS, ENEMIES, BUILDINGS, TIERS, TRAITS, RELICS, XP_LEVELS, MAX_LEVEL, islandInfo, renownCost, STORY, upgradeCost, upgradeTime, describeLevel, levelEffects, ABILITIES, RIVALS, rivalDef } from './data.js';
+import { UNITS, ENEMIES, BUILDINGS, TIERS, TRAITS, RELICS, XP_LEVELS, MAX_LEVEL, islandInfo, renownCost, STORY, upgradeCost, upgradeTime, describeLevel, levelEffects, ABILITIES, RIVALS, rivalDef, provinceOf } from './data.js';
 const FORMATIONS = ['Loose', 'Line', 'Wedge', 'Column'];
 import { Unit, Building, Struct, cellOf } from './world.js';
 import { T } from './terrain.js';
@@ -8,7 +8,7 @@ import { MAJOR } from './events.js';
 import { audio } from './audio.js';
 import { FEATS } from './tutorial.js';
 
-export const VERSION = '3.0';
+export const VERSION = '3.1';
 
 const $ = s => document.querySelector(s);
 const src = k => SHEETS[k] ? encodeURI(SHEETS[k].src) : '';
@@ -116,6 +116,10 @@ export class UI {
     if (!info.fresh && localStorage.getItem('tinyrealm.seen') !== VERSION) {
       const div = document.createElement('div');
       div.innerHTML = `<p style="text-align:left;font-size:14px;line-height:1.4">
+        <b>3.1</b><br>
+        The realm now runs on your real clock. Night falls at dusk where you are: torches are lit, night raids bring skeletons, bats and imps and pay 50% more, and wisps drift over the island.<br>
+        Day and Night Orders: two new objectives at every dawn and dusk.<br>
+        Annexed land becomes a province with a lasting bonus. Grass changes colour with the seasons.<br>
         <b>3.0</b><br>
         Your island lives in a much bigger sea now. Conquer a boss island or a rival capital and its land sails over and slams into your coast. Coastal tiles stay clear of buildings to make room.<br>
         Four rival houses now raid you. Conquer their capitals from the new sea chart in Voyage to make them pay tribute.<br>
@@ -183,6 +187,7 @@ export class UI {
     else if (!R.exp && S.timers.raid < 120) pills.push(['raidsoon', 'red', `Raid in ${time(S.timers.raid)}`]);
     else if (!R.exp) pills.push(['raidsoon', 'black', `Next raid ${time(S.timers.raid)}`]);
     pills.push(['env', R.env.isNight ? 'black' : 'blue', R.env.label()]);
+    if (!R.exp && S.orders) { const o = S.orders.list; pills.push(['orders', S.orders.kind === 'night' ? 'purple' : 'yellow', `${S.orders.kind === 'night' ? 'Night' : 'Day'} orders ${o.filter(x => x.done).length}/${o.length}`]); }
     if (!R.exp) { const q = R.currentQuest(); pills.push(['quest', 'purple', `Goal: ${q.text} ${Math.min(R.questValue(q.type), q.n)}/${q.n}`]); }
     if (E.merchant) pills.push(['merchant', 'yellow', `Merchant ${time(E.merchant.t)}`]);
     if (E.bees) pills.push(['bees', 'yellow', `Bee swarm`]);
@@ -194,7 +199,7 @@ export class UI {
   pillAction(k) {
     const R = this.R;
     if (k === 'merchant') this.openPanel('merchant');
-    else if (k === 'quest') this.openPanel('chronicle');
+    else if (k === 'quest' || k === 'orders') this.openPanel('chronicle');
     else if (k === 'env') { const e = R.env; this.toast(`${e.season.name}: ${e.season.desc}${e.weather !== 'clear' ? ' ' + e.w.name + ': ' + e.w.desc : ''}`); }
     else if (k === 'raid' && R.raid) { const u = R.raid.units.find(u => u.alive); if (u) this.view.centerOn(u.x, u.y); }
     else if (k === 'bees' && R.events.bees) this.view.centerOn(R.events.bees.x, R.events.bees.y);
@@ -598,7 +603,9 @@ export class UI {
       const rows = [['Realm day', days], ['Castle', TIERS[S.tier].name], ['Renown', S.renown], ['Daily streak', S.daily.streak], ['Islands cleared', S.cleared], ['Raids repelled', S.stats.raidsSurvived], ['Raids lost', S.stats.raidsLost], ['Great events survived', S.stats.eventsSurvived], ['Monsters slain', S.stats.kills], ['Trolls slain', S.stats.trollsSlain], ['Soldiers fallen', S.fallen.length], ['Gold gathered', fmt(S.stats.gold || 0)], ['Wood gathered', fmt(S.stats.wood || 0)], ['Meat gathered', fmt(S.stats.meat || 0)], ['Storage cap', fmt(R.storage())]];
       const rv = RIVALS.map(r => { const st = S.rivals[r.key], open = R.rivalUnlocked(r);
         return `<div class="card light"><div class="thumb"><img src="${src('b' + r.key + '_Castle')}" alt=""></div><div class="grow"><h3>${r.name}</h3><p>${!open ? 'Unknown waters. Grow your realm to meet them.' : st.subjugated ? `Your vassal. Pays ${R.tributeRate(r.key).gold} gold and ${R.tributeRate(r.key).wood} wood per hour.` : `At war. Level ${R.rivalLevel(r.key)}, ${st.raids} raids so far. Conquer their capital from Voyage.`}</p></div></div>`; }).join('');
-      return `<div class="stat-grid">${rows.map(([a, b]) => `<span>${a}</span><span>${b}</span>`).join('')}</div><p class="section-title">Rival houses</p>${rv}`;
+      const prov = (S.annexed || []).map(a => provinceOf(a.region));
+      const provHtml = prov.length ? prov.map(p => `<div class="card light"><div class="grow"><h3>${p.name}</h3><p>${p.desc}</p></div></div>`).join('') : '<p style="text-align:center;font-size:13px">Conquer boss islands and rival capitals to annex their land. Each province adds a lasting bonus.</p>';
+      return `<div class="stat-grid">${rows.map(([a, b]) => `<span>${a}</span><span>${b}</span>`).join('')}</div><p class="section-title">Provinces</p>${provHtml}<p class="section-title">Rival houses</p>${rv}`;
     }
     if (this.tab === 'log') {
       if (!S.log.length) return '<p class="section-title">Your tale has yet to be told.</p>';
@@ -608,7 +615,9 @@ export class UI {
     const v = R.questValue(q.type);
     const pct = Math.min(100, v / q.n * 100);
     const relicsOwned = Object.values(S.relics).filter(Boolean).length;
-    return `<div class="card"><i class="ic ic-info" style="width:40px;height:40px"></i><div class="grow"><h3>${esc(q.text)}</h3><p>${Math.min(v, q.n)} / ${q.n}</p><div class="xpbar"><i style="width:${pct}%"></i></div>
+    const O = S.orders;
+    const orders = O ? `<p class="section-title">${O.kind === 'night' ? 'Night orders' : 'Day orders'} <span class="muted">(new ones at ${O.kind === 'night' ? 'dawn' : 'dusk'})</span></p>` + O.list.map(o => `<div class="card ${o.done ? '' : 'light'}"><i class="ic ${o.done ? 'ic-shield' : 'ic-sword'}"></i><div class="grow"><h3>${esc(o.text)}</h3><p>${o.done ? 'Done.' : `${Math.floor(o.have || 0)} / ${o.n}`}</p>${o.done ? '' : `<div class="xpbar"><i style="width:${Math.min(100, (o.have || 0) / o.n * 100)}%"></i></div>`}${this.costHtml(o.reward).replace(/lack/g, '')}</div></div>`).join('') : '';
+    return orders + `<p class="section-title">Chronicle</p><div class="card"><i class="ic ic-info" style="width:40px;height:40px"></i><div class="grow"><h3>${esc(q.text)}</h3><p>${Math.min(v, q.n)} / ${q.n}</p><div class="xpbar"><i style="width:${pct}%"></i></div>
       <p style="margin-top:4px">Reward</p>${this.costHtml(q.reward).replace(/lack/g, '')}</div></div>
       <p class="section-title">Goals that never end</p>
       <div class="card light"><div class="grow"><p>Push the frontier: island ${S.frontier} awaits. Every fifth island holds a boss and a relic.</p></div></div>
@@ -786,7 +795,7 @@ export class UI {
     if (s.result === 'won') {
       div.innerHTML = `<p>${esc(s.name)} is cleared.</p><div class="cost" style="justify-content:center;font-size:18px"><span><i class="ic ic-gold"></i>+${s.loot.gold}</span><span><i class="ic ic-wood"></i>+${s.loot.wood}</span><span><i class="ic ic-meat"></i>+${s.loot.meat}</span></div>
         ${s.rival ? `<p><b>${rivalDef(s.rival).name}</b> bends the knee. They will pay tribute every hour and never raid you again.</p>` : ''}
-        ${s.annexed ? '<p>The conquered land will join your island when you return.</p>' : ''}
+        ${s.annexed ? `<p>The conquered land will join your island when you return${s.province ? `, a ${s.province.name} province: ${s.province.desc}` : ''}.</p>` : ''}
         ${s.relic ? `<p>Relic found: <b>${RELICS[s.relic].name}</b>. ${RELICS[s.relic].desc}</p>` : ''}<p class="muted">Survivors: ${s.survivors.map(esc).join(', ') || 'none'}</p>`;
       this.choice('Victory', div, [{ label: 'Home' }]);
     } else if (s.result === 'lost') {

@@ -262,3 +262,23 @@ export function rivalRoster(key, level) {
   const pool = ['warrior', 'archer', 'warrior', 'lancer', 'archer', 'monk', 'swordsman', 'berserker', 'horseman'].map(u => `${key}_${u}`);
   return pool.filter(k => (ENEMIES[k].minLevel || 0) <= level);
 }
+
+// ---------- provinces: annexed land grants a bonus by where it came from ----------
+export const PROVINCES = {
+  goblin: { name: 'Goblin Shore', bonus: { gold: 0.08 }, desc: '+8% gold' },
+  gnome: { name: 'Gnome Woods', bonus: { wood: 0.1 }, desc: '+10% wood' },
+  badlands: { name: 'Gnoll Badlands', bonus: { gold: 0.1 }, desc: '+10% gold' },
+  reef: { name: 'Shark Reef', bonus: { meat: 0.12 }, desc: '+12% meat' },
+  crypt: { name: 'Skull Crypts', bonus: { towerDmg: 0.08, xp: 0.05 }, desc: '+8% tower damage, +5% experience' },
+  rival: { name: 'Conquered capital', bonus: { gather: 0.04, hp: 0.03 }, desc: '+4% all gathering, +3% soldier health' },
+  wilds: { name: 'Wild land', bonus: { gather: 0.02 }, desc: '+2% all gathering' },
+};
+export function provinceOf(label) {
+  if (!label) return PROVINCES.wilds;
+  if (PROVINCES[label]) return PROVINCES[label];
+  if (String(label).startsWith('rival') || / House /.test(' ' + label + ' ')) return PROVINCES.rival;
+  const byName = Object.values(PROVINCES).find(p => p.name === label);
+  return byName || PROVINCES.wilds;
+}
+// night creatures join raids after dark
+export const NIGHT_CREATURES = ['skull', 'bat', 'imp', 'skull', 'bat'];
