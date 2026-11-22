@@ -74,6 +74,7 @@ export class Realm {
     this.state = Object.assign(freshState(), s || {});
     this.state.stats = Object.assign(freshState().stats, this.state.stats || {});
     this.state.timers = Object.assign(freshState().timers, this.state.timers || {});
+    for (const r of this.state.soldiers || []) if (/ undefined$/.test(r.name)) r.name = r.name.replace(/ undefined$/, ' ' + EPITHETS[r.id % EPITHETS.length]);
     this.state.daily = Object.assign(freshState().daily, this.state.daily || {});
     this.state.rivals = this.state.rivals || {};
     for (const r of RIVALS) this.state.rivals[r.key] = Object.assign({ subjugated: false, defeats: 0, raids: 0, tributeAt: 0, met: false }, this.state.rivals[r.key] || {});
@@ -141,11 +142,11 @@ export class Realm {
   // ---- 3.4 village services
   tavernHero() { // today's wandering hero, the same all day
     const S = this.state, day = new Date().toDateString();
-    if (!S.tavern || S.tavern.day !== day) {
+    if (!S.tavern || S.tavern.day !== day || /undefined/.test(S.tavern.name)) {
       const types = Object.keys(UNITS).filter(k => k !== 'pawn' && !UNITS[k].unique && UNITS[k].tier <= Math.min(5, S.tier + 1));
       let h = 0; for (const c of day + S.seed) h = (h * 31 + c.charCodeAt(0)) >>> 0;
       const type = types[h % types.length];
-      S.tavern = { day, type, name: FIRST_NAMES[h % FIRST_NAMES.length] + ' ' + EPITHETS[(h >> 5) % EPITHETS.length], level: 2 + S.tier, hired: false };
+      S.tavern = { day, type, name: FIRST_NAMES[h % FIRST_NAMES.length] + ' ' + EPITHETS[(h >>> 5) % EPITHETS.length], level: 2 + S.tier, hired: false };
     }
     return S.tavern;
   }

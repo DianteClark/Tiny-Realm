@@ -601,7 +601,7 @@ export class UI {
         <div class="grow"><h3>${S.relics[k] ? r.name : 'Unknown relic'}</h3><p>${S.relics[k] ? r.desc : 'Won from bosses, great events, bounties, and stranger places.'}</p></div></div>`).join('');
     }
     const list = [...S.soldiers].sort((a, b) => b.level - a.level || b.kills - a.kills);
-    const pop = `<p class="section-title">${S.soldiers.length} soldiers - room ${R.popUsed()}/${R.popCap()}</p>`;
+    const pop = `<p class="section-title">${S.soldiers.length} soldier${S.soldiers.length === 1 ? '' : 's'} - room ${R.popUsed()}/${R.popCap()}</p>`;
     if (!list.length) return pop + '<p style="text-align:center">Build a Barracks or Archery Range to train soldiers.</p>';
     return pop + (R.exp ? '' : `<button class="btn wide" data-act="selall">Select everyone at home</button><p></p>`) + list.map(r => this.soldierCard(r)).join('');
   }
