@@ -726,6 +726,7 @@ export class Scene {
   useAbility(u) {
     const ab = ABILITIES[u.type]; if (!ab || u.abT > 0 || !u.alive || u.cursed > 0) return false;
     u.abT = ab.cd;
+    if (u.team === 0 && this.game.state) this.game.state.stats.abilities = (this.game.state.stats.abilities || 0) + 1;
     const G = this.game, foes = () => this.units.filter(o => o.team !== u.team && o.alive && !o.hidden && o.kind !== 'pawn');
     const allies = r => this.units.filter(o => o.team === u.team && o.alive && !o.hidden && o.kind !== 'pawn' && dist(o.x, o.y, u.x, u.y) < r);
     this.floatText(ab.name, u.x, u.y - 92, '#ffe066', 15);
@@ -733,7 +734,7 @@ export class Scene {
     else if (u.type === 'archer') {
       let near = null, bd = u.range + 3 * T;
       for (const o of foes()) { const d = dist(o.x, o.y, u.x, u.y); if (d < bd) { bd = d; near = o; } }
-      if (!near) { u.abT = 1; this.floatText('No foes in range', u.x, u.y - 70, '#ffffff', 13); return false; }
+      if (!near) { u.abT = 1; if (u.team === 0 && G.state) G.state.stats.abilities--; this.floatText('No foes in range', u.x, u.y - 70, '#ffffff', 13); return false; }
       const pack = foes().filter(o => dist(o.x, o.y, near.x, near.y) < 1.8 * T);
       for (let i = 0; i < 6; i++) {
         const t = pack[i % pack.length], sy = u.y - 38, delay = i * 0.07;

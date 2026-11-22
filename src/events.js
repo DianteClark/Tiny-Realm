@@ -205,6 +205,7 @@ export class EventDirector {
       if (act.duelWon) { give('minotaurhorn'); R.ui.toast(`${act.champ.rec.name} is now a Champion.`); }
     }
     // great events always leave a piece of gear on the field; the hunt leaves something special
+    R.chal.note('boss', {});
     R.dropGear(4 + S.tier * 3, { min: kind === 'moonhunt' ? 2 : 1, from: MAJOR[kind] ? MAJOR[kind].title : '' });
     if (relic) R.ui.banner('Relic claimed', `${RELICS[relic].name}: ${RELICS[relic].desc}`, 'gold');
   }

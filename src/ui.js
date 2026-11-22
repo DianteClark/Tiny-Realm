@@ -227,6 +227,7 @@ export class UI {
     if (R.home.goldRush > 0) N.push(['rush', 'gold', 'ic-gold', `Gold Rush ${time(R.home.goldRush)}`]);
     if (S.upgradeEnd) N.push(['upgrade', 'blue', 'ic-hammer', `Castle grows ${time((S.upgradeEnd - Date.now()) / 1000)}`]);
     if (!R.exp && S.orders) { const o = S.orders.list, d = o.filter(x => x.done).length; if (d < o.length) N.push(['orders', S.orders.kind === 'night' ? 'purple' : 'gold', 'ic-sword', `${S.orders.kind === 'night' ? 'Night' : 'Day'} orders ${d}/${o.length}`]); }
+    if (!R.exp && R.chal.C.day && !R.chal.C.day.done) { const c = R.chal.C.day; N.push(['chal', 'gold', 'ic-shield', `Daily: ${c.text}${c.n > 1 ? ` ${Math.floor(c.have)}/${c.n}` : ''}`]); }
     if (!R.exp) { const q = R.currentQuest(); N.push(['quest', 'blue', 'ic-info', `${q.text} ${Math.min(R.questValue(q.type), q.n)}/${q.n}`]); }
     const max = this.noticesOpen ? N.length : 3;
     const list = N.slice(0, max);
@@ -250,7 +251,7 @@ export class UI {
     const R = this.R;
     if (k === 'more') { this.noticesOpen = !this.noticesOpen; this.renderPills(); return; }
     if (k === 'merchant') this.openPanel('merchant');
-    else if (k === 'quest' || k === 'orders') this.openPanel('chronicle');
+    else if (k === 'quest' || k === 'orders' || k === 'chal') this.openPanel('chronicle');
     else if (k === 'market') this.openPanel('nightmarket');
     else if (k === 'holiday') { const h = R.holiday(); if (h) this.banner(h.name, (h.verse ? h.verse + ' ' : '') + h.desc, h.colour || 'gold'); }
     else if (k === 'env') { const e = R.env; this.toast(`${e.season.name}: ${e.season.desc}${e.weather !== 'clear' ? ' ' + e.w.name + ': ' + e.w.desc : ''}`); }
@@ -708,12 +709,24 @@ export class UI {
     const relicsOwned = Object.values(S.relics).filter(Boolean).length;
     const O = S.orders;
     const orders = O ? `<p class="section-title">${O.kind === 'night' ? 'Night orders' : 'Day orders'} <span class="muted">(new ones at ${O.kind === 'night' ? 'dawn' : 'dusk'})</span></p>` + O.list.map(o => `<div class="card ${o.done ? '' : 'light'}"><i class="ic ${o.done ? 'ic-shield' : 'ic-sword'}"></i><div class="grow"><h3>${esc(o.text)}</h3><p>${o.done ? 'Done.' : `${Math.floor(o.have || 0)} / ${o.n}`}</p>${o.done ? '' : `<div class="xpbar"><i style="width:${Math.min(100, (o.have || 0) / o.n * 100)}%"></i></div>`}${this.costHtml(o.reward).replace(/lack/g, '')}</div></div>`).join('') : '';
-    return orders + `<p class="section-title">Chronicle</p><div class="card"><i class="ic ic-info" style="width:40px;height:40px"></i><div class="grow"><h3>${esc(q.text)}</h3><p>${Math.min(v, q.n)} / ${q.n}</p><div class="xpbar"><i style="width:${pct}%"></i></div>
+    return this.chalHtml() + orders + `<p class="section-title">Chronicle</p><div class="card"><i class="ic ic-info" style="width:40px;height:40px"></i><div class="grow"><h3>${esc(q.text)}</h3><p>${Math.min(v, q.n)} / ${q.n}</p><div class="xpbar"><i style="width:${pct}%"></i></div>
       <p style="margin-top:4px">Reward</p>${this.costHtml(q.reward).replace(/lack/g, '')}</div></div>
       <p class="section-title">Goals that never end</p>
       <div class="card light"><div class="grow"><p>Push the frontier: island ${S.frontier} awaits. Every fifth island holds a boss and a relic.</p></div></div>
       <div class="card light"><div class="grow"><p>Raise the castle: ${S.tier < 5 ? 'next is ' + TIERS[S.tier + 1].name : 'Citadel reached. Raise your Renown without limit.'}</p></div></div>
       <div class="card light"><div class="grow"><p>Relics found: ${relicsOwned} of ${Object.keys(RELICS).length}. Great events like the Troll Breakout hold the rarest.</p></div></div>`;
+  }
+
+  chalHtml() {
+    const R = this.R, C = R.chal.C; if (!C.day) return '';
+    const card = (c, label, sub) => `<div class="card ${c.done ? '' : 'light'} chal"><i class="ic ${c.done ? 'ic-shield' : 'ic-sword'}"></i><div class="grow"><p class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:1px">${label}</p><h3>${esc(c.text)}</h3>
+      <p>${c.done ? 'Done. ' + sub.done : `${Math.floor(c.have)} / ${c.n}. ${sub.todo}`}</p>${c.done ? '' : `<div class="xpbar"><i style="width:${Math.min(100, c.have / c.n * 100)}%"></i></div>`}</div></div>`;
+    const flames = C.streak ? `<div class="streak">${Array.from({ length: 7 }, (_, i) => `<span class="${i < (C.streak % 7 || (C.streak ? 7 : 0)) ? 'on' : ''}"></span>`).join('')}<b>${C.streak} day streak</b></div>` : '';
+    const nextDay = new Date(); nextDay.setHours(24, 0, 0, 0);
+    return `<p class="section-title">Challenges</p>${flames}` +
+      card(C.day, 'Today', { todo: `Reward: resources and ${R.chal.nextPrize()}.`, done: `Next challenge in ${time((nextDay - Date.now()) / 1000)}.` }) +
+      card(C.week, 'This week', { todo: 'Reward: an epic piece, plenty of gold and a relic fragment.', done: 'A new one arrives on Monday.' }) +
+      `<p class="muted" style="text-align:center;font-size:12px">Best streak: ${C.best} day${C.best === 1 ? "" : "s"}. Every 3rd day in a row brings an epic piece, every 7th a legendary one.</p>`;
   }
 
   panel_building() {

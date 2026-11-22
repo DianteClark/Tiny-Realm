@@ -270,3 +270,7 @@ body.exp #abilitybar { bottom: calc(var(--safe-bot) + 124px); }
 .card { border: 2px solid #3d444d; border-image: none; border-radius: 7px; background: #525b66; padding: 10px; box-shadow: 0 2px 0 rgba(0,0,0,.18); }
 .card.light { border-color: #d6c39c; background: #f7eedb; box-shadow: 0 2px 0 rgba(120,90,50,.18); }
 .ic-gem { background-size: 520%; background-position: center; }
+.streak { display: flex; align-items: center; justify-content: center; gap: 4px; margin: 0 0 6px; font-size: 13px; }
+.streak span { width: 14px; height: 14px; border-radius: 3px; background: #cbbb99; border: 2px solid #a8946c; }
+.streak span.on { background: #f0a43a; border-color: #b86a1c; box-shadow: 0 0 5px #f0a43a; }
+.streak b { margin-left: 6px; font-weight: normal; }

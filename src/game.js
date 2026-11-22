@@ -10,6 +10,7 @@ import {
 } from './data.js';
 import { EventDirector } from './events.js';
 import * as Gear from './gear.js';
+import { Challenges } from './challenges.js';
 import { SHEETS } from './assets.js';
 import { audio } from './audio.js';
 import { Environment } from './env.js';
@@ -57,6 +58,7 @@ export class Realm {
     this.events = new EventDirector(this);
     this.env = new Environment(this);
     this.orders = new Orders(this);
+    this.chal = new Challenges(this);
   }
 
   // ------------------------------------------------------------ persistence
@@ -869,7 +871,7 @@ export class Realm {
     this.env.update(dt);
     this.updateAnnex(dt); // annexed land slam (src/annex.js)
     this.tickTimersT = (this.tickTimersT || 0) - dt;
-    if (this.tickTimersT <= 0) { this.tickTimersT = 0.5; this.tickTimers(false); this.checkDaily(); this.tickTribute(); this.orders.update(); this.holidayTick(); }
+    if (this.tickTimersT <= 0) { this.tickTimersT = 0.5; this.tickTimers(false); this.checkDaily(); this.tickTribute(); this.orders.update(); this.chal.update(); this.holidayTick(); }
     // sheep breed
     this.sheepT = (this.sheepT || 0) + dt;
     if (this.env.breed() > 0 && this.sheepT > 35 / this.env.breed()) { this.sheepT = 0; if (this.home.sheep.length < this.maxSheep()) this.spawnSheep(); }
@@ -1000,6 +1002,7 @@ export class Realm {
       this.ui.banner(R.kind === 'raid' ? 'Raid repelled' : R.title + ' survived', `The raiders are beaten. You recover ${reward} gold from the field.`, 'blue');
       this.log(`Repelled a ${R.region ? R.region.name : ''} raid. +${reward} gold.`);
       if (Math.random() < 0.15 + R.level * 0.005) this.dropGear(R.level, { from: 'a raider' });
+      this.chal.note('raid', { downs: R.downs || 0 });
     }
     if (R.onEnd) R.onEnd(won);
     this.raid = null;
@@ -1134,6 +1137,7 @@ export class Realm {
   }
   onBuildingDown(scene, b, src) {
     if (b === this.castle) { this.loseRaid(); return; }
+    if (this.raid && this.raid.active && !b.def.wall) this.raid.downs = (this.raid.downs || 0) + 1;
     if (b.def.wall) { // fences splinter and are gone
       scene.removeBuilding(b); scene.fxAt('dust2', b.x, b.y);
       this.reach = reachable(scene.map, this.door[0], this.door[1]);
@@ -1247,6 +1251,7 @@ export class Realm {
     });
     // squad
     const squad = S.soldiers.filter(s => ids.includes(s.id));
+    sc.squadTypes = squad.map(s => s.type);
     squad.forEach((rec, i) => {
       rec.status = 'away';
       const c = sc.nearestWalkable(land[0] + (i % 3), land[1] + Math.floor(i / 3) - 1) || land;
@@ -1293,6 +1298,9 @@ export class Realm {
         if (unowned.length && Math.random() < 0.35) { const k = unowned[Math.floor(Math.random() * unowned.length)]; S.relics[k] = true; summary.relic = k; }
       } else if (!sc.rival && sc.n === S.frontier) { S.frontier++; S.cleared = Math.max(S.cleared, sc.n); }
       S.stats.voyagesWon = (S.stats.voyagesWon || 0) + 1;
+      const squadTypes = sc.squadTypes || [];
+      this.chal.note('voyage', { squad: squadTypes, lost: squadTypes.length - survivors.length });
+      if (sc.rival || sc.info.boss) this.chal.note('boss', {});
       // gear: one piece per victory, more from bosses and capitals
       summary.gear = [];
       const big = sc.rival || (sc.info.boss && !sc.bounty);

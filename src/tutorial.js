@@ -107,6 +107,11 @@ export const FEATS = [
   { id: 'advent', name: 'Watchful Waiting', desc: 'Keep all four Sundays of Advent.', test: S => ((S.holidaysSeen || {}).advent || 0) >= 4 },
   { id: 'moonhunt', name: 'Moonhide', desc: 'Survive the Moonlit Hunt.', test: S => (S.stats.moonHunts || 0) >= 1 },
   { id: 'market', name: 'Shady Dealings', desc: 'Buy something at the Night Market.', test: S => (S.stats.marketBuys || 0) >= 1 },
+  { id: 'geared', name: 'Kitted Out', desc: 'Find 10 pieces of gear.', test: S => (S.stats.gearFound || 0) >= 10 },
+  { id: 'legend', name: 'The Stuff of Legend', desc: 'Find a legendary piece of gear.', test: S => (S.stats.legendaries || 0) >= 1 },
+  { id: 'streak3', name: 'Habit Forming', desc: 'Reach a 3 day challenge streak.', test: S => ((S.chal && S.chal.best) || 0) >= 3 },
+  { id: 'streak7', name: 'A Week of Valour', desc: 'Reach a 7 day challenge streak.', test: S => ((S.chal && S.chal.best) || 0) >= 7 },
+  { id: 'weekly', name: 'Week Won', desc: 'Complete a weekly challenge.', test: S => (S.stats.weeklyChallenges || 0) >= 1 },
   { id: 'annex', name: 'Land Grabber', desc: 'Annex new land to your island.', test: S => (S.annexed || []).length >= 1 },
 ];
 export function checkFeats(R) {
