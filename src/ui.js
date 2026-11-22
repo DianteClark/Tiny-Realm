@@ -16,7 +16,7 @@ import { DECREES } from './decrees.js';
 import { SHOP, SEASON_EVENTS } from './seasonal.js';
 import * as Legacy from './legacy.js';
 
-export const VERSION = '3.4';
+export const VERSION = '3.5';
 
 const $ = s => document.querySelector(s);
 const src = k => SHEETS[k] ? encodeURI(SHEETS[k].src) : '';
@@ -128,6 +128,13 @@ export class UI {
     if (!info.fresh && localStorage.getItem('tinyrealm.seen') !== VERSION) {
       const div = document.createElement('div');
       div.innerHTML = `<p style="text-align:left;font-size:14px;line-height:1.4">
+        <b>3.5</b><br>
+        Promotions: level 10 soldiers become Knights, Berserkers, Cavaliers or Elites, and grow to level 15.<br>
+        The Abyss: an endless descent in the top-left of the sea chart. Press on or come home after every floor.<br>
+        Royal decrees: choose one law each week. Every law has a price.<br>
+        Seasonal events: The Harvest Fair runs until December, then The Long Night. Tasks, a weekly boss and a season shop live in Chronicle, Season.<br>
+        New Game+: from Stronghold, found a new realm. Your Legacy grows, and one hero sails with you.<br>
+        Fences can no longer trap your people.<br><br>
         <b>3.4</b><br>
         Hero gear: weapons, armour and trinkets drop from voyages and great events. Equip them from Army.<br>
         Daily and weekly challenges with a streak: every 7th day in a row brings a legendary piece.<br>

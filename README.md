@@ -78,10 +78,19 @@ Import, and Wipe Realm to start over.
   towers. Break in to reach the castle.
 - **Trade routes**: Market boats sail to Lantern Bay, your provinces and your
   vassals, and return with cargo. Pirates sometimes follow them home.
+- **Promotions**: level 10 soldiers can be promoted (Warrior to Swordsman or
+  Berserker, Lancer to Horseman, others to Elite) and grow to level 15.
+- **The Abyss**: an endless descent of monster floors with a boss every fifth
+  floor. After each floor, press on with your survivors or go home.
+- **Royal decrees**: each week, pick one of three laws, each with a cost.
+- **Seasonal events**: the Harvest Fair, the Long Night, the Turtle Tide and the
+  Midsummer War follow the real seasons, with tasks, a weekly boss and a shop.
+- **New Game+ (Legacy)**: from Stronghold, found a new realm. Legacy points
+  give every future realm lasting bonuses, and one hero comes along.
 - **Holy days and the moon**: Advent, Christmas, Epiphany, Palm Sunday, Good
   Friday, Easter, Ascension and Pentecost on the real calendar with verses;
   a full-moon Moonlit Hunt and a Night Market after dark.
-- **Feats and tutorial**: 41 achievements, and a guided first session.
+- **Feats and tutorial**: 46 achievements, and a guided first session.
 
 Controls: drag to pan, pinch or scroll to zoom. Tap a soldier (or All), then
 tap the ground to move or tap a foe to attack. Tap buildings to train and
@@ -100,6 +109,7 @@ upgrade.
   - `env.js`: seasons, weather, day and night
   - `tutorial.js`: guided tutorial and Feats
   - `gear.js`, `challenges.js`, `needs.js`, `campaign.js`, `trade.js`: the 3.4 systems
+  - `decrees.js`, `seasonal.js`, `legacy.js`: the 3.5 systems
   - `calendar.js`: holy days, festivals and moon phases
   - `orders.js`: Day and Night Orders
   - `audio.js`: synthesized sound effects and procedural music
