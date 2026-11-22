@@ -9,6 +9,7 @@ import { audio } from './audio.js';
 import { FEATS } from './tutorial.js';
 import { upcomingHolidays } from './calendar.js';
 import * as Gear from './gear.js';
+import { NEEDS, MOODS, EXCHANGE } from './needs.js';
 
 export const VERSION = '3.3';
 
@@ -18,7 +19,7 @@ const fmt = n => n >= 10000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1) + 'k' : St
 const time = s => { s = Math.max(0, Math.ceil(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return h ? `${h}h ${m}m` : `${m}:${String(x).padStart(2, '0')}`; };
 const ago = t => { const s = (Date.now() - t) / 1000; return s < 60 ? 'just now' : s < 3600 ? Math.floor(s / 60) + 'm ago' : s < 86400 ? Math.floor(s / 3600) + 'h ago' : Math.floor(s / 86400) + 'd ago'; };
 const UNIT_AV = { pawn: 'av_h5', warrior: 'av_h1', archer: 'av_h3', lancer: 'av_h2', monk: 'av_h4', swordsman: 'av_swordsman1', berserker: 'av_berserker1', horseman: 'av_horseman1', catapult: 'av_catapult1', king: 'av_king1' };
-const BLD_IMG = { lantern: 'fire1', wall: 'fence', gate: 'fence', castle: 'b_Castle', house: 'b_House1', barracks: 'b_Barracks', archery: 'b_Archery', monastery: 'b_Monastery', tower: 'b_Tower' };
+const BLD_IMG = { lantern: 'fire1', wall: 'fence', gate: 'fence', castle: 'b_Castle', house: 'b_House1', barracks: 'b_Barracks', archery: 'b_Archery', monastery: 'b_Monastery', tower: 'b_Tower', tavern: 'b_Tavern', market: 'b_Market', chapel: 'b_Chapel' };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 export class UI {
@@ -227,6 +228,7 @@ export class UI {
     if (R.home.goldRush > 0) N.push(['rush', 'gold', 'ic-gold', `Gold Rush ${time(R.home.goldRush)}`]);
     if (S.upgradeEnd) N.push(['upgrade', 'blue', 'ic-hammer', `Castle grows ${time((S.upgradeEnd - Date.now()) / 1000)}`]);
     if (!R.exp && S.orders) { const o = S.orders.list, d = o.filter(x => x.done).length; if (d < o.length) N.push(['orders', S.orders.kind === 'night' ? 'purple' : 'gold', 'ic-sword', `${S.orders.kind === 'night' ? 'Night' : 'Day'} orders ${d}/${o.length}`]); }
+    if (!R.exp && R.needs.get().mood.key === 'unhappy') N.push(['mood', 'red', 'ic-pawn', 'Your people are unhappy']);
     if (!R.exp && R.chal.C.day && !R.chal.C.day.done) { const c = R.chal.C.day; N.push(['chal', 'gold', 'ic-shield', `Daily: ${c.text}${c.n > 1 ? ` ${Math.floor(c.have)}/${c.n}` : ''}`]); }
     if (!R.exp) { const q = R.currentQuest(); N.push(['quest', 'blue', 'ic-info', `${q.text} ${Math.min(R.questValue(q.type), q.n)}/${q.n}`]); }
     const max = this.noticesOpen ? N.length : 3;
@@ -252,6 +254,7 @@ export class UI {
     if (k === 'more') { this.noticesOpen = !this.noticesOpen; this.renderPills(); return; }
     if (k === 'merchant') this.openPanel('merchant');
     else if (k === 'quest' || k === 'orders' || k === 'chal') this.openPanel('chronicle');
+    else if (k === 'mood') this.openPanel('workers');
     else if (k === 'market') this.openPanel('nightmarket');
     else if (k === 'holiday') { const h = R.holiday(); if (h) this.banner(h.name, (h.verse ? h.verse + ' ' : '') + h.desc, h.colour || 'gold'); }
     else if (k === 'env') { const e = R.env; this.toast(`${e.season.name}: ${e.season.desc}${e.weather !== 'clear' ? ' ' + e.w.name + ': ' + e.w.desc : ''}`); }
@@ -515,7 +518,10 @@ export class UI {
     const castle = R.castle;
     const q = castle.queue.filter(x => x.unit === 'pawn').length;
     const jobs = [['wood', 'Woodcutters', 'ic-wood', 'Chop trees. Forests regrow.'], ['gold', 'Miners', 'ic-gold', 'Break gold stones. New seams appear.'], ['meat', 'Shepherds', 'ic-meat', 'Bring back meat from the flock.'], ['build', 'Builders', 'ic-hammer', 'Speed up construction and repair damage.']];
-    return `<p class="section-title">${S.pawns} pawns - ${S.pawns - busy} idle</p>` +
+    const H = R.needs.get();
+    const mood = `<div class="card mood m-${H.mood.key}"><div class="grow"><h3>Happiness: ${H.mood.name} (${H.value})</h3><div class="hpbar happy"><i style="width:${H.value}%"></i></div><p>${H.mood.desc}</p>
+      <details><summary>Why</summary>${H.parts.map(([l, v]) => `<p class="why"><span>${esc(l)}</span><b class="${v < 0 ? 'neg' : ''}">${v > 0 ? '+' : ''}${v}</b></p>`).join('')}</details></div></div>`;
+    return mood + `<p class="section-title">${S.pawns} pawns - ${S.pawns - busy} idle</p>` +
       jobs.map(([k, n, ic, d]) => `<div class="job card light"><i class="ic ${ic}"></i><div class="name"><h3>${n}</h3><p>${d}</p></div>
         <button class="tiny-btn red" data-act="job:${k}:-1">-</button><span class="count">${J[k]}</span><button class="tiny-btn" data-act="job:${k}:1">+</button></div>`).join('') +
       `<div class="card"><div class="thumb"><img src="${src('av_h5')}" class="av" alt=""></div><div class="grow"><h3>Train a Pawn</h3><p>New hands for the realm. Trained at the Castle.${q ? ` ${q} in training.` : ''}</p>${this.costHtml(UNITS.pawn.cost)}</div>
@@ -760,6 +766,20 @@ export class UI {
       html += `<div class="card"><div class="grow"><h3>${b.hold ? 'Held shut' : 'Automatic'}</h3><p>${b.hold ? 'The gate stays closed until you open it.' : 'Opens for your people, slams shut when foes come within 4 tiles.'}</p></div>
         <button class="btn small" data-act="gate:${b.id}">${b.hold ? 'Automatic' : 'Hold shut'}</button></div>`;
     }
+    // village services (3.4)
+    if (b.done && !b.ruined && b.type === 'tavern') {
+      const t = R.tavernHero(), U = UNITS[t.type];
+      html += `<p class="section-title">Today at the Tavern</p><div class="card light"><div class="thumb"><img src="${src('av_' + U.avatar + (U.avatar.startsWith('h') ? '' : '1'))}" class="av" alt=""></div>
+        <div class="grow"><h3>${esc(t.name)}</h3><p>Level ${t.level} ${U.name}, two traits, arrives wearing rare gear or better.</p>${t.hired ? '<p class="muted">Already hired. Someone new tomorrow.</p>' : this.costHtml(R.tavernCost())}</div>
+        ${t.hired ? '' : `<button class="btn small" data-act="hire">Hire</button>`}</div>`;
+    }
+    if (b.done && !b.ruined && b.type === 'market') {
+      html += `<p class="section-title">Exchange</p>` + EXCHANGE.map(x => `<div class="card light"><div class="grow"><h3>${x.label}</h3><div class="cost">${Object.entries(x.give).map(([k, v]) => `<span><i class="ic ic-${k}"></i>${v}</span>`).join('')} for ${Object.entries(x.get).map(([k, v]) => `<span><i class="ic ic-${k}"></i>${v}</span>`).join('')}</div></div>
+        <button class="btn small" data-act="xchg:${x.id}" ${R.canAfford(x.give) ? '' : 'disabled'}>Trade</button></div>`).join('') + `<p class="muted" style="text-align:center;font-size:13px">Trade boats sail from the Voyage panel.</p>`;
+    }
+    if (b.done && !b.ruined && b.type === 'chapel') {
+      html += `<p class="section-title">Blessings</p><div class="card light"><div class="grow"><p>Soldiers resting at home heal twice as fast. On holy days the realm receives a second gift and soldiers twice the experience.</p></div></div>`;
+    }
     // level and upgrades (2.0)
     if (b.type !== 'castle' && b.done && !b.def.wall) {
       const cur = describeLevel(b.type, b.level);
@@ -861,6 +881,8 @@ export class UI {
       return;
     }
     if (k === 'selall') { this.closePanel(); this.selectAll(); return; }
+    if (k === 'hire') { err(R.hireHero()); return this.refresh(); }
+    if (k === 'xchg') { err(R.exchange(x)); return this.refresh(); }
     if (k === 'hero') { const rec = R.state.soldiers.find(s => s.id === +x); if (rec) this.openPanel('hero', rec); return; }
     if (k === 'eq') { const rec = R.state.soldiers.find(s => s.id === +x); Gear.equip(R, rec, +y); return this.refresh(); }
     if (k === 'uneq') { const rec = R.state.soldiers.find(s => s.id === +x); Gear.unequip(R, rec, y); return this.refresh(); }

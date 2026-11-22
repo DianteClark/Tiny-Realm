@@ -274,3 +274,8 @@ body.exp #abilitybar { bottom: calc(var(--safe-bot) + 124px); }
 .streak span { width: 14px; height: 14px; border-radius: 3px; background: #cbbb99; border: 2px solid #a8946c; }
 .streak span.on { background: #f0a43a; border-color: #b86a1c; box-shadow: 0 0 5px #f0a43a; }
 .streak b { margin-left: 6px; font-weight: normal; }
+.hpbar.happy i { background: linear-gradient(90deg, #d9534f, #e8b93a 45%, #6dbb5b); }
+.mood details { margin-top: 4px; font-size: 13px; }
+.mood summary { cursor: pointer; opacity: .8; }
+.mood .why { display: flex; justify-content: space-between; margin: 2px 0; }
+.mood .why b { font-weight: normal; color: #9be37b; } .mood .why b.neg { color: #ff8a80; }

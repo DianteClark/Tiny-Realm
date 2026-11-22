@@ -56,17 +56,20 @@ export const BUILDINGS = {
   wall: { name: 'Wooden Wall', img: 'fence', fw: 1, fh: 1, hp: 260, cost: { wood: 6 }, time: 3, wall: true, desc: 'Fence lines that raiders must hack through. Drag out a line to build many at once.' },
   gate: { name: 'Gate', img: 'fence', fw: 1, fh: 1, hp: 450, cost: { wood: 20 }, time: 6, wall: true, gate: true, desc: 'A gap your people walk through. Swings shut whenever foes come close. Place it on a wall to convert it.' },
   lantern: { name: 'Lantern Post', img: 'fence', fw: 1, fh: 1, hp: 120, cost: { wood: 20, gold: 10 }, time: 5, lantern: true, desc: 'Lights up the night. Pawns within 5 tiles keep working at full pace after dark.' },
+  tavern: { name: 'Tavern', img: 'b_Tavern', fw: 2, fh: 1, hp: 380, cost: { wood: 110, gold: 50 }, time: 45, need: true, desc: 'Drink and company for 15 people. Once a day a wandering hero stops by, ready to be hired.' },
+  market: { name: 'Market', img: 'b_Market', fw: 2, fh: 1, hp: 380, cost: { wood: 140, gold: 70 }, time: 55, need: true, desc: 'Goods for 15 people, a fixed-price exchange, and trade boats to your vassals and provinces.' },
+  chapel: { name: 'Chapel', img: 'b_Chapel', fw: 3, fh: 2, hp: 650, cost: { wood: 160, gold: 120 }, time: 70, need: true, desc: 'Faith and rest for 20 people. Soldiers at home heal twice as fast, and holy days give twice the gifts.' },
   tower: { name: 'Watchtower', img: 'b_Tower', fw: 2, fh: 1, hp: 700, cost: { wood: 100, gold: 40 }, time: 60, defense: { dmg: 12, range: 5.5, cd: 1.4 }, desc: 'A posted archer shoots raiders. Higher ground gives longer range.' },
 };
 
 // ---------- kingdom tiers ----------
 export const TIERS = [
   null,
-  { name: 'Village', storage: 400, squad: 4, castleHp: 1500, limits: { house: 3, barracks: 1, archery: 1, tower: 1, monastery: 0 } },
-  { name: 'Town', storage: 1200, squad: 6, castleHp: 2400, cost: { gold: 250, wood: 300, meat: 120 }, time: 180, limits: { house: 6, barracks: 1, archery: 1, tower: 2, monastery: 1 } },
-  { name: 'Stronghold', storage: 3000, squad: 8, castleHp: 3600, cost: { gold: 800, wood: 900, meat: 400 }, time: 600, limits: { house: 9, barracks: 2, archery: 2, tower: 4, monastery: 1 } },
-  { name: 'Fortress', storage: 7000, squad: 10, castleHp: 5200, cost: { gold: 2000, wood: 2200, meat: 1000 }, time: 1800, limits: { house: 12, barracks: 2, archery: 2, tower: 6, monastery: 2 } },
-  { name: 'Citadel', storage: 16000, squad: 12, castleHp: 7500, cost: { gold: 5000, wood: 5000, meat: 2500 }, time: 3600, limits: { house: 16, barracks: 3, archery: 3, tower: 8, monastery: 2 } },
+  { name: 'Village', storage: 400, squad: 4, castleHp: 1500, limits: { house: 3, barracks: 1, archery: 1, tower: 1, monastery: 0, tavern: 1, market: 0, chapel: 0 } },
+  { name: 'Town', storage: 1200, squad: 6, castleHp: 2400, cost: { gold: 250, wood: 300, meat: 120 }, time: 180, limits: { house: 6, barracks: 1, archery: 1, tower: 2, monastery: 1, tavern: 1, market: 1, chapel: 1 } },
+  { name: 'Stronghold', storage: 3000, squad: 8, castleHp: 3600, cost: { gold: 800, wood: 900, meat: 400 }, time: 600, limits: { house: 9, barracks: 2, archery: 2, tower: 4, monastery: 1, tavern: 2, market: 1, chapel: 1 } },
+  { name: 'Fortress', storage: 7000, squad: 10, castleHp: 5200, cost: { gold: 2000, wood: 2200, meat: 1000 }, time: 1800, limits: { house: 12, barracks: 2, archery: 2, tower: 6, monastery: 2, tavern: 2, market: 2, chapel: 2 } },
+  { name: 'Citadel', storage: 16000, squad: 12, castleHp: 7500, cost: { gold: 5000, wood: 5000, meat: 2500 }, time: 3600, limits: { house: 16, barracks: 3, archery: 3, tower: 8, monastery: 2, tavern: 3, market: 2, chapel: 2 } },
 ];
 // Endless Renown ranks after Citadel
 export function renownCost(rank) {
@@ -207,6 +210,8 @@ export const levelHp = (type, level) => Math.round(BUILDINGS[type].hp * (1 + 0.3
 export function levelEffects(type, L) {
   if (type === 'tower') return { dmg: 1 + 0.35 * (L - 1), range: 0.75 * (L - 1), cd: 1 - 0.07 * (L - 1), shots: L >= 4 ? 2 : 1 };
   if (type === 'house') return { pop: 5 + 3 * (L - 1) };
+  if (type === 'tavern' || type === 'market') return { serves: 15 + 8 * (L - 1), boats: L };
+  if (type === 'chapel') return { serves: 20 + 10 * (L - 1) };
   if (type === 'barracks' || type === 'archery' || type === 'monastery') return { speed: 1 - 0.13 * (L - 1), recruit: L, queue: 4 + L };
   return {};
 }
@@ -214,6 +219,8 @@ export function describeLevel(type, L) {
   const e = levelEffects(type, L);
   if (type === 'tower') return `x${e.dmg.toFixed(2)} damage, +${e.range} range, ${Math.round((1 - e.cd) * 100)}% faster${e.shots > 1 ? ', fires 2 arrows' : ''}`;
   if (type === 'house') return `houses ${e.pop} people`;
+  if (type === 'market') return `serves ${e.serves} people, ${e.boats} trade boat${e.boats > 1 ? 's' : ''}`;
+  if (e.serves) return `serves ${e.serves} people`;
   if (e.recruit) return `trains ${Math.round((1 - e.speed) * 100)}% faster, recruits start at level ${e.recruit}, queue of ${e.queue}`;
   return '';
 }

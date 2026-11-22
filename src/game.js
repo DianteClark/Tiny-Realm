@@ -11,6 +11,7 @@ import {
 import { EventDirector } from './events.js';
 import * as Gear from './gear.js';
 import { Challenges } from './challenges.js';
+import { Needs, EXCHANGE } from './needs.js';
 import { SHEETS } from './assets.js';
 import { audio } from './audio.js';
 import { Environment } from './env.js';
@@ -59,6 +60,7 @@ export class Realm {
     this.env = new Environment(this);
     this.orders = new Orders(this);
     this.chal = new Challenges(this);
+    this.needs = new Needs(this);
   }
 
   // ------------------------------------------------------------ persistence
@@ -124,7 +126,7 @@ export class Realm {
       rangedDmg: R.sharktooth ? 0.1 : 0,
       atkSpeed: R.pandabelt ? 0.05 : 0,
       towerDmg: R.boneidol ? 0.25 : 0,
-      gather: rn * RENOWN_BONUS.gather + (R.rubberduck ? 0.05 : 0),
+      gather: rn * RENOWN_BONUS.gather + (R.rubberduck ? 0.05 : 0) + (this.needs && this.home ? this.needs.gatherBonus() : 0),
       gold: R.goldenacorn ? 0.1 : 0,
       wood: R.bearpelt ? 0.1 : 0,
       castleHp: R.turtleshell ? 0.2 : 0,
@@ -133,6 +135,39 @@ export class Realm {
     return b;
   }
   get tierDef() { return TIERS[this.state.tier]; }
+  // ---- 3.4 village services
+  tavernHero() { // today's wandering hero, the same all day
+    const S = this.state, day = new Date().toDateString();
+    if (!S.tavern || S.tavern.day !== day) {
+      const types = Object.keys(UNITS).filter(k => k !== 'pawn' && !UNITS[k].unique && UNITS[k].tier <= Math.min(5, S.tier + 1));
+      let h = 0; for (const c of day + S.seed) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+      const type = types[h % types.length];
+      S.tavern = { day, type, name: FIRST_NAMES[h % FIRST_NAMES.length] + ' ' + EPITHETS[(h >> 5) % EPITHETS.length], level: 2 + S.tier, hired: false };
+    }
+    return S.tavern;
+  }
+  tavernCost() { const t = this.tavernHero(); return { gold: (UNITS[t.type].cost.gold || 30) * 2 + 60 * this.state.tier, meat: 40 * this.state.tier }; }
+  hireHero() {
+    const S = this.state, t = this.tavernHero();
+    if (!this.countOf('tavern')) return 'Build a Tavern first.';
+    if (t.hired) return 'Today\'s hero has already joined you.';
+    if (this.popUsed() + UNITS[t.type].pop > this.popCap()) return 'No room. Build more Houses.';
+    if (!this.pay(this.tavernCost())) return 'Not enough to pay.';
+    t.hired = true;
+    const rec = this.newSoldier(t.type); rec.name = t.name; rec.level = t.level; rec.xp = XP_LEVELS[rec.level];
+    const extra = COMMON_TRAITS.filter(k => !rec.traits.includes(k)); rec.traits.push(extra[Math.floor(Math.random() * extra.length)]);
+    const it = this.dropGear(t.level + 2, { min: 1, quiet: true, from: 'the Tavern' });
+    Gear.equip(this, rec, it.id);
+    this.spawnSoldier(rec, false, { x: this.castle.x, y: this.castle.y + 40 });
+    this.ui.toast(`${rec.name} joins your realm, bringing ${it.name}.`, 'gold'); this.sfx('ready');
+    this.log(`${rec.name} was hired at the Tavern.`);
+  }
+  exchange(id) {
+    if (!this.countOf('market')) return 'Build a Market first.';
+    const x = EXCHANGE.find(e => e.id === id); if (!x) return;
+    if (!this.pay(x.give)) return 'Not enough to trade.';
+    this.addAll(x.get); this.sfx('coin');
+  }
   gearMods(rec) { return this.state && this.state.gear ? Gear.mods(this.state, rec) : {}; }
   dropGear(level, opts = {}) { return Gear.grant(this, Gear.rollItem(this.state, level, opts), opts.quiet); }
   storage() { return this.tierDef.storage + this.state.renown * 2000; }
@@ -617,7 +652,7 @@ export class Realm {
     return Object.entries(UNITS).filter(([k, u]) => u.from === b.type).map(([k, u]) => ({ key: k, def: u, locked: u.tier > this.state.tier, block: this.trainBlock(b, k) }));
   }
   queueCap(b) { return b.type === 'castle' ? 5 : levelEffects(b.type, b.level).queue || 5; }
-  trainTime(b, unit) { const e = levelEffects(b.type, b.level); return Math.round(UNITS[unit].time * (e.speed || 1)); }
+  trainTime(b, unit) { const e = levelEffects(b.type, b.level); return Math.round(UNITS[unit].time * (e.speed || 1) * (this.needs && this.home ? this.needs.trainMult() : 1)); }
   // Why can't this unit be trained right now? null if it can.
   trainBlock(b, unit) {
     const d = UNITS[unit];
@@ -842,7 +877,9 @@ export class Realm {
     this.sfx(h.solemn ? 'bell' : 'victory');
     this.log(`${h.name} was kept in the realm.`);
     const soldiers = this.home.units.filter(u => u.rec && u.alive);
-    if (h.xpGift) for (const u of soldiers) { this.grantXp(this.home, u, h.xpGift); u.hp = u.maxHp; this.home.fxAt('healFx', u.x, u.y); }
+    const blessed = this.countOf('chapel') ? 2 : 1;
+    if (blessed > 1 && h.verse) { const g = 100 + this.state.tier * 80; this.addAll({ gold: g, meat: g }); this.ui.toast('The Chapel gives thanks: a second gift for the realm.', 'gold'); }
+    if (h.xpGift) for (const u of soldiers) { this.grantXp(this.home, u, h.xpGift * blessed); u.hp = u.maxHp; this.home.fxAt('healFx', u.x, u.y); }
     if (h.feast) for (const u of soldiers) u.hp = u.maxHp;
     if (h.lambs) for (let i = 0; i < h.lambs; i++) this.spawnSheep();
     if (h.merchant && !this.events.merchant) this.events.startMerchant();
@@ -880,11 +917,13 @@ export class Realm {
     if (this.regenT > 1) {
       this.regenT = 0;
       const calm = !this.raid || !this.raid.active;
-      for (const u of this.home.units) if (u.rec && u.alive && calm && !u.target) u.hp = Math.min(u.maxHp, u.hp + u.maxHp * 0.03);
+      const mend = this.countOf('chapel') ? 0.06 : 0.03;
+      for (const u of this.home.units) if (u.rec && u.alive && calm && !u.target) u.hp = Math.min(u.maxHp, u.hp + u.maxHp * mend);
       for (const b of this.home.buildings) if (b.done && calm && b.hp < b.maxHp) b.hp = Math.min(b.maxHp, b.hp + b.maxHp * (b.ruined ? 0.004 : 0.006));
       if (this.castle.hp <= 0) this.castle.hp = 1;
     }
     this.updateRaid(dt);
+    this.needs.update(dt);
     if (!this.exp) this.events.update(dt);
     this.questT -= dt;
     if (this.questT <= 0) { this.questT = 1; this.checkQuest(); }
@@ -993,7 +1032,7 @@ export class Realm {
     R.active = false;
     const S = this.state;
     if (won) {
-      S.stats.raidsSurvived++;
+      S.stats.raidsSurvived++; S.lastRaidWon = Date.now();
       if (this.env.isNight) S.stats.nightRaids = (S.stats.nightRaids || 0) + 1;
       if (this.env.weather === 'storm') S.stats.stormRaids = (S.stats.stormRaids || 0) + 1;
       const reward = Math.round((R.loot + 20 + R.level * 6) * (this.env.isNight ? 1.5 : 1));
@@ -1013,7 +1052,7 @@ export class Realm {
   }
   loseRaid() {
     const R = this.raid; if (!R || !R.active) return;
-    const S = this.state;
+    const S = this.state; S.lastRaidLost = Date.now();
     const lost = {};
     for (const r of ['gold', 'wood', 'meat']) { lost[r] = Math.floor(S.res[r] * 0.25); S.res[r] -= lost[r]; }
     S.stats.raidsLost++;

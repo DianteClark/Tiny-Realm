@@ -44,6 +44,10 @@ S('sheepGrass', F + 'Terrain/Resources/Meat/Sheep/Sheep_Grass.png', 128, 128, 84
 for (const b of ['Castle', 'House1', 'House2', 'House3', 'Barracks', 'Archery', 'Monastery', 'Tower']) {
   S('b_' + b, F + `Buildings/Blue Buildings/${b}.png`, 0, 0, 0);
 }
+// 3.4 village buildings use the pack's other-coloured buildings as they are
+S('b_Tavern', F + 'Buildings/Red Buildings/House3.png', 0, 0, 0);
+S('b_Market', F + 'Buildings/Yellow Buildings/House2.png', 0, 0, 0);
+S('b_Chapel', F + 'Buildings/Yellow Buildings/Monastery.png', 0, 0, 0);
 for (const b of ['Castle', 'House1', 'Tower', 'Barracks']) {
   S('br_' + b, F + `Buildings/Red Buildings/${b}.png`, 0, 0, 0);
 }
