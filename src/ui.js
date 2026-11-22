@@ -1,6 +1,6 @@
 // HUD, panels and dialogs. Plain DOM styled with the pack's UI art.
 import { SHEETS } from './assets.js';
-import { UNITS, ENEMIES, BUILDINGS, TIERS, TRAITS, RELICS, XP_LEVELS, MAX_LEVEL, islandInfo, renownCost, STORY, upgradeCost, upgradeTime, describeLevel, levelEffects, ABILITIES } from './data.js';
+import { UNITS, ENEMIES, BUILDINGS, TIERS, TRAITS, RELICS, XP_LEVELS, MAX_LEVEL, islandInfo, renownCost, STORY, upgradeCost, upgradeTime, describeLevel, levelEffects, ABILITIES, RIVALS, rivalDef } from './data.js';
 const FORMATIONS = ['Loose', 'Line', 'Wedge', 'Column'];
 import { Unit, Building, Struct, cellOf } from './world.js';
 import { T } from './terrain.js';
@@ -498,19 +498,83 @@ export class UI {
     for (const id of [...this.squadPick]) if (!home.some(s => s.id === id)) this.squadPick.delete(id);
     const info = islandInfo(S.frontier);
     const bountyDone = S.daily.bounty === S.daily.last;
-    const target = this.voyageTarget || 'frontier';
-    const isle = (k, title, sub, desc, enabled) => `<div class="card ${target === k ? '' : 'light'}" data-act="vt:${k}" style="${enabled ? '' : 'opacity:.5'}">
-      <div class="thumb"><img src="${src(k === 'bounty' ? 'av_thief' : 'av_' + info.region.boss)}" class="av" alt=""></div>
-      <div class="grow"><h3>${title}</h3><p>${sub}</p><p class="muted">${desc}</p></div></div>`;
-    let html = '<p class="section-title">Choose an island</p>';
-    html += isle('frontier', `Island ${info.n}: ${info.name}`, `${info.region.name} - Level ${info.level}${info.boss ? ' - Boss: ' + ENEMIES[info.region.boss].name : ''}`, info.boss ? `The boss guards a relic: ${RELICS[info.region.bossRelic].name}.` : 'Clear every camp to push the frontier onward.', true);
-    html += isle('bounty', 'Bounty Isle', bountyDone ? 'Plundered today. A new one appears tomorrow.' : 'Double loot and a chance at a relic. Once per day.', 'A different island every day.', !bountyDone);
+    let target = this.voyageTarget || 'frontier';
+    if (target.startsWith('rival:')) { const rv = rivalDef(target.slice(6)); if (!R.rivalUnlocked(rv) || S.rivals[rv.key].subjugated) target = this.voyageTarget = 'frontier'; }
+    let html = `<canvas id="chart" class="chart"></canvas><p class="muted" style="text-align:center;font-size:12px;margin:2px 0 6px">Tap an island on the chart to choose your destination.</p>`;
+    // destination card
+    let title, sub, desc, av, blocked = false;
+    if (target === 'bounty') { title = 'Bounty Isle'; sub = bountyDone ? 'Plundered today. A new one appears tomorrow.' : 'Double loot and a chance at a relic. Once per day.'; desc = 'A different island every day.'; av = 'av_thief'; blocked = bountyDone; }
+    else if (target.startsWith('rival:')) {
+      const rv = rivalDef(target.slice(6)), lv = R.rivalLevel(rv.key), tr = R.tributeRate(rv.key);
+      title = `${rv.name} Capital`; sub = `Ruled by ${rv.ruler} - Level ${lv}`; av = `av_h${rv.avatarRow}`;
+      desc = `"${rv.motto}" Storm four strongholds and defeat their King. Conquered houses stop raiding and pay ${tr.gold} gold and ${tr.wood} wood every hour.`;
+    } else {
+      title = `Island ${info.n}: ${info.name}`; sub = `${info.region.name} - Level ${info.level}${info.boss ? ' - Boss: ' + ENEMIES[info.region.boss].name : ''}`;
+      desc = info.boss ? `The boss guards a relic: ${RELICS[info.region.bossRelic].name}.` : 'Clear every camp to push the frontier onward.'; av = 'av_' + info.region.boss;
+    }
+    html += `<div class="card"><div class="thumb"><img src="${src(av)}" class="av" alt=""></div><div class="grow"><h3>${esc(title)}</h3><p>${esc(sub)}</p><p class="muted">${esc(desc)}</p></div></div>`;
     html += `<p class="section-title">Pick your squad (${this.squadPick.size}/${cap})</p>`;
     if (!home.length) html += '<p style="text-align:center">No soldiers at home.</p>';
     html += home.sort((a, b) => b.level - a.level).map(r => this.soldierCard(r, { pick: true })).join('');
     html += `<p class="muted" style="text-align:center;font-size:13px">Soldiers who fall on an island are gone forever. Survivors return with experience and loot.</p>`;
-    html += `<button class="btn wide" data-act="launch" ${this.squadPick.size && !(target === 'bounty' && bountyDone) ? '' : 'disabled'}>Set sail</button>`;
+    html += `<button class="btn wide" data-act="launch" ${this.squadPick.size && !blocked ? '' : 'disabled'}>Set sail</button>`;
+    this.afterRender = () => this.drawChart(target);
+    this.live.push(() => this.drawChart(target));
     return html;
+  }
+  drawChart(target) {
+    const cv = $('#chart'); if (!cv) return;
+    const R = this.R, S = R.state, dpr = Math.min(2, window.devicePixelRatio || 1);
+    const W = cv.clientWidth || 340, H = 230;
+    if (cv.width !== W * dpr) { cv.width = W * dpr; cv.height = H * dpr; }
+    const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.imageSmoothingEnabled = false;
+    c.fillStyle = '#47aba9'; c.fillRect(0, 0, W, H);
+    const t = performance.now() / 1000;
+    // gentle waves
+    c.fillStyle = 'rgba(255,255,255,0.18)';
+    for (let i = 0; i < 26; i++) { const x = (i * 97 + t * 6) % W, y = (i * 53) % H; c.fillRect(x, y, 6, 2); }
+    const tiles = SHEETS.tiles1.img, sx = W / 340;
+    const isle = (x, y, size, sheet = tiles, alpha = 1) => { c.globalAlpha = alpha; c.drawImage(sheet, 3 * 64, 3 * 64, 64, 64, x - size / 2, y - size / 2, size, size); c.globalAlpha = 1; };
+    const img = (k, x, y, w) => { const s = SHEETS[k]; if (!s || !s.img) return; const h = w * s.fh / s.fw; c.drawImage(s.img, 0, 0, s.fw, s.fh, x - w / 2, y - h / 2, w, h); };
+    const nodes = [];
+    // home
+    const hx = 46 * sx, hy = 120;
+    isle(hx, hy, 70); img('b_Castle', hx, hy - 6, 50);
+    // frontier chain
+    const F = S.frontier, first = Math.max(1, F - 3), pts = [];
+    for (let j = 0; j < 8; j++) { const n = first + j; pts.push({ n, x: (102 + j * 25) * sx, y: 120 + Math.sin(n * 1.3) * 52 }); }
+    c.strokeStyle = 'rgba(255,255,255,0.55)'; c.setLineDash([4, 4]); c.lineWidth = 2;
+    c.beginPath(); c.moveTo(hx + 26, hy); for (const p of pts) c.lineTo(p.x, p.y); c.stroke(); c.setLineDash([]);
+    for (const p of pts) {
+      const inf = islandInfo(p.n), done = p.n < F, cur = p.n === F;
+      isle(p.x, p.y, cur ? 34 : 26, SHEETS['tiles' + inf.region.colors[0]].img, done ? 0.55 : 1);
+      if (done) img('icon_shield', p.x, p.y, 16);
+      else if (cur || inf.boss) img('av_' + (inf.boss ? inf.region.boss : inf.region.enemies[0]), p.x, p.y - 4, cur ? 40 : 30);
+      if (p.n > F + 1) img('cloud' + (1 + p.n % 8), p.x, p.y, 54);
+      if (cur) nodes.push({ k: 'frontier', x: p.x, y: p.y, r: 26 });
+    }
+    // bounty
+    const bx = 150 * sx, by = 24, bountyDone = S.daily.bounty === S.daily.last;
+    isle(bx, by, 30, SHEETS.tiles4.img, bountyDone ? 0.5 : 1); img('av_thief', bx, by - 4, 34);
+    nodes.push({ k: 'bounty', x: bx, y: by, r: 22 });
+    // rival capitals down the right edge
+    RIVALS.forEach((rv, i) => {
+      const x = (W - 34), y = 26 + i * 58, st = S.rivals[rv.key], open = R.rivalUnlocked(rv);
+      isle(x, y + 6, 46, SHEETS['tiles' + rv.colors[0]].img, open ? 1 : 0.6);
+      img(`b${rv.key}_Castle`, x, y, 46);
+      if (!open) img('cloud' + (3 + i), x, y + 4, 70);
+      if (st.subjugated) { c.fillStyle = '#4a90c0'; c.fillRect(x - 22, y + 20, 44, 10); c.fillStyle = '#fff'; c.font = '9px BoldPixels, monospace'; c.textAlign = 'center'; c.fillText('VASSAL', x, y + 28); }
+      if (open && !st.subjugated) nodes.push({ k: 'rival:' + rv.key, x, y, r: 26 });
+    });
+    // selection ring
+    const sel = nodes.find(n => n.k === target);
+    if (sel) { const s = 0.5 + Math.sin(t * 5) * 0.05; img('cursorRing', sel.x, sel.y, 128 * s); }
+    cv.onclick = e => {
+      const rc = cv.getBoundingClientRect(), mx = e.clientX - rc.left, my = e.clientY - rc.top;
+      let best = null, bd = 30;
+      for (const n of nodes) { const d = Math.hypot(n.x - mx, n.y - my); if (d < bd) { bd = d; best = n; } }
+      if (best) { this.voyageTarget = best.k; audio.play('click'); this.refresh(); }
+    };
   }
 
   panel_chronicle() {
@@ -519,7 +583,9 @@ export class UI {
     if (this.tab === 'realm') {
       const days = Math.floor((Date.now() - S.created) / 86400000) + 1;
       const rows = [['Realm day', days], ['Castle', TIERS[S.tier].name], ['Renown', S.renown], ['Daily streak', S.daily.streak], ['Islands cleared', S.cleared], ['Raids repelled', S.stats.raidsSurvived], ['Raids lost', S.stats.raidsLost], ['Great events survived', S.stats.eventsSurvived], ['Monsters slain', S.stats.kills], ['Trolls slain', S.stats.trollsSlain], ['Soldiers fallen', S.fallen.length], ['Gold gathered', fmt(S.stats.gold || 0)], ['Wood gathered', fmt(S.stats.wood || 0)], ['Meat gathered', fmt(S.stats.meat || 0)], ['Storage cap', fmt(R.storage())]];
-      return `<div class="stat-grid">${rows.map(([a, b]) => `<span>${a}</span><span>${b}</span>`).join('')}</div>`;
+      const rv = RIVALS.map(r => { const st = S.rivals[r.key], open = R.rivalUnlocked(r);
+        return `<div class="card light"><div class="thumb"><img src="${src('b' + r.key + '_Castle')}" alt=""></div><div class="grow"><h3>${r.name}</h3><p>${!open ? 'Unknown waters. Grow your realm to meet them.' : st.subjugated ? `Your vassal. Pays ${R.tributeRate(r.key).gold} gold and ${R.tributeRate(r.key).wood} wood per hour.` : `At war. Level ${R.rivalLevel(r.key)}, ${st.raids} raids so far. Conquer their capital from Voyage.`}</p></div></div>`; }).join('');
+      return `<div class="stat-grid">${rows.map(([a, b]) => `<span>${a}</span><span>${b}</span>`).join('')}</div><p class="section-title">Rival houses</p>${rv}`;
     }
     if (this.tab === 'log') {
       if (!S.log.length) return '<p class="section-title">Your tale has yet to be told.</p>';
@@ -672,7 +738,8 @@ export class UI {
     }
     if (k === 'launch') {
       const ids = [...this.squadPick];
-      const bounty = (this.voyageTarget || 'frontier') === 'bounty';
+      const vt = this.voyageTarget || 'frontier';
+      const bounty = vt === 'bounty' ? true : vt.startsWith('rival:') ? vt : false;
       this.squadPick.clear();
       R.startExpedition(R.state.frontier, ids, bounty);
       this.banner(R.exp.islandName, `${R.exp.region.name}, level ${R.exp.level}. Destroy every camp. Tap a soldier or All, then tap the ground or a foe.`, 'blue');
@@ -705,6 +772,7 @@ export class UI {
     const div = document.createElement('div');
     if (s.result === 'won') {
       div.innerHTML = `<p>${esc(s.name)} is cleared.</p><div class="cost" style="justify-content:center;font-size:18px"><span><i class="ic ic-gold"></i>+${s.loot.gold}</span><span><i class="ic ic-wood"></i>+${s.loot.wood}</span><span><i class="ic ic-meat"></i>+${s.loot.meat}</span></div>
+        ${s.rival ? `<p><b>${rivalDef(s.rival).name}</b> bends the knee. They will pay tribute every hour and never raid you again.</p>` : ''}
         ${s.relic ? `<p>Relic found: <b>${RELICS[s.relic].name}</b>. ${RELICS[s.relic].desc}</p>` : ''}<p class="muted">Survivors: ${s.survivors.map(esc).join(', ') || 'none'}</p>`;
       this.choice('Victory', div, [{ label: 'Home' }]);
     } else if (s.result === 'lost') {

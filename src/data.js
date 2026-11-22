@@ -230,3 +230,35 @@ export const ABILITIES = {
   catapult: { name: 'Firestone', cd: 30, desc: 'The next stone bursts into flames that burn the area.' },
   king: { name: 'Rally', cd: 45, dur: 10, desc: 'Allies within 6 tiles deal 25% more damage and heal 20%.' },
 };
+
+// ---------- rival kingdoms (3.0) ----------
+// Four rival houses in the pack's other team colours. They raid you, grow
+// stronger over time, and can be conquered for tribute (and land).
+export const RIVALS = [
+  { key: 'red', color: 'Red', name: 'House Ember', ruler: 'Queen Brannagh', base: 3, unlock: { tier: 2 }, colors: [4, 1, 2], avatarRow: 6, motto: 'The fire remembers.' },
+  { key: 'yellow', color: 'Yellow', name: 'House Sunhold', ruler: 'Lord Aurel', base: 5, unlock: { tier: 2, raids: 6 }, colors: [1, 2, 3], avatarRow: 11, motto: 'Gold buys every war.' },
+  { key: 'purple', color: 'Purple', name: 'House Duskmere', ruler: 'the Twin Regents', base: 8, unlock: { tier: 3 }, colors: [2, 5, 3], avatarRow: 16, motto: 'We wait. We win.' },
+  { key: 'black', color: 'Black', name: 'House Ashgrave', ruler: 'the Iron Widow', base: 11, unlock: { tier: 4 }, colors: [5, 2, 4], avatarRow: 21, motto: 'Ash to ash.' },
+];
+const RIVAL_UNITS = { warrior: 1.4, archer: 1.3, lancer: 2, monk: 1.6, swordsman: 2.6, berserker: 2.6, horseman: 3.5, king: 14 };
+for (const r of RIVALS) {
+  const house = r.name.split(' ')[1];
+  for (const [u, cost] of Object.entries(RIVAL_UNITS)) {
+    const d = UNITS[u];
+    ENEMIES[`${r.key}_${u}`] = {
+      name: `${house} ${d.name}`, hp: d.hp, dmg: d.dmg, heal: d.heal, range: d.range, cd: d.cd, speed: d.speed, hit: d.hit, proj: d.proj,
+      armor: d.armor, cleave: d.cleave, rage: d.rage, charge: d.charge, big: u === 'horseman' || u === 'king', boss: u === 'king',
+      anim: `${r.key}_${u}`, rival: r.key, cost, xp: Math.round(cost * 8), gold: Math.round(cost * 6), minLevel: { swordsman: 5, berserker: 5, horseman: 7, monk: 3 }[u] || 0,
+    };
+  }
+  CAMP_STRUCTS[`${r.key}Castle`] = { name: `${house} Castle`, sprite: `b${r.key}_Castle`, hp: 1600, fw: 5, fh: 2, rival: r.key };
+  CAMP_STRUCTS[`${r.key}Tower`] = { name: `${house} Tower`, sprite: `b${r.key}_Tower`, hp: 650, fw: 2, fh: 1, shoots: 'arrow', rival: r.key };
+  CAMP_STRUCTS[`${r.key}Barracks`] = { name: `${house} Barracks`, sprite: `b${r.key}_Barracks`, hp: 700, fw: 3, fh: 2, rival: r.key };
+  CAMP_STRUCTS[`${r.key}House`] = { name: `${house} House`, sprite: `b${r.key}_House1`, hp: 350, fw: 2, fh: 1, rival: r.key };
+}
+export const rivalDef = k => RIVALS.find(r => r.key === k);
+// a raid party or garrison drawn from a rival's roster at a given level
+export function rivalRoster(key, level) {
+  const pool = ['warrior', 'archer', 'warrior', 'lancer', 'archer', 'monk', 'swordsman', 'berserker', 'horseman'].map(u => `${key}_${u}`);
+  return pool.filter(k => (ENEMIES[k].minLevel || 0) <= level);
+}

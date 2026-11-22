@@ -17,7 +17,7 @@ export class Unit {
     this.x = x; this.y = y;
     this.def = team === 0 ? UNITS[type] : ENEMIES[type];
     this.kind = team === 1 ? 'enemy' : (type === 'pawn' ? 'pawn' : 'soldier');
-    this.anim = team === 0 ? this.def.anim : type;
+    this.anim = team === 0 ? this.def.anim : (this.def.anim || type);
     this.rec = opts.rec || null;
     this.level = opts.level || 1;
     this.state = 'idle';
@@ -51,7 +51,8 @@ export class Unit {
     }
     if (this.team === 1) {
       const boss = d.boss || d.big;
-      hp *= 1 + (this.level - 1) * (boss ? 0.07 : 0.12); dmg *= 1 + (this.level - 1) * (boss ? 0.05 : 0.09);
+      const hs = d.rival ? 0.06 : boss ? 0.07 : 0.12, ds = d.rival ? 0.045 : boss ? 0.05 : 0.09; // rival soldiers start strong, so they scale gently
+      hp *= 1 + (this.level - 1) * hs; dmg *= 1 + (this.level - 1) * ds;
       if (opts.elite) { hp *= 1.6; dmg *= 1.3; }
     }
     this.maxHp = Math.round(hp); this.dmg = dmg; this.speed = speed; this.cd = cd;
@@ -403,7 +404,7 @@ export class Scene {
     for (const f of this.fires || []) if (f.t > 0 && u.team !== 0 && dist(f.x, f.y, u.x, u.y) < 64) { u.burnT = (u.burnT || 0) - dt; if (u.burnT <= 0) { u.burnT = 0.5; this.applyDamage(f.src, u, 6); } }
     u.updateAttack(dt);
     if (u.kind === 'pawn') return this.game.pawnAI(this, u, dt);
-    if (u.type === 'monk') return this.monkAI(u, dt);
+    if (u.type === 'monk' || u.def.heal) return this.monkAI(u, dt);
     if (u.team === 0) return this.soldierAI(u, dt);
     return this.enemyAI(u, dt);
   }
@@ -526,8 +527,14 @@ export class Scene {
     // follow the nearest soldier loosely in the field
     if (this.kind !== 'home') {
       let f = null, fd = 1e9;
-      for (const o of this.units) if (o !== u && o.team === 0 && o.kind === 'soldier' && o.type !== 'monk' && o.alive) { const d = dist(o.x, o.y, u.x, u.y); if (d < fd) { fd = d; f = o; } }
+      for (const o of this.units) if (o !== u && o.team === u.team && o.kind !== 'pawn' && !o.def.heal && o.alive) { const d = dist(o.x, o.y, u.x, u.y); if (d < fd) { fd = d; f = o; } }
       if (f && fd > 2.5 * T) { if (!u.path || !u.path.length || (u.pathT -= dt) <= 0) { u.pathT = 0.8; u.setPath(f.x, f.y); } u.stepPath(dt); return; }
+    }
+    if (u.team === 1 && this.kind === 'home') { // a rival healer with nobody hurt marches with the raid
+      let f = null, fd = 1e9;
+      for (const o of this.units) if (o !== u && o.team === 1 && o.alive && !o.def.heal) { const d = dist(o.x, o.y, u.x, u.y); if (d < fd) { fd = d; f = o; } }
+      if (f && fd > 2.5 * T) { if (!u.path || !u.path.length || (u.pathT -= dt) <= 0) { u.pathT = 0.8; u.setPath(f.x, f.y); } u.stepPath(dt); } else u.moving = false;
+      return;
     }
     if (u.atkAnim < 0 && dist(u.x, u.y, u.home.x, u.home.y) > 40 && this.kind === 'home') {
       if ((!u.path || !u.path.length) && !u.setPath(u.home.x, u.home.y)) { u.home = { x: u.x, y: u.y }; return; }

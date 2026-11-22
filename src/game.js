@@ -5,6 +5,7 @@ import {
   UNITS, ENEMIES, BUILDINGS, TIERS, TRAITS, COMMON_TRAITS, XP_LEVELS, MAX_LEVEL, RELICS, REGIONS,
   islandInfo, FIRST_NAMES, EPITHETS, QUESTS, endlessQuest, renownCost, RENOWN_BONUS,
   maxBuildingLevel, upgradeCost, upgradeTime, levelHp, levelEffects, castlePop,
+  RIVALS, rivalDef, rivalRoster, CAMP_STRUCTS,
 } from './data.js';
 import { EventDirector } from './events.js';
 import { SHEETS } from './assets.js';
@@ -57,6 +58,8 @@ export class Realm {
     this.state.stats = Object.assign(freshState().stats, this.state.stats || {});
     this.state.timers = Object.assign(freshState().timers, this.state.timers || {});
     this.state.daily = Object.assign(freshState().daily, this.state.daily || {});
+    this.state.rivals = this.state.rivals || {};
+    for (const r of RIVALS) this.state.rivals[r.key] = Object.assign({ subjugated: false, defeats: 0, raids: 0, tributeAt: 0, met: false }, this.state.rivals[r.key] || {});
     // a voyage interrupted by closing the app counts as a retreat
     for (const rec of this.state.soldiers) if (rec.status === 'away') { rec.status = 'home'; rec.post = null; }
     if (this.state.timers.raid < 60) this.state.timers.raid = 60;
@@ -754,6 +757,30 @@ export class Realm {
     }
   }
 
+  // ------------------------------------------------------------ rival kingdoms
+  rivalUnlocked(r) { const S = this.state, u = r.unlock; return S.tier >= (u.tier || 1) && S.stats.raidsSurvived >= (u.raids || 0); }
+  rivalLevel(key) {
+    const r = rivalDef(key), days = (Date.now() - this.state.created) / 86400000;
+    return r.base + Math.floor(days / 1.5) + (this.state.tier - 1) + this.state.renown;
+  }
+  activeRivals() { return RIVALS.filter(r => this.rivalUnlocked(r) && !this.state.rivals[r.key].subjugated); }
+  tributeRate(key) { return { gold: 30 + this.rivalLevel(key) * 6, wood: 20 + this.rivalLevel(key) * 4 }; } // per hour
+  tickTribute() {
+    const now = Date.now();
+    for (const r of RIVALS) {
+      const st = this.state.rivals[r.key];
+      if (!st.subjugated) continue;
+      if (!st.tributeAt) st.tributeAt = now;
+      const hours = Math.floor((now - st.tributeAt) / 3600000);
+      if (hours >= 1) {
+        const rate = this.tributeRate(r.key), h = Math.min(hours, 24);
+        const g = this.addRes('gold', rate.gold * h), w = this.addRes('wood', rate.wood * h);
+        st.tributeAt += hours * 3600000;
+        if (g || w) this.ui.toast(`${r.name} pays tribute: ${g} gold, ${w} wood.`, 'gold');
+      }
+    }
+  }
+
   // ------------------------------------------------------------ daily
   checkDaily() {
     const D = this.state.daily, today = todayStr();
@@ -775,7 +802,7 @@ export class Realm {
     this.home.update(dt);
     this.env.update(dt);
     this.tickTimersT = (this.tickTimersT || 0) - dt;
-    if (this.tickTimersT <= 0) { this.tickTimersT = 0.5; this.tickTimers(false); this.checkDaily(); }
+    if (this.tickTimersT <= 0) { this.tickTimersT = 0.5; this.tickTimers(false); this.checkDaily(); this.tickTribute(); }
     // sheep breed
     this.sheepT = (this.sheepT || 0) + dt;
     if (this.env.breed() > 0 && this.sheepT > 35 / this.env.breed()) { this.sheepT = 0; if (this.home.sheep.length < this.maxSheep()) this.spawnSheep(); }
@@ -838,7 +865,15 @@ export class Realm {
   planRaid(kind = 'raid', opts = {}) {
     const S = this.state;
     const unlocked = Math.min(REGIONS.length, 1 + Math.floor(S.cleared / 5));
-    const region = opts.region || REGIONS[Math.floor(Math.random() * unlocked)];
+    let region = opts.region || REGIONS[Math.floor(Math.random() * unlocked)];
+    // rival houses take a share of the raids once they know of you
+    const rivals = this.activeRivals();
+    if (!opts.region && !opts.units && kind === 'raid' && rivals.length && Math.random() < 0.35) {
+      const rv = rivals[Math.floor(Math.random() * rivals.length)];
+      region = { key: 'rival', name: rv.name, rival: rv.key, enemies: rivalRoster(rv.key, this.rivalLevel(rv.key)) };
+      if (!S.rivals[rv.key].met) { S.rivals[rv.key].met = true; this.log(`${rv.name} declared war. "${rv.motto}"`); }
+      S.rivals[rv.key].raids++;
+    }
     const days = (Date.now() - S.created) / 86400000;
     const budget = opts.budget ?? (3 + S.tier * 2.5 + S.stats.raidsSurvived * 0.7 + Math.min(days, 60) * 0.25 + S.renown * 2);
     const level = 1 + Math.floor(S.stats.raidsSurvived / 4) + (S.tier - 1) + S.renown;
@@ -856,8 +891,8 @@ export class Realm {
     if (opts.units) for (const t of opts.units) queue.push({ type: t, si: queue.length, elite: opts.elite });
     else {
       let b = budget, i = 0;
-      const enemies = region.enemies.filter(k => !ENEMIES[k].boss && !(ENEMIES[k].caster && S.tier < 3) && (ENEMIES[k].minLevel || 0) <= level + 1);
-      if (S.tier >= 2 && Math.random() < 0.35) queue.push({ type: 'thief', si: 0 });
+      const enemies = region.rival ? rivalRoster(region.rival, this.rivalLevel(region.rival)) : region.enemies.filter(k => !ENEMIES[k].boss && !(ENEMIES[k].caster && S.tier < 3) && (ENEMIES[k].minLevel || 0) <= level + 1);
+      if (S.tier >= 2 && !region.rival && Math.random() < 0.35) queue.push({ type: 'thief', si: 0 });
       while (b > 0 && i < 40) {
         const k = enemies[Math.floor(Math.random() * enemies.length)];
         queue.push({ type: k, si: i++ });
@@ -1056,13 +1091,21 @@ export class Realm {
   // ------------------------------------------------------------ expeditions
   startExpedition(n, ids, bounty) {
     const S = this.state;
-    const info = islandInfo(n);
-    const seed = bounty ? hashStr('bounty' + todayStr()) : hashStr('isle' + n + 'x' + S.seed);
-    const region = bounty ? REGIONS[seed % REGIONS.length] : info.region;
-    const level = bounty ? Math.max(2, info.level + 1) : info.level;
+    const rivalKey = typeof bounty === 'string' && bounty.startsWith('rival:') ? bounty.slice(6) : null;
+    if (rivalKey) bounty = false;
+    let info = islandInfo(n);
+    const seed = rivalKey ? hashStr('rival' + rivalKey + S.seed) : bounty ? hashStr('bounty' + todayStr()) : hashStr('isle' + n + 'x' + S.seed);
+    let region = bounty ? REGIONS[seed % REGIONS.length] : info.region;
+    let level = bounty ? Math.max(2, info.level + 1) : info.level;
+    if (rivalKey) {
+      const rv = rivalDef(rivalKey);
+      level = this.rivalLevel(rivalKey);
+      region = { key: 'rival', name: rv.name, colors: rv.colors, rival: rivalKey, enemies: rivalRoster(rivalKey, level), camp: `${rivalKey}Tower`, camp2: `${rivalKey}Barracks`, camp3: `${rivalKey}House`, boss: `${rivalKey}_king` };
+      info = { ...info, boss: true, name: `the ${rv.name.split(' ')[1]} Capital`, rival: rivalKey };
+    }
     const map = generateIsland({ w: 40, h: 30, seed, plateaus: 5, highs: 2, colors: region.colors, landFrac: 0.55 });
     const sc = new Scene(this, 'expedition', map, seed);
-    sc.islandName = bounty ? 'the Bounty Isle' : info.name; sc.info = info; sc.region = region; sc.level = level; sc.bounty = !!bounty; sc.n = n;
+    sc.islandName = bounty ? 'the Bounty Isle' : info.name; sc.info = info; sc.region = region; sc.level = level; sc.bounty = !!bounty; sc.n = n; sc.rival = rivalKey;
     sc.expLoot = 0;
     const r = rng(seed + 5);
     // landing on the west shore, boat floating clear of the coast
@@ -1074,7 +1117,7 @@ export class Realm {
     if (spot) sc.boats.push({ key: 'boat', x: center(spot.wx), y: center(spot.wy) + 46, t: 0, flip: spot.dx < 0 });
     const re = reachable(map, land[0], land[1]);
     // camps
-    const nCamps = Math.min(5, 2 + Math.floor(level / 4));
+    const nCamps = rivalKey ? 4 : Math.min(5, 2 + Math.floor(level / 4));
     const camps = [];
     const campSpots = reach0.filter(([x, y]) => re[map.i(x, y)] && dist(x, y, land[0], land[1]) > 9);
     for (let k = 0; k < 400 && camps.length < nCamps; k++) {
@@ -1084,20 +1127,32 @@ export class Realm {
       camps.push([x, y]);
     }
     camps.sort((a, b) => dist(a[0], a[1], land[0], land[1]) - dist(b[0], b[1], land[0], land[1]));
-    camps.forEach(([x, y], ci) => {
+    camps.forEach(([x, y], ci) => { // x,y may move to where the capital fits
       const isBossCamp = info.boss && !bounty && ci === camps.length - 1;
-      const stype = (ci % 2 && region.camp2) ? region.camp2 : region.camp;
+      let stype = (ci % 2 && region.camp2) ? region.camp2 : region.camp;
+      if (rivalKey) stype = isBossCamp ? `${rivalKey}Castle` : [region.camp, region.camp2, region.camp3][ci % 3];
       // place the structure on free ground near the spot
       const sd = { fw: 3, fh: 1, ...((s => s && { fw: s.fw, fh: s.fh })(this.campDef(stype))) };
       let placed = false;
-      for (let rr = 0; rr < 4 && !placed; rr++) for (let dy = -rr; dy <= rr && !placed; dy++) for (let dx = -rr; dx <= rr && !placed; dx++) {
+      for (let rr = 0; rr < 7 && !placed; rr++) for (let dy = -rr; dy <= rr && !placed; dy++) for (let dx = -rr; dx <= rr && !placed; dx++) {
         const cx = x + dx, cy = y + dy; let ok = true;
         for (let yy = cy; yy < cy + sd.fh; yy++) for (let xx = cx; xx < cx + sd.fw; xx++) if (!map.walkable(xx, yy) || map.stairAt(xx, yy) || map.kindAt(xx, yy) !== map.kindAt(x, y)) ok = false;
         if (ok && map.walkable(cx, cy + sd.fh)) { sc.addStruct(stype, cx, cy, ci, level); placed = true; }
       }
-      const budget = 1.6 + level * 0.85;
+      if (!placed && rivalKey && isBossCamp) { // the capital castle must exist: search the whole island for room
+        let best = null, bd = 1e9;
+        for (const [qx, qy] of campSpots) {
+          let ok = true;
+          for (let yy = qy; yy < qy + sd.fh && ok; yy++) for (let xx = qx; xx < qx + sd.fw && ok; xx++) if (!map.walkable(xx, yy) || map.stairAt(xx, yy) || map.level(xx, yy) !== map.level(qx, qy)) ok = false;
+          if (ok && map.walkable(qx, qy + sd.fh)) { const d = -dist(qx, qy, land[0], land[1]); if (d < bd) { bd = d; best = [qx, qy]; } }
+        }
+        if (best) { sc.addStruct(stype, best[0], best[1], ci, level); x = best[0] + 2; y = best[1] + 1; }
+        else sc.addStruct(`${rivalKey}Tower`, x, y, ci, level);
+      }
+      const budget = rivalKey ? 2 + level * 0.45 : 1.6 + level * 0.85;
       let b = budget, i = 0;
       const pool = region.enemies.filter(k => !ENEMIES[k].boss && (ENEMIES[k].minLevel || 0) <= level);
+      if (rivalKey && isBossCamp) b += 3;
       while (b > 0 && i < 14) {
         const k = pool[Math.floor(r() * pool.length)];
         const c = sc.nearestWalkable(x + Math.floor(r() * 5) - 2, y + 1 + Math.floor(r() * 3), 5);
@@ -1124,7 +1179,7 @@ export class Realm {
     this.ui.onSceneChange();
     this.save();
   }
-  campDef(t) { return { goblinHut: { fw: 2, fh: 1 }, gnomeHut: { fw: 2, fh: 1 }, gnomeTower: { fw: 2, fh: 1 }, cave: { fw: 2, fh: 1 }, fishHut: { fw: 2, fh: 1 }, pirateTower: { fw: 2, fh: 1 }, skullSpike: { fw: 1, fh: 1 }, deadTree: { fw: 2, fh: 1 } }[t]; }
+  campDef(t) { return CAMP_STRUCTS[t]; }
   expStatus() {
     const sc = this.exp; if (!sc) return null;
     const foes = sc.units.filter(u => u.team === 1 && u.alive).length;
@@ -1146,12 +1201,17 @@ export class Realm {
       const loot = { gold: Math.round((50 + lv * 28 + sc.expLoot) * mult), wood: Math.round((30 + lv * 18) * mult), meat: Math.round((25 + lv * 14) * mult) };
       if (sc.info.boss && !sc.bounty) { loot.gold += 150 + lv * 20; }
       this.addAll(loot); summary.loot = loot;
-      if (sc.info.boss && !sc.bounty && !S.relics[sc.region.bossRelic]) { S.relics[sc.region.bossRelic] = true; summary.relic = sc.region.bossRelic; }
-      if (sc.bounty) {
+      if (sc.info.boss && !sc.bounty && sc.region.bossRelic && !S.relics[sc.region.bossRelic]) { S.relics[sc.region.bossRelic] = true; summary.relic = sc.region.bossRelic; }
+      if (sc.rival) {
+        const st = S.rivals[sc.rival], rv = rivalDef(sc.rival);
+        st.subjugated = true; st.defeats++; st.tributeAt = Date.now();
+        summary.rival = sc.rival;
+        this.log(`${rv.name} bent the knee. ${rv.ruler} will pay tribute.`);
+      } else if (sc.bounty) {
         S.daily.bounty = todayStr();
         const unowned = Object.keys(RELICS).filter(k => !S.relics[k] && !['trolltusk', 'minotaurhorn', 'bearpelt', 'pandabelt', 'turtleshell', 'rubberduck'].includes(k));
         if (unowned.length && Math.random() < 0.35) { const k = unowned[Math.floor(Math.random() * unowned.length)]; S.relics[k] = true; summary.relic = k; }
-      } else if (sc.n === S.frontier) { S.frontier++; S.cleared = Math.max(S.cleared, sc.n); }
+      } else if (!sc.rival && sc.n === S.frontier) { S.frontier++; S.cleared = Math.max(S.cleared, sc.n); }
       for (const u of survivors) this.grantXp(sc, u, 15 + lv * 2);
       this.log(`Cleared ${sc.islandName}${summary.relic ? ' and claimed the ' + RELICS[summary.relic].name : ''}.`);
     } else if (result === 'lost') {

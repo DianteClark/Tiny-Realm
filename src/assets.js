@@ -97,6 +97,21 @@ WF('Catapult', 'idle', 256, 200, 'IdleWithStone'); WF('Catapult', 'run', 256, 20
 WF('Catapult', 'attack', 256, 200, 'FireStone'); WF('Catapult', 'load', 256, 200, 'LoadStone');
 S('stone', W + 'Catapult/Stone Projectile/Stone_Spinning.png', 128, 128, 64);
 
+// Rival kingdoms: units and buildings in the other four team colours
+for (const [key, C] of [['red', 'Red'], ['yellow', 'Yellow'], ['purple', 'Purple'], ['black', 'Black']]) {
+  const UU = F + `Units/${C} Units/`;
+  P(`${key}_warrior_idle`, UU + 'Warrior/Warrior_Idle.png', 192, 136); P(`${key}_warrior_run`, UU + 'Warrior/Warrior_Run.png', 192, 136); P(`${key}_warrior_attack`, UU + 'Warrior/Warrior_Attack1.png', 192, 136);
+  P(`${key}_archer_idle`, UU + 'Archer/Archer_Idle.png', 192, 135); P(`${key}_archer_run`, UU + 'Archer/Archer_Run.png', 192, 135); P(`${key}_archer_attack`, UU + 'Archer/Archer_Shoot.png', 192, 135);
+  P(`${key}_lancer_idle`, UU + 'Lancer/Lancer_Idle.png', 320, 197); P(`${key}_lancer_run`, UU + 'Lancer/Lancer_Run.png', 320, 197); P(`${key}_lancer_attack`, UU + 'Lancer/Lancer_Right_Attack.png', 320, 197);
+  P(`${key}_monk_idle`, UU + 'Monk/Idle.png', 192, 133); P(`${key}_monk_run`, UU + 'Monk/Run.png', 192, 133); P(`${key}_monk_attack`, UU + 'Monk/Heal.png', 192, 133);
+  const WC = (unit, anim, fw, foot, file) => P(`${key}_${unit.toLowerCase()}_${anim}`, W + `${unit}/${unit} Animations/${unit}_${C}/${unit}_${file}_${C}.png`, fw, foot);
+  WC('King', 'idle', 192, 136, 'Idle'); WC('King', 'run', 192, 136, 'Run'); WC('King', 'attack', 192, 136, 'Attack');
+  WC('Berserker', 'idle', 192, 137, 'Idle'); WC('Berserker', 'run', 192, 137, 'Run'); WC('Berserker', 'attack', 192, 137, C === 'Red' ? 'Attac' : 'Attack'); // the pack ships 'Attac' for red
+  WC('Swordsman', 'idle', 320, 205, 'Idle'); WC('Swordsman', 'run', 320, 205, 'Run'); WC('Swordsman', 'attack', 320, 205, 'Attack');
+  WC('Horseman', 'idle', 320, 221, 'Idle'); WC('Horseman', 'run', 320, 221, 'Run'); WC('Horseman', 'attack', 320, 221, 'Attack');
+  for (const b of ['Castle', 'Tower', 'Barracks', 'House1']) S(`b${key}_${b}`, F + `Buildings/${C} Buildings/${b}.png`, 0, 0, 0);
+}
+
 // Avatars
 for (let i = 1; i <= 25; i++) S('av_h' + i, F + `UI Elements/UI Elements/Human Avatars/Avatars_${String(i).padStart(2, '0')}.png`, 256, 256, 0);
 for (const u of ['King', 'Berserker', 'Horseman']) for (let i = 1; i <= 5; i++) S(`av_${u.toLowerCase()}${i}`, W + `${u}/${u} Avatar/${u}_Avatar_0${i}.png`, 256, 256, 0);
