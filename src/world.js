@@ -1,6 +1,6 @@
 // Scenes hold a map plus every live object on it, run the AI and draw it all.
 import { SHEETS, drawSprite, animDuration } from './assets.js';
-import { T, findPath, renderTerrain, foamCells, rng, K_WATER } from './terrain.js';
+import { T, findPath, TerrainChunks, foamCells, rng, K_WATER } from './terrain.js';
 import { UNITS, ENEMIES, BUILDINGS, CAMP_STRUCTS, TRAITS, levelEffects, ABILITIES } from './data.js';
 
 const WATER = '#47aba9';
@@ -220,7 +220,7 @@ export class Struct {
 export class Scene {
   constructor(game, kind, map, seed) {
     this.game = game; this.kind = kind; this.map = map;
-    this.terrain = renderTerrain(map);
+    this.terrain = new TerrainChunks(map); // chunked canvases, rendered lazily (see terrain.js)
     this.foam = foamCells(map, rng(seed + 99));
     this.units = []; this.buildings = []; this.structs = [];
     this.trees = []; this.golds = []; this.sheep = [];
@@ -775,10 +775,12 @@ export class Scene {
     const t = this.time;
     for (const d of this.map.decor) if (d.type === 'wrock' && vis(center(d.x), center(d.y))) drawSprite(ctx, 'wrock' + d.v, center(d.x), center(d.y) + 8, t + d.t);
     for (const f of this.foam) if (vis(center(f.x), center(f.y))) drawSprite(ctx, 'foam', center(f.x), center(f.y), t + f.t);
+    // annexed land sliding in (src/annex.js sets this.slam = { cv, foam, x, y })
+    const sl = this.slam;
+    if (sl) for (const f of sl.foam) drawSprite(ctx, 'foam', sl.x + center(f.x), sl.y + center(f.y), t + f.t);
     // terrain
-    const sx = Math.max(0, x0), sy = Math.max(0, y0);
-    const sw = Math.min(this.terrain.width, x1) - sx, sh = Math.min(this.terrain.height, y1) - sy;
-    if (sw > 0 && sh > 0) ctx.drawImage(this.terrain, sx, sy, sw, sh, sx, sy, sw, sh);
+    this.terrain.draw(ctx, cam, x0, y0, x1, y1);
+    if (sl) ctx.drawImage(sl.cv, Math.round(sl.x), Math.round(sl.y));
 
     // y-sorted objects
     const list = [];

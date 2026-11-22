@@ -1,5 +1,6 @@
 // The Realm: persistent state, economy, pawn work, raids, expeditions, quests, saving.
 import { T, generateIsland, rng, hashStr, reachable, boatSpots, K_LOW, K_WATER } from './terrain.js';
+import * as Annex from './annex.js';
 import { Scene, Unit, Building, cellOf } from './world.js';
 import {
   UNITS, ENEMIES, BUILDINGS, TIERS, TRAITS, COMMON_TRAITS, XP_LEVELS, MAX_LEVEL, RELICS, REGIONS,
@@ -13,9 +14,13 @@ import { audio } from './audio.js';
 import { Environment } from './env.js';
 
 const SAVE_KEY = 'tinyrealm.save.v1';
-const HOME_W = 46, HOME_H = 34;
-const MAP_VERSION = 2; // bump when island generation changes so saves get migrated
-const CASTLE = { x: 20, y: 14, w: 5, h: 2 };
+// The home map is a big sea; the starting island (BASE_W x BASE_H) sits in the middle at BASE_X,BASE_Y
+// and annexed land (src/annex.js) grows out from it.
+const HOME_W = 96, HOME_H = 72;
+const BASE_W = 46, BASE_H = 34, BASE_X = (HOME_W - BASE_W) >> 1, BASE_Y = (HOME_H - BASE_H) >> 1;
+const MAP_VERSION = 3; // bump when island generation changes so saves get migrated (3: island moved into the 96x72 sea)
+const CASTLE = { x: 20 + BASE_X, y: 14 + BASE_Y, w: 5, h: 2 };
+const HOME_CFG = { w: HOME_W, h: HOME_H, baseW: BASE_W, baseH: BASE_H, ox: BASE_X, oy: BASE_Y, castle: CASTLE };
 const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
 const center = c => c * T + T / 2;
 const todayStr = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -88,7 +93,7 @@ export class Realm {
     const S = this.state, h = this.home;
     if (!h) return;
     S.buildings = h.buildings.map(b => ({ type: b.type, cx: b.cx, cy: b.cy, hp: Math.round(b.hp), maxHp: b.maxHp, buildEnd: b.buildEnd, buildTotal: b.buildTotal, variant: b.variant, queue: b.queue, level: b.level, upEnd: b.upEnd, upTotal: b.upTotal }));
-    S.trees = h.trees.map(t => ({ wood: t.wood, regrow: t.regrow }));
+    S.trees = h.trees.map(t => ({ cx: t.cx, cy: t.cy, wood: t.wood, regrow: t.regrow })); // cx,cy: matched by position on load (annex.js)
     S.golds = h.golds.map(g => ({ cx: g.cx, cy: g.cy, amount: Math.round(g.amount) }));
     S.sheep = h.sheep.filter(s => !s.caught).length;
     for (const u of h.units) if (u.rec && u.alive) { u.rec.hp = Math.round(u.hp); u.rec.post = { x: Math.round(u.home.x), y: Math.round(u.home.y) }; }
@@ -139,9 +144,19 @@ export class Realm {
   // ------------------------------------------------------------ home island
   buildHome() {
     const S = this.state;
-    const migrate = S.buildings && S.mapVer !== MAP_VERSION;
-    if (migrate) { S.trees = null; S.golds = null; S.goldRespawns = []; for (const rec of S.soldiers) rec.post = null; }
-    const map = generateIsland({ w: HOME_W, h: HOME_H, seed: S.seed, plateaus: 6, highs: 2, reserve: { x: CASTLE.x - 1, y: CASTLE.y - 1, w: CASTLE.w + 2, h: CASTLE.h + 4 }, colors: [1, 3, 2], landFrac: 0.6 });
+    const ver = S.mapVer || 0;
+    const migrate = S.buildings && ver !== MAP_VERSION;
+    if (!Array.isArray(S.annexed)) S.annexed = [];
+    if (migrate && ver < 2) { S.trees = null; S.golds = null; S.goldRespawns = []; for (const rec of S.soldiers) rec.post = null; }
+    if (migrate && ver < 3) {
+      // v3: the 46x34 island now sits at BASE_X,BASE_Y in a bigger sea. Same island, same layout: shift every stored coordinate.
+      for (const b of S.buildings) { b.cx += BASE_X; b.cy += BASE_Y; }
+      for (const g of S.golds || []) { g.cx += BASE_X; g.cy += BASE_Y; }
+      for (const g of S.goldRespawns || []) { g.cx += BASE_X; g.cy += BASE_Y; }
+      for (const rec of S.soldiers) if (rec.post) { rec.post.x += BASE_X * T; rec.post.y += BASE_Y * T; }
+      S.trees = null; S.annexed = [];
+    }
+    const { map, parts } = Annex.buildHomeMap(HOME_CFG, S.seed, S.annexed);
     const h = new Scene(this, 'home', map, S.seed);
     this.home = h;
     const r = rng(S.seed + 1234);
@@ -168,67 +183,43 @@ export class Realm {
       if (!ok) { stranded.push(b); h.removeBuilding(b); }
     }
     // resources (deterministic layout from the seed, then saved state applied)
-    const free = (x, y, pad = 0) => {
-      for (let oy = -pad; oy <= pad; oy++) for (let ox = -pad; ox <= pad; ox++) {
-        const k = map.kindAt(x + ox, y + oy);
-        if (k === K_WATER || map.block[map.i(x + ox, y + oy)] || map.stairAt(x + ox, y + oy)) return false;
-      }
-      for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) if (map.stairAt(x + ox, y + oy)) return false;
-      return map.ground(x, y) && !map.isCliff(x, y + 1);
-    };
+    const free = (x, y, pad = 0) => Annex.freeCell(map, x, y, pad, true);
     const nearCastle = (x, y, d) => Math.abs(x - (CASTLE.x + 2)) < d + 2 && Math.abs(y - (CASTLE.y + 1)) < d;
-    const treeSpots = [];
-    const forests = [];
-    for (let i = 0; i < 4; i++) {
-      for (let k = 0; k < 50; k++) {
-        const fx = r.int(4, HOME_W - 5), fy = r.int(4, HOME_H - 5);
-        if (map.isLand(fx, fy) && !nearCastle(fx, fy, 6) && forests.every(f => dist(f[0], f[1], fx, fy) > 8)) { forests.push([fx, fy]); break; }
-      }
-    }
-    for (const [fx, fy] of forests) {
-      const n = r.int(9, 14);
-      for (let k = 0; k < n * 4 && treeSpots.filter(t => t.f === fx).length < n; k++) {
-        const x = fx + r.int(-3, 3), y = fy + r.int(-3, 3);
-        if (free(x, y) && !nearCastle(x, y, 5) && !treeSpots.some(t => t.x === x && t.y === y)) { treeSpots.push({ x, y, f: fx }); map.block[map.i(x, y)]++; }
-      }
-    }
-    // drop any tree that seals off walkable ground (plateaus, nooks) from the castle
-    const door0 = h.nearestWalkable(CASTLE.x + 2, CASTLE.y + 2);
-    for (let pass = 0; pass < 4; pass++) {
-      const re = reachable(map, door0[0], door0[1]);
-      const sealed = (x, y) => map.walkable(x, y) && !re[map.i(x, y)];
-      const keep = [];
-      let removed = 0;
-      for (const t of treeSpots) {
-        let bad = false;
-        for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) if (sealed(t.x + ox, t.y + oy)) bad = true;
-        if (bad) { map.block[map.i(t.x, t.y)]--; removed++; } else keep.push(t);
-      }
-      treeSpots.length = 0; treeSpots.push(...keep);
-      if (!removed) break;
-    }
-    for (const t of treeSpots) map.block[map.i(t.x, t.y)]--;
-    // validate: every tree must leave the castle reachable (avoid sealing paths)
-    treeSpots.forEach((t, i) => {
-      const saved = S.trees && S.trees[i];
+    const inBase = () => [r.int(BASE_X + 4, BASE_X + BASE_W - 5), r.int(BASE_Y + 4, BASE_Y + BASE_H - 5)];
+    this.annexParts = parts;
+    const spots = this.homeTreeSpots(map, parts, r);
+    const savedTree = new Map();
+    for (const t of S.trees || []) if (t && t.cx != null) savedTree.set(t.cx + ',' + t.cy, t);
+    const stones = new Set((S.golds || []).map(g => g.cx + ',' + g.cy)); // a saved stone keeps its cell
+    for (const t of spots) {
+      if (stones.has(t.x + ',' + t.y)) continue;
+      const saved = savedTree.get(t.x + ',' + t.y);
       h.addTree(t.x, t.y, { v: 1 + ((t.x * 7 + t.y * 13) % 4), wood: saved ? saved.wood : 25, regrow: saved ? saved.regrow : 0 });
-    });
-    if (S.golds) for (const g of S.golds) h.addGold(g.cx, g.cy, { amount: g.amount });
+    }
+    if (S.golds) { for (const g of S.golds) if (map.ground(g.cx, g.cy)) h.addGold(g.cx, g.cy, { amount: g.amount }); }
     else {
       let placedG = 0;
+      const gs = [], put = (x, y) => { gs.push({ x, y }); map.block[map.i(x, y)]++; };
       for (let k = 0; k < 300 && placedG < 7; k++) {
-        const x = r.int(4, HOME_W - 5), y = r.int(4, HOME_H - 5);
-        if (free(x, y, 1) && !nearCastle(x, y, 5)) { h.addGold(x, y, { amount: 120 }); placedG++; if (free(x + 1, y, 0) && placedG < 7) { h.addGold(x + 1, y + (r.chance(0.5) ? 0 : 1) * 0, { amount: 120 }); placedG++; } }
+        const [x, y] = inBase();
+        if (free(x, y, 1) && !nearCastle(x, y, 5)) { put(x, y); placedG++; if (free(x + 1, y, 0) && placedG < 7) { put(x + 1, y); placedG++; } }
       }
+      for (const p of parts) for (const [x, y] of Annex.annexGoldSpots(map, p)) put(x, y);
+      for (const g of gs) map.block[map.i(g.x, g.y)]--;
+      Annex.unsealTrees(map, h.nearestWalkable(CASTLE.x + 2, CASTLE.y + 2), gs); // stones must not wall off a nook either
+      for (const g of gs) h.addGold(g.x, g.y, { amount: 120 });
     }
+    Annex.unsealScene(h, h.nearestWalkable(CASTLE.x + 2, CASTLE.y + 2), !S.golds); // trees (and fresh gold) get the same final pass as a live merge
     this.goldZones = h.golds.map(g => [g.cx, g.cy]);
-    // pasture for sheep
+    // pasture for sheep (plus one per annexed chunk)
     this.pasture = null;
     for (let k = 0; k < 200 && !this.pasture; k++) {
-      const x = r.int(5, HOME_W - 6), y = r.int(5, HOME_H - 6);
+      const x = r.int(BASE_X + 5, BASE_X + BASE_W - 6), y = r.int(BASE_Y + 5, BASE_Y + BASE_H - 6);
       if (map.kindAt(x, y) === K_LOW && free(x, y, 1) && !nearCastle(x, y, 4) && dist(x, y, CASTLE.x, CASTLE.y) < 14) this.pasture = [x, y];
     }
     if (!this.pasture) this.pasture = [CASTLE.x + 2, CASTLE.y + 5];
+    this.pastures = [this.pasture];
+    for (const p of parts) { const pp = Annex.annexPasture(map, p); if (pp) this.pastures.push(pp); }
     for (let i = 0; i < S.sheep; i++) this.spawnSheep();
     // reachability from the castle door (for raids and placement)
     this.door = h.nearestWalkable(CASTLE.x + 2, CASTLE.y + 2);
@@ -246,7 +237,7 @@ export class Realm {
       } else this.addAll(BUILDINGS[b.type].cost);
       this.reach = reachable(map, this.door[0], this.door[1]);
     }
-    if (migrate) this.migrated = true;
+    if (migrate && ver < 2) this.migrated = true; // (v3 only shifted coordinates: nothing moved for the player)
     S.mapVer = MAP_VERSION;
     this.shore = boatSpots(map, this.reach);
     // people
@@ -254,7 +245,7 @@ export class Realm {
     for (const rec of S.soldiers) if (rec.status === 'home') this.spawnSoldier(rec, true);
   }
   spawnSheep(x, y) {
-    const [px, py] = this.pasture;
+    const [px, py] = (this.pastures && this.pastures[Math.floor(Math.random() * this.pastures.length)]) || this.pasture; // annexed land adds pastures
     for (let k = 0; k < 20; k++) {
       const cx = (x != null ? cellOf(x) : px) + Math.floor(Math.random() * 5) - 2, cy = (y != null ? cellOf(y) : py) + Math.floor(Math.random() * 4) - 2;
       if (this.home.map.walkable(cx, cy) && this.home.map.kindAt(cx, cy) === K_LOW) {
@@ -478,7 +469,7 @@ export class Realm {
     const m = this.home.map, h = this.home;
     if (type === 'gate') { const w = h.wallAt(x, y); if (w && w.type === 'wall') return true; }
     if (!m.ground(x, y) || m.stairAt(x, y) || m.block[m.i(x, y)]) return false;
-    if (m.isCliff(x, y + 1) && false) return false;
+    for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) if (!m.isLand(x + ox, y + oy)) return false; // coasts stay free for new land
     if (h.units.some(u => u.alive && !u.hidden && cellOf(u.x) === x && cellOf(u.y) === y && u.kind !== 'pawn' && u.team === 1)) return false;
     return true;
   }
@@ -516,9 +507,12 @@ export class Realm {
   countOf(type) { return this.home.buildings.filter(b => b.type === type).length; }
   canPlace(type, cx, cy) {
     const d = BUILDINGS[type], m = this.home.map;
+    if (this.slam) return false; // land is being annexed
     let lvl = null;
     for (let y = cy; y < cy + d.fh; y++) for (let x = cx; x < cx + d.fw; x++) {
       if (!m.ground(x, y) || m.stairAt(x, y) || m.block[m.i(x, y)]) return false;
+      // keep the coast free for annexed land: no footprint cell may touch water (8-neighbourhood)
+      for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) if (!m.isLand(x + ox, y + oy)) return false;
       if (m.isCliff(x, y + 1) && y === cy + d.fh - 1) return false;
       const l = m.level(x, y); if (lvl === null) lvl = l; else if (l !== lvl) return false;
     }
@@ -802,6 +796,7 @@ export class Realm {
     if (this.exp) { const n = this.speed === 2 ? 2 : 1; for (let k = 0; k < n; k++) this.exp.update(dt); } // battle speed only speeds up the voyage
     this.home.update(dt);
     this.env.update(dt);
+    this.updateAnnex(dt); // annexed land slam (src/annex.js)
     this.tickTimersT = (this.tickTimersT || 0) - dt;
     if (this.tickTimersT <= 0) { this.tickTimersT = 0.5; this.tickTimers(false); this.checkDaily(); this.tickTribute(); }
     // sheep breed
@@ -1216,6 +1211,11 @@ export class Realm {
         if (unowned.length && Math.random() < 0.35) { const k = unowned[Math.floor(Math.random() * unowned.length)]; S.relics[k] = true; summary.relic = k; }
       } else if (!sc.rival && sc.n === S.frontier) { S.frontier++; S.cleared = Math.max(S.cleared, sc.n); }
       for (const u of survivors) this.grantXp(sc, u, 15 + lv * 2);
+      // conquered land joins the realm: rival capitals and boss islands slam into your coast
+      if ((sc.rival || (sc.info.boss && !sc.bounty)) && this.canAnnex()) {
+        const rec = this.annex({ region: sc.rival ? rivalDef(sc.rival).name : sc.region.name, size: sc.rival ? 3 : 2 });
+        if (rec) summary.annexed = true;
+      }
       this.log(`Cleared ${sc.islandName}${summary.relic ? ' and claimed the ' + RELICS[summary.relic].name : ''}.`);
     } else if (result === 'lost') {
       this.log(`The squad sent to ${sc.islandName} was lost.`);
@@ -1229,5 +1229,43 @@ export class Realm {
     this.ui.onSceneChange();
     this.ui.expeditionResult(summary);
     this.save();
+  }
+
+  // ------------------------------------------------------------ annexed land (see src/annex.js for the API)
+  homeCfg() { return HOME_CFG; }
+  // The home tree layout: base forests (from the seed) plus each annexed chunk's forests, minus spots
+  // under buildings or that would seal ground off. Depends only on terrain and buildings, so a live
+  // merge and a reload agree. r continues the seed's sequence in buildHome.
+  homeTreeSpots(map, parts, r = rng(this.state.seed + 1234)) {
+    const h = this.home, live = map.block;
+    map.block = new Uint16Array(live.length);
+    for (const b of h.buildings) for (const [x, y] of b.cells()) if (map.in(x, y)) map.block[map.i(x, y)]++;
+    const nearCastle = (x, y, d) => Math.abs(x - (CASTLE.x + 2)) < d + 2 && Math.abs(y - (CASTLE.y + 1)) < d;
+    const inBase = () => [r.int(BASE_X + 4, BASE_X + BASE_W - 5), r.int(BASE_Y + 4, BASE_Y + BASE_H - 5)];
+    const spots = Annex.forestSpots(map, r, 4, () => { const c = inBase(); return nearCastle(c[0], c[1], 6) ? null : c; }, () => r.int(9, 14), (x, y) => !nearCastle(x, y, 5));
+    for (const p of parts) spots.push(...Annex.annexTreeSpots(map, p));
+    const keep = spots.filter(t => map.block[map.i(t.x, t.y)] === 0);
+    Annex.unsealTrees(map, h.nearestWalkable(CASTLE.x + 2, CASTLE.y + 2), keep);
+    map.block = live;
+    return keep;
+  }
+  canAnnex(opts) { return Annex.canAnnex(this, opts); }
+  planAnnex(opts) { return Annex.planAnnex(this, opts); }
+  annex(opts = {}) {
+    // away on an expedition: queue it (saved) and slam it in when the player is home again
+    if (!opts.instant && this.scene !== this.home) {
+      const S = this.state; (S.annexPending = S.annexPending || []).push({ side: opts.side, size: opts.size, seed: opts.seed, region: opts.region });
+      return { pending: true };
+    }
+    return Annex.annex(this, opts);
+  }
+  debugAnnex(opts = {}) {
+    const o = { side: 'auto', seed: (Math.random() * 1e9) >>> 0, size: 1 + Math.floor(Math.random() * 3), ...opts };
+    return this.annex(o) || (opts.size ? null : this.annex({ ...o, size: undefined }));
+  }
+  updateAnnex(dt) {
+    if (this.slam) Annex.updateSlam(this, dt);
+    const P = this.state.annexPending;
+    if (!this.slam && P && P.length && this.scene === this.home && !this.exp) { const o = P.shift(); if (!this.annex(o) && !this.annex({ ...o, side: 'auto', size: undefined })) this.log('There was no room left in the sea for new land.'); }
   }
 }

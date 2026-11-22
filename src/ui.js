@@ -117,6 +117,7 @@ export class UI {
       const div = document.createElement('div');
       div.innerHTML = `<p style="text-align:left;font-size:14px;line-height:1.4">
         <b>3.0</b><br>
+        Your island lives in a much bigger sea now. Conquer a boss island or a rival capital and its land sails over and slams into your coast. Coastal tiles stay clear of buildings to make room.<br>
         Four rival houses now raid you. Conquer their capitals from the new sea chart in Voyage to make them pay tribute.<br>
         Build walls and gates. Raiders must hack their way through.<br>
         Every soldier type has a special ability, and squads can march in formations. Expeditions have a 2x speed button.<br>
@@ -785,6 +786,7 @@ export class UI {
     if (s.result === 'won') {
       div.innerHTML = `<p>${esc(s.name)} is cleared.</p><div class="cost" style="justify-content:center;font-size:18px"><span><i class="ic ic-gold"></i>+${s.loot.gold}</span><span><i class="ic ic-wood"></i>+${s.loot.wood}</span><span><i class="ic ic-meat"></i>+${s.loot.meat}</span></div>
         ${s.rival ? `<p><b>${rivalDef(s.rival).name}</b> bends the knee. They will pay tribute every hour and never raid you again.</p>` : ''}
+        ${s.annexed ? '<p>The conquered land will join your island when you return.</p>' : ''}
         ${s.relic ? `<p>Relic found: <b>${RELICS[s.relic].name}</b>. ${RELICS[s.relic].desc}</p>` : ''}<p class="muted">Survivors: ${s.survivors.map(esc).join(', ') || 'none'}</p>`;
       this.choice('Victory', div, [{ label: 'Home' }]);
     } else if (s.result === 'lost') {
