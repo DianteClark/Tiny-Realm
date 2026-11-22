@@ -9,6 +9,7 @@ import {
 import { EventDirector } from './events.js';
 import { SHEETS } from './assets.js';
 import { audio } from './audio.js';
+import { Environment } from './env.js';
 
 const SAVE_KEY = 'tinyrealm.save.v1';
 const HOME_W = 46, HOME_H = 34;
@@ -44,6 +45,7 @@ export class Realm {
     this.home = null; this.exp = null; this.scene = null;
     this.raid = null; this.saveT = 0; this.questT = 0; this.regenT = 0;
     this.events = new EventDirector(this);
+    this.env = new Environment(this);
   }
 
   // ------------------------------------------------------------ persistence
@@ -380,7 +382,7 @@ export class Realm {
         if (u.workT <= 0) {
           u.working = false;
           const take = job === 'wood' ? Math.min(5, u.node.wood) : Math.min(5, u.node.amount);
-          let n = take * (1 + gb.gather + (job === 'gold' ? gb.gold : gb.wood));
+          let n = take * (1 + gb.gather + (job === 'gold' ? gb.gold : gb.wood) + this.env.gather(job));
           if (job === 'gold' && scene.goldRush > 0) n *= 2;
           if (job === 'wood') { u.node.wood -= take; if (u.node.wood <= 0) { u.node.regrow = Date.now() + 180000; this.releaseNode(u); } }
           else {
@@ -414,7 +416,7 @@ export class Realm {
           u.working = false; s.caught = true; scene.fxAt('dust1', s.x, s.y); this.sfx('baa', s, scene);
           scene.sheep = scene.sheep.filter(o => o !== s);
           this.releaseNode(u);
-          u.carry = 'Meat'; u.carryN = Math.round(8 * (1 + gb.gather)); u.task = null;
+          u.carry = 'Meat'; u.carryN = Math.round(8 * (1 + gb.gather + this.env.gather('meat'))); u.task = null;
         }
       }
       return;
@@ -771,11 +773,12 @@ export class Realm {
     const S = this.state;
     if (this.exp) { const n = this.speed === 2 ? 2 : 1; for (let k = 0; k < n; k++) this.exp.update(dt); } // battle speed only speeds up the voyage
     this.home.update(dt);
+    this.env.update(dt);
     this.tickTimersT = (this.tickTimersT || 0) - dt;
     if (this.tickTimersT <= 0) { this.tickTimersT = 0.5; this.tickTimers(false); this.checkDaily(); }
     // sheep breed
     this.sheepT = (this.sheepT || 0) + dt;
-    if (this.sheepT > 35) { this.sheepT = 0; if (this.home.sheep.length < this.maxSheep()) this.spawnSheep(); }
+    if (this.env.breed() > 0 && this.sheepT > 35 / this.env.breed()) { this.sheepT = 0; if (this.home.sheep.length < this.maxSheep()) this.spawnSheep(); }
     // soldiers mend at home when no fighting
     this.regenT += dt;
     if (this.regenT > 1) {
@@ -997,7 +1000,7 @@ export class Realm {
   }
   grantXp(scene, u, xp) {
     const rec = u.rec; if (!rec || rec.level >= MAX_LEVEL) return;
-    rec.xp += xp * (u.xpMul || 1);
+    rec.xp += xp * ((u.xpMul || 1) + this.env.xpMul());
     let up = false;
     while (rec.level < MAX_LEVEL && rec.xp >= XP_LEVELS[rec.level + 1]) {
       rec.level++; up = true;

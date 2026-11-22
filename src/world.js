@@ -109,6 +109,7 @@ export class Unit {
   effRange(t) {
     let r = this.range;
     if (this.def.proj && this.team === 0 && !(t instanceof Building) && t.y !== undefined) { const up = this.scene.map.level(cellOf(this.x), cellOf(this.y)) - this.scene.map.level(cellOf(t.x), cellOf(t.y)); if (up > 0) r += 1.5 * up * T; }
+    if (this.def.proj) r *= this.scene.game.env.rangeMul();
     return r + (t.big ? 18 : 0);
   }
   canAttack() { return this.atkT <= 0 && this.atkAnim < 0 && this.cursed <= 0; }
@@ -488,7 +489,7 @@ export class Scene {
     if (u.target && (!u.target.alive || u.target.hidden || u.distTo(u.target) > 9 * T)) u.target = null;
     if (!u.target && (u.giveUp || 0) <= 0) {
       const raiding = this.kind === 'home' && this.game.raid && this.game.raid.active;
-      const aggro = this.kind === 'home' ? (raiding ? 15 : 8) * T : 5.5 * T;
+      const aggro = (this.kind === 'home' ? (raiding ? 15 : 8) * T : 5.5 * T) * this.game.env.aggroMul();
       let best = this.nearestFoe(u, aggro);
       if (!best && u.def.siege) best = this.nearestStruct(u, u.range + T);
       if (best) u.target = best;
@@ -621,7 +622,7 @@ export class Scene {
       if (b.atkT <= 0) {
         const L = levelEffects('tower', b.level);
         const lvlBonus = this.map.level(b.cx, b.cy) * 1.5;
-        const range = (def.range + lvlBonus + L.range) * T;
+        const range = (def.range + lvlBonus + L.range) * T * this.game.env.rangeMul();
         const foes = [];
         for (const u of this.units) if (u.team === 1 && u.alive && !u.duel) { const d = dist(u.x, u.y, b.x, b.y - 20); if (d < range) foes.push([d, u]); }
         foes.sort((a, c) => a[0] - c[0]);
@@ -850,9 +851,14 @@ export class Scene {
       ctx.fillStyle = tx.color; ctx.fillText(tx.text, tx.x, tx.y - tx.t * 28);
     }
     ctx.globalAlpha = 1;
-    // clouds
+    this.game.env.drawWorld(ctx, this);
+    // clouds (more of them when the weather turns)
+    const wantClouds = 4 + (this.game.env.w.clouds || 0) + (this.game.env.w.fog ? 6 : 0);
+    while (this.clouds.length < wantClouds) this.clouds.push({ k: 'cloud' + (1 + Math.floor(Math.random() * 8)), x: -300, y: Math.random() * this.map.h * T, v: 6 + Math.random() * 8 });
+    if (this.clouds.length > wantClouds && this.clouds[this.clouds.length - 1].x < -200) this.clouds.pop();
     for (const c of this.clouds) if (vis(c.x, c.y)) drawSprite(ctx, c.k, c.x, c.y, 0, { alpha: 0.9 });
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.game.env.drawScreen(ctx, vw, vh, this, cam);
     if (this.tint > 0) { ctx.fillStyle = `rgba(70,10,40,${0.32 * this.tint})`; ctx.fillRect(0, 0, vw, vh); }
   }
   bar(ctx, x, y, w, frac, color) {

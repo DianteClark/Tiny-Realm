@@ -173,6 +173,7 @@ export class UI {
     } else if (E.pending) pills.push(['event', 'red', `${MAJOR[E.pending.kind].title} ${time(E.pending.t)}`]);
     else if (!R.exp && S.timers.raid < 120) pills.push(['raidsoon', 'red', `Raid in ${time(S.timers.raid)}`]);
     else if (!R.exp) pills.push(['raidsoon', 'black', `Next raid ${time(S.timers.raid)}`]);
+    pills.push(['env', R.env.isNight ? 'black' : 'blue', R.env.label()]);
     if (!R.exp) { const q = R.currentQuest(); pills.push(['quest', 'purple', `Goal: ${q.text} ${Math.min(R.questValue(q.type), q.n)}/${q.n}`]); }
     if (E.merchant) pills.push(['merchant', 'yellow', `Merchant ${time(E.merchant.t)}`]);
     if (E.bees) pills.push(['bees', 'yellow', `Bee swarm`]);
@@ -185,6 +186,7 @@ export class UI {
     const R = this.R;
     if (k === 'merchant') this.openPanel('merchant');
     else if (k === 'quest') this.openPanel('chronicle');
+    else if (k === 'env') { const e = R.env; this.toast(`${e.season.name}: ${e.season.desc}${e.weather !== 'clear' ? ' ' + e.w.name + ': ' + e.w.desc : ''}`); }
     else if (k === 'raid' && R.raid) { const u = R.raid.units.find(u => u.alive); if (u) this.view.centerOn(u.x, u.y); }
     else if (k === 'bees' && R.events.bees) this.view.centerOn(R.events.bees.x, R.events.bees.y);
     else if (k === 'upgrade') this.openPanel('building', R.castle);
