@@ -540,9 +540,10 @@ export class Scene {
   separate(dt) {
     const us = this.units;
     for (let i = 0; i < us.length; i++) {
-      const a = us[i]; if (!a.alive || a.hidden) continue;
+      const a = us[i]; if (!a.alive || a.hidden || a.kind === 'pawn') continue; // pawns walk through everyone
       for (let j = i + 1; j < us.length; j++) {
-        const b = us[j]; if (!b.alive || b.hidden) continue;
+        const b = us[j]; if (!b.alive || b.hidden || b.kind === 'pawn') continue;
+        if (a.moving && b.moving) continue; // walkers pass each other; only standing units spread out
         if (a.flying !== b.flying) continue;
         const dx = b.x - a.x, dy = b.y - a.y; const d2 = dx * dx + dy * dy;
         const minD = (a.big || b.big) ? 40 : 22;
