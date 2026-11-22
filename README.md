@@ -1,6 +1,6 @@
 # Tiny Realm
 
-**Play now: [dianteclark.github.io/tiny-realm](https://dianteclark.github.io/tiny-realm/)**
+**Play now: [dianteclark.github.io/Tiny-Realm](https://dianteclark.github.io/Tiny-Realm/)**
 
 A persistent kingdom builder that runs in the browser. Grow a village into a
 citadel, send squads of named soldiers on dangerous expeditions (death is
@@ -11,7 +11,7 @@ like the Troll Breakout.
 
 **On your phone (GitHub Pages):** in this repo go to Settings > Pages, set
 Source to "Deploy from a branch", pick `main` and `/ (root)`, and save. After a
-minute the game is live at `https://dianteclark.github.io/tiny-realm/`. On
+minute the game is live at `https://dianteclark.github.io/Tiny-Realm/`. On
 iPhone, use Share > Add to Home Screen for a full-screen app.
 
 **Locally:** run any static server from the repo root, for example
