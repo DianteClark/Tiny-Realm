@@ -849,6 +849,14 @@ export function mergeAnnex(m, rec, start) {
   placeStairs(m, r, 1, inChunk);
   cleanStairs(m);
   const newMask = (x, y) => isNew(x, y);
+  // the new plateaus' cliff rows may meet other cliffs: settle the coast again (adds land only)
+  let again = false;
+  for (let k = 0; k < 10; k++) {
+    const a = fixCliffRuns(m), b = tidyBox(m, all, null), c = thicken(m);
+    if (!a && !b && !c) break;
+    again = true;
+  }
+  if (again) { fillLakes(); settle(m, 2, inChunk); settle(m, 1, inChunk); cleanStairs(m); }
   ensureConnected(m, r, start, newMask);
   m.computeKinds();
   // 8. decorations: clear water rocks that are now ashore, scatter new bushes / rocks / water rocks
@@ -911,7 +919,7 @@ export function auditMap(m, start) {
   }
   if (start) {
     const re = reachable(m, start[0], start[1]);
-    for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) if (m.ground(x, y) && m.H(x, y) >= 1 && !re[m.i(x, y)] && !m.stairAt(x, y)) bad('unreachable', x, y);
+    for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) if (m.ground(x, y) && m.H(x, y) >= 1 && !re[m.i(x, y)] && !m.stairAt(x, y) && !m.block[m.i(x, y)]) bad('unreachable', x, y); // occupied cells (trees, buildings) are skipped
   }
   // jagged coast: one-tile slivers and notches (islets of up to 4 tiles are decoration)
   const small = new Set();

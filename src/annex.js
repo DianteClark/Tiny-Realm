@@ -87,7 +87,7 @@ export function forestSpots(map, r, n, pickCentre, perForest, ok) {
   }
   return spots;
 }
-// Drop trees (in place) that would seal walkable ground off from the door. Blocks stay as on entry.
+// Drop trees / stones (in place, spots [{x,y}]) that would seal walkable ground off from the door. Blocks stay as on entry.
 export function unsealTrees(map, door, spots) {
   for (const t of spots) map.block[map.i(t.x, t.y)]++;
   for (let pass = 0; pass < 4; pass++) {
@@ -105,6 +105,21 @@ export function unsealTrees(map, door, spots) {
   for (const t of spots) map.block[map.i(t.x, t.y)]--;
   return spots;
 }
+// Scene-wide: remove trees / gold stones next to ground that only they cut off from the door
+// (ground the terrain itself leaves unreachable, like decorative islets, is ignored).
+export function unsealScene(h, door) {
+  const m = h.map, blk = m.block;
+  m.block = new Uint16Array(blk.length); const open = reachable(m, door[0], door[1]); m.block = blk;
+  for (let pass = 0; pass < 6; pass++) {
+    const re = reachable(m, door[0], door[1]);
+    const sealed = (x, y) => m.in(x, y) && m.walkable(x, y) && open[m.i(x, y)] && !re[m.i(x, y)];
+    const near = o => { for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) if (sealed(o.cx + ox, o.cy + oy)) return true; return false; };
+    const bad = [...h.trees.filter(near), ...h.golds.filter(near)];
+    if (!bad.length) return;
+    for (const o of bad) { h.trees = h.trees.filter(t => t !== o); h.golds = h.golds.filter(g => g !== o); h.placeBlock([[o.cx, o.cy]], -1); }
+  }
+}
+
 // Trees, gold and a pasture for one annexed chunk. Trees and pasture ignore blocks so they come
 // out the same on every rebuild; gold (saved with the game) avoids whatever stands there now.
 export function annexTreeSpots(map, part) {
@@ -199,7 +214,9 @@ function commitAnnex(R, job) {
   const trees = annexTreeSpots(m, part).filter(t => m.block[m.i(t.x, t.y)] === 0);
   unsealTrees(m, door, trees);
   for (const t of trees) h.addTree(t.x, t.y, { v: 1 + ((t.x * 7 + t.y * 13) % 4) });
-  for (const [x, y] of annexGoldSpots(m, part)) { h.addGold(x, y, { amount: 120 }); R.goldZones.push([x, y]); }
+  const golds = annexGoldSpots(m, part).map(([x, y]) => ({ x, y }));
+  unsealTrees(m, door, golds); // gold stones must not seal ground off either
+  for (const { x, y } of golds) { h.addGold(x, y, { amount: 120 }); R.goldZones.push([x, y]); }
   const past = annexPasture(m, part);
   if (past) {
     R.pastures = R.pastures || [R.pasture];
@@ -209,6 +226,8 @@ function commitAnnex(R, job) {
       if (c) { const s = h.addSheep(center(c[0]), center(c[1]) + 10); s.hx = center(past[0]); s.hy = center(past[1]); }
     }
   }
+  unsealScene(h, door);
+  for (const u of h.units) if (u.node && !h.trees.includes(u.node) && !h.golds.includes(u.node)) { if (R.releaseNode) R.releaseNode(u); u.task = null; u.working = false; }
   R.reach = reachable(m, door[0], door[1]);
   R.shore = boatSpots(m, R.reach);
   if (R.log) R.log(`New land joined the realm (${rec.side}).`);
@@ -216,8 +235,8 @@ function commitAnnex(R, job) {
   if (job.onDone) job.onDone(rec);
 }
 
-// Defensive: after a merge nothing may stand in water or on a cliff (merges never remove old
-// land or change its height, so this should find nothing).
+// After a merge nothing may stand in water or on a cliff (merges never remove old land or change
+// its height, so that part is defensive), and nothing that floats may end up on the new land.
 function keepEverythingAshore(R) {
   const h = R.home, m = h.map;
   for (const t of [...h.trees]) if (!m.ground(t.cx, t.cy) || m.stairAt(t.cx, t.cy)) { h.trees = h.trees.filter(o => o !== t); h.placeBlock([[t.cx, t.cy]], -1); }
@@ -232,6 +251,17 @@ function keepEverythingAshore(R) {
     if (spot) { const nb = h.addBuilding(b.type, spot[0], spot[1], { hp: b.hp, maxHp: b.maxHp, buildEnd: b.buildEnd, buildTotal: b.buildTotal, variant: b.variant, queue: b.queue }); nb.level = b.level; nb.upEnd = b.upEnd; nb.upTotal = b.upTotal; }
   }
   for (const u of h.units) if (!u.flying && !m.walkable(cellOf(u.x), cellOf(u.y))) { const c = h.nearestWalkable(cellOf(u.x), cellOf(u.y)); if (c) { u.x = center(c[0]); u.y = center(c[1]) + 8; if (u.stop) u.stop(); } }
+  // boats, landing spots and the rubber duck float in open water: move them off any new land
+  const wet = (x, y) => { for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) if (m.isLand(x + ox, y + oy) || m.isCliff(x + ox, y + oy)) return false; return m.in(x, y); };
+  const shore = boatSpots(m, R.reach || reachable(m, R.door[0], R.door[1]));
+  const nearestSpot = (x, y) => shore.reduce((b, s) => (!b || dist(s.wx, s.wy, x, y) < dist(b.wx, b.wy, x, y) ? s : b), null);
+  const plans = [R.raid, R.pendingRaid, R.events && R.events.pending && R.events.pending.plan].filter(Boolean);
+  for (const P of plans) for (const sp of P.spawns || []) if (!sp.ground && !wet(sp.wx, sp.wy)) { const n = nearestSpot(sp.wx, sp.wy); if (n) Object.assign(sp, { wx: n.wx, wy: n.wy, lx: n.lx, ly: n.ly, dx: n.dx, dy: n.dy }); }
+  for (const b of h.boats) {
+    const off = b.key === 'seahorse' ? 30 : 46, wx = cellOf(b.x), wy = cellOf(b.y - off);
+    if (!wet(wx, wy)) { const n = nearestSpot(wx, wy); if (n) { b.x = center(n.wx); b.y = center(n.wy) + off; b.flip = n.wx > n.lx; } }
+  }
+  if (h.duck && !wet(cellOf(h.duck.x), cellOf(h.duck.y - 20))) { const n = nearestSpot(cellOf(h.duck.x), cellOf(h.duck.y)); if (n) { h.duck.x = center(n.wx); h.duck.y = center(n.wy) + 20; } }
   for (const s of h.sheep) if (!m.walkable(cellOf(s.x), cellOf(s.y))) { const c = h.nearestWalkable(cellOf(s.x), cellOf(s.y)); if (c) { s.x = s.tx = center(c[0]); s.y = s.ty = center(c[1]) + 10; } }
 }
 

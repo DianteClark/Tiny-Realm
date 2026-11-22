@@ -195,11 +195,15 @@ export class Realm {
     if (S.golds) { for (const g of S.golds) if (map.ground(g.cx, g.cy)) h.addGold(g.cx, g.cy, { amount: g.amount }); }
     else {
       let placedG = 0;
+      const gs = [], put = (x, y) => { gs.push({ x, y }); map.block[map.i(x, y)]++; };
       for (let k = 0; k < 300 && placedG < 7; k++) {
         const [x, y] = inBase();
-        if (free(x, y, 1) && !nearCastle(x, y, 5)) { h.addGold(x, y, { amount: 120 }); placedG++; if (free(x + 1, y, 0) && placedG < 7) { h.addGold(x + 1, y, { amount: 120 }); placedG++; } }
+        if (free(x, y, 1) && !nearCastle(x, y, 5)) { put(x, y); placedG++; if (free(x + 1, y, 0) && placedG < 7) { put(x + 1, y); placedG++; } }
       }
-      for (const p of parts) for (const [x, y] of Annex.annexGoldSpots(map, p)) h.addGold(x, y, { amount: 120 });
+      for (const p of parts) for (const [x, y] of Annex.annexGoldSpots(map, p)) put(x, y);
+      for (const g of gs) map.block[map.i(g.x, g.y)]--;
+      Annex.unsealTrees(map, h.nearestWalkable(CASTLE.x + 2, CASTLE.y + 2), gs); // stones must not wall off a nook either
+      for (const g of gs) h.addGold(g.x, g.y, { amount: 120 });
     }
     this.goldZones = h.golds.map(g => [g.cx, g.cy]);
     // pasture for sheep (plus one per annexed chunk)
