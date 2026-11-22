@@ -9,13 +9,14 @@
 //                               tiles fall inside it, added counts all new land including the seam
 //                               fill, and center is the rect centre in world pixels.
 //   realm.annex(opts?)       -> the stored record, or null if there is no room. Plays the slam
-//                               (about 2.8 s) and then merges the land. opts.instant skips the
-//                               animation. The animation is also skipped while the player is away
-//                               on an expedition. opts.onDone(rec) runs after the merge.
+//                               (about 2.8 s) and then merges the land. opts.instant merges at
+//                               once with no animation. opts.onDone(rec) runs after the merge.
 //   realm.debugAnnex(opts?)  -> annex() with a random side and seed (for testing from the console).
 //   opts: { side: 'N'|'E'|'S'|'W'|'NE'|'SE'|'SW'|'NW'|'auto', size: 1|2|3 (12x9, 16x12, 20x14),
 //           seed, region (free-form label, e.g. the conquered island's region key), plan (a preview
 //           from planAnnex(), to annex exactly that slot) }
+//   While the player is away on an expedition, annex() (without opts.instant) is queued in
+//   state.annexPending and slams in once the home island is on screen again; it returns { pending: true }.
 //   realm.slam               -> the running slam, or null. While it runs, canPlace() refuses and
 //                               annex() returns null.
 //   realm.cameraTarget       -> {x, y, z} world point/zoom that main.js glides the camera to (or null).
@@ -24,7 +25,13 @@
 //   state.annexed = [{ id, seed, side, size, region, x, y, w, h, at }] in merge order. The home map
 //   is rebuilt as: starting island (from state.seed) embedded in the middle of the sea, then
 //   mergeAnnex() for each record in order. That rebuild is deterministic, so a reload matches the
-//   live merge. state.trees entries carry cx,cy, so tree state is matched by position.
+//   live merge. state.trees entries carry cx,cy, so tree state is matched by position, and the tree
+//   layout (realm.homeTreeSpots) depends only on terrain + buildings, so live and reload agree.
+//   state.annexPending = [opts] waiting for the player to come home (see above).
+//
+// Testing: auditMap(map, start) in terrain.js lists broken tilemap rules (empty = all good), e.g.
+//   import('/src/terrain.js').then(T => T.auditMap(realm.home.map, [47, 34]))
+//   tools/terrain-preview.html?seed=5&annex=10 renders a home sea with 10 annexes.
 //
 // Integration: call realm.annex({ region, size }) when an island is conquered (and check
 // canAnnex() first, if the reward should depend on it).
@@ -106,15 +113,21 @@ export function unsealTrees(map, door, spots) {
   return spots;
 }
 // Scene-wide: remove trees / gold stones next to ground that only they cut off from the door
-// (ground the terrain itself leaves unreachable, like decorative islets, is ignored).
-export function unsealScene(h, door) {
+// (ground that terrain or buildings leave unreachable, like decorative islets, is ignored).
+// golds=false leaves gold stones alone (on load: saved stones stay where the player had them).
+export function unsealScene(h, door, golds = true) {
   const m = h.map, blk = m.block;
-  m.block = new Uint16Array(blk.length); const open = reachable(m, door[0], door[1]); m.block = blk;
-  for (let pass = 0; pass < 6; pass++) {
+  // "open": reachable with only buildings standing (pockets walled in by buildings are not the trees' fault)
+  m.block = new Uint16Array(blk.length);
+  for (const b of h.buildings) for (const [x, y] of b.cells()) if (m.in(x, y)) m.block[m.i(x, y)]++;
+  const open = reachable(m, door[0], door[1]); m.block = blk;
+  for (let pass = 0; pass < 10; pass++) {
     const re = reachable(m, door[0], door[1]);
     const sealed = (x, y) => m.in(x, y) && m.walkable(x, y) && open[m.i(x, y)] && !re[m.i(x, y)];
     const near = o => { for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) if (sealed(o.cx + ox, o.cy + oy)) return true; return false; };
-    const bad = [...h.trees.filter(near), ...h.golds.filter(near)];
+    // stones first, then trees: a reload (stones from the save, trees regenerated) then ends the same
+    let bad = golds ? h.golds.filter(near) : [];
+    if (!bad.length) bad = h.trees.filter(near);
     if (!bad.length) return;
     for (const o of bad) { h.trees = h.trees.filter(t => t !== o); h.golds = h.golds.filter(g => g !== o); h.placeBlock([[o.cx, o.cy]], -1); }
   }
@@ -211,9 +224,13 @@ function commitAnnex(R, job) {
   // fresh resources on the new land
   const part = { rec, cells: res.cells };
   const door = R.door;
-  const trees = annexTreeSpots(m, part).filter(t => m.block[m.i(t.x, t.y)] === 0);
-  unsealTrees(m, door, trees);
-  for (const t of trees) h.addTree(t.x, t.y, { v: 1 + ((t.x * 7 + t.y * 13) % 4) });
+  // the whole tree layout is recomputed the way a reload builds it; standing trees keep their state
+  R.annexParts = R.annexParts || [];
+  R.annexParts.push(part);
+  const want = R.homeTreeSpots ? R.homeTreeSpots(m, R.annexParts) : annexTreeSpots(m, part);
+  const wantSet = new Set(want.map(t => t.x + ',' + t.y)), have = new Set(h.trees.map(t => t.cx + ',' + t.cy));
+  for (const t of [...h.trees]) if (!wantSet.has(t.cx + ',' + t.cy)) { h.trees = h.trees.filter(o => o !== t); h.placeBlock([[t.cx, t.cy]], -1); }
+  for (const t of want) if (!have.has(t.x + ',' + t.y) && m.block[m.i(t.x, t.y)] === 0) h.addTree(t.x, t.y, { v: 1 + ((t.x * 7 + t.y * 13) % 4) });
   const golds = annexGoldSpots(m, part).map(([x, y]) => ({ x, y }));
   unsealTrees(m, door, golds); // gold stones must not seal ground off either
   for (const { x, y } of golds) { h.addGold(x, y, { amount: 120 }); R.goldZones.push([x, y]); }

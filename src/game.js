@@ -180,15 +180,13 @@ export class Realm {
     const free = (x, y, pad = 0) => Annex.freeCell(map, x, y, pad, true);
     const nearCastle = (x, y, d) => Math.abs(x - (CASTLE.x + 2)) < d + 2 && Math.abs(y - (CASTLE.y + 1)) < d;
     const inBase = () => [r.int(BASE_X + 4, BASE_X + BASE_W - 5), r.int(BASE_Y + 4, BASE_Y + BASE_H - 5)];
-    // tree spots ignore buildings so the layout is the same on every load; ones under a building are dropped
-    const treeSpots = Annex.forestSpots(map, r, 4, () => { const c = inBase(); return nearCastle(c[0], c[1], 6) ? null : c; }, () => r.int(9, 14), (x, y) => !nearCastle(x, y, 5));
-    for (const p of parts) treeSpots.push(...Annex.annexTreeSpots(map, p));
-    const spots = treeSpots.filter(t => map.block[map.i(t.x, t.y)] === 0);
-    // drop any tree that seals off walkable ground (plateaus, nooks) from the castle
-    Annex.unsealTrees(map, h.nearestWalkable(CASTLE.x + 2, CASTLE.y + 2), spots);
+    this.annexParts = parts;
+    const spots = this.homeTreeSpots(map, parts, r);
     const savedTree = new Map();
     for (const t of S.trees || []) if (t && t.cx != null) savedTree.set(t.cx + ',' + t.cy, t);
+    const stones = new Set((S.golds || []).map(g => g.cx + ',' + g.cy)); // a saved stone keeps its cell
     for (const t of spots) {
+      if (stones.has(t.x + ',' + t.y)) continue;
       const saved = savedTree.get(t.x + ',' + t.y);
       h.addTree(t.x, t.y, { v: 1 + ((t.x * 7 + t.y * 13) % 4), wood: saved ? saved.wood : 25, regrow: saved ? saved.regrow : 0 });
     }
@@ -205,6 +203,7 @@ export class Realm {
       Annex.unsealTrees(map, h.nearestWalkable(CASTLE.x + 2, CASTLE.y + 2), gs); // stones must not wall off a nook either
       for (const g of gs) h.addGold(g.x, g.y, { amount: 120 });
     }
+    Annex.unsealScene(h, h.nearestWalkable(CASTLE.x + 2, CASTLE.y + 2), !S.golds); // trees (and fresh gold) get the same final pass as a live merge
     this.goldZones = h.golds.map(g => [g.cx, g.cy]);
     // pasture for sheep (plus one per annexed chunk)
     this.pasture = null;
@@ -1114,6 +1113,22 @@ export class Realm {
 
   // ------------------------------------------------------------ annexed land (see src/annex.js for the API)
   homeCfg() { return HOME_CFG; }
+  // The home tree layout: base forests (from the seed) plus each annexed chunk's forests, minus spots
+  // under buildings or that would seal ground off. Depends only on terrain and buildings, so a live
+  // merge and a reload agree. r continues the seed's sequence in buildHome.
+  homeTreeSpots(map, parts, r = rng(this.state.seed + 1234)) {
+    const h = this.home, live = map.block;
+    map.block = new Uint16Array(live.length);
+    for (const b of h.buildings) for (const [x, y] of b.cells()) if (map.in(x, y)) map.block[map.i(x, y)]++;
+    const nearCastle = (x, y, d) => Math.abs(x - (CASTLE.x + 2)) < d + 2 && Math.abs(y - (CASTLE.y + 1)) < d;
+    const inBase = () => [r.int(BASE_X + 4, BASE_X + BASE_W - 5), r.int(BASE_Y + 4, BASE_Y + BASE_H - 5)];
+    const spots = Annex.forestSpots(map, r, 4, () => { const c = inBase(); return nearCastle(c[0], c[1], 6) ? null : c; }, () => r.int(9, 14), (x, y) => !nearCastle(x, y, 5));
+    for (const p of parts) spots.push(...Annex.annexTreeSpots(map, p));
+    const keep = spots.filter(t => map.block[map.i(t.x, t.y)] === 0);
+    Annex.unsealTrees(map, h.nearestWalkable(CASTLE.x + 2, CASTLE.y + 2), keep);
+    map.block = live;
+    return keep;
+  }
   canAnnex(opts) { return Annex.canAnnex(this, opts); }
   planAnnex(opts) { return Annex.planAnnex(this, opts); }
   annex(opts = {}) {
