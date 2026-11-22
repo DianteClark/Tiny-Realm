@@ -114,6 +114,7 @@ export const RELICS = {
   pandabelt: { name: 'Panda Sash', desc: 'Soldiers attack 5% faster' },
   turtleshell: { name: 'Turtle Shell', desc: 'Castle has 20% more health' },
   moonstone: { name: 'Moonstone', desc: 'Soldiers deal 15% more damage at night' },
+  seacrown: { name: 'Crown of the Sea Kings', desc: '+10% health and damage for all soldiers, +10% to everything gathered' },
 };
 
 // ---------- expedition regions ----------
@@ -293,4 +294,5 @@ export function provinceOf(label) {
 export const NIGHT_CREATURES = ['skull', 'bat', 'imp', 'skull', 'bat'];
 
 // the full-moon beast: the Bear sprite, drawn larger
+ENEMIES.trollking = { ...ENEMIES.troll, name: 'The Troll King', hp: 3400, dmg: 58, cd: 2.4, scale: 1.6, splash: 1.4, anim: 'troll', cost: 40, xp: 600, gold: 800 };
 ENEMIES.moonbear = { ...ENEMIES.bear, name: 'Moonhide Bear', hp: 1300, dmg: 36, cd: 1.6, boss: true, big: true, splash: 1.1, anim: 'bear', scale: 1.5, cost: 20, xp: 160, gold: 160 };

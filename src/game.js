@@ -12,6 +12,7 @@ import { EventDirector } from './events.js';
 import * as Gear from './gear.js';
 import { Challenges } from './challenges.js';
 import { Needs, EXCHANGE } from './needs.js';
+import { CHAPTERS, chapterState } from './campaign.js';
 import { SHEETS } from './assets.js';
 import { audio } from './audio.js';
 import { Environment } from './env.js';
@@ -120,13 +121,13 @@ export class Realm {
   bonus() {
     const R = this.state.relics, rn = this.state.renown, P = this.provinceBonus();
     const b = {
-      hp: (R.minotaurhorn ? 0.1 : 0) + rn * RENOWN_BONUS.power,
-      dmg: rn * RENOWN_BONUS.power,
+      hp: (R.minotaurhorn ? 0.1 : 0) + (R.seacrown ? 0.1 : 0) + rn * RENOWN_BONUS.power,
+      dmg: rn * RENOWN_BONUS.power + (R.seacrown ? 0.1 : 0),
       meleeDmg: R.trolltusk ? 0.1 : 0,
       rangedDmg: R.sharktooth ? 0.1 : 0,
       atkSpeed: R.pandabelt ? 0.05 : 0,
       towerDmg: R.boneidol ? 0.25 : 0,
-      gather: rn * RENOWN_BONUS.gather + (R.rubberduck ? 0.05 : 0) + (this.needs && this.home ? this.needs.gatherBonus() : 0),
+      gather: rn * RENOWN_BONUS.gather + (R.rubberduck ? 0.05 : 0) + (R.seacrown ? 0.1 : 0) + (this.needs && this.home ? this.needs.gatherBonus() : 0),
       gold: R.goldenacorn ? 0.1 : 0,
       wood: R.bearpelt ? 0.1 : 0,
       castleHp: R.turtleshell ? 0.2 : 0,
@@ -1216,8 +1217,10 @@ export class Realm {
     const S = this.state;
     const rivalKey = typeof bounty === 'string' && bounty.startsWith('rival:') ? bounty.slice(6) : null;
     if (rivalKey) bounty = false;
+    const storyIdx = typeof bounty === 'string' && bounty.startsWith('story:') ? +bounty.slice(6) : -1;
+    if (storyIdx >= 0) bounty = false;
     let info = islandInfo(n);
-    const seed = rivalKey ? hashStr('rival' + rivalKey + S.seed) : bounty ? hashStr('bounty' + todayStr()) : hashStr('isle' + n + 'x' + S.seed);
+    const seed = storyIdx >= 0 ? hashStr('story' + storyIdx + 'x' + S.seed) : rivalKey ? hashStr('rival' + rivalKey + S.seed) : bounty ? hashStr('bounty' + todayStr()) : hashStr('isle' + n + 'x' + S.seed);
     let region = bounty ? REGIONS[seed % REGIONS.length] : info.region;
     let level = bounty ? Math.max(2, info.level + 1) : info.level;
     if (rivalKey) {
@@ -1226,10 +1229,16 @@ export class Realm {
       region = { key: 'rival', name: rv.name, colors: rv.colors, rival: rivalKey, enemies: rivalRoster(rivalKey, level), camp: `${rivalKey}Tower`, camp2: `${rivalKey}Barracks`, camp3: `${rivalKey}House`, boss: `${rivalKey}_king` };
       info = { ...info, boss: true, name: `the ${rv.name.split(' ')[1]} Capital`, rival: rivalKey };
     }
+    if (storyIdx >= 0) {
+      const ch = CHAPTERS[storyIdx], base = REGIONS.find(r => r.key === ch.region);
+      region = ch.boss ? { ...base, boss: ch.boss, bossRelic: ch.final ? null : base.bossRelic } : base;
+      level = ch.level + (info.cycle || 0) * 0;
+      info = { ...info, boss: !!ch.boss, name: ch.name, story: storyIdx };
+    }
     const map = generateIsland({ w: 40, h: 30, seed, plateaus: 5, highs: 2, colors: region.colors, landFrac: 0.55 });
     const sc = new Scene(this, 'expedition', map, seed);
     sc.islandName = bounty ? 'the Bounty Isle' : info.name; sc.info = info; sc.region = region; sc.level = level; sc.bounty = !!bounty; sc.n = n; sc.rival = rivalKey;
-    sc.expLoot = 0;
+    sc.expLoot = 0; sc.story = storyIdx;
     const r = rng(seed + 5);
     // landing on the west shore, boat floating clear of the coast
     const reach0 = [];
@@ -1240,7 +1249,7 @@ export class Realm {
     if (spot) sc.boats.push({ key: 'boat', x: center(spot.wx), y: center(spot.wy) + 46, t: 0, flip: spot.dx < 0 });
     const re = reachable(map, land[0], land[1]);
     // camps
-    const nCamps = rivalKey ? 4 : Math.min(5, 2 + Math.floor(level / 4));
+    const nCamps = rivalKey ? 4 : storyIdx >= 0 && CHAPTERS[storyIdx].final ? 5 : Math.min(5, 2 + Math.floor(level / 4));
     const camps = [];
     const campSpots = reach0.filter(([x, y]) => re[map.i(x, y)] && dist(x, y, land[0], land[1]) > 9);
     for (let k = 0; k < 400 && camps.length < nCamps; k++) {
@@ -1319,7 +1328,7 @@ export class Realm {
     const sc = this.exp, S = this.state; if (!sc || sc.ended) return;
     sc.ended = true;
     const survivors = sc.units.filter(u => u.team === 0 && u.alive && u.rec);
-    const summary = { result, name: sc.islandName, survivors: survivors.map(u => u.rec.name), fallen: [], loot: null, relic: null };
+    const summary = { result, name: sc.islandName, survivors: survivors.map(u => u.rec.name), fallen: [], loot: null, relic: null, gear: [] };
     if (result === 'won') {
       const lv = sc.level, mult = sc.bounty ? 2 : 1;
       const loot = { gold: Math.round((50 + lv * 28 + sc.expLoot) * mult), wood: Math.round((30 + lv * 18) * mult), meat: Math.round((25 + lv * 14) * mult) };
@@ -1335,13 +1344,21 @@ export class Realm {
         S.daily.bounty = todayStr();
         const unowned = Object.keys(RELICS).filter(k => !S.relics[k] && !['trolltusk', 'minotaurhorn', 'bearpelt', 'pandabelt', 'turtleshell', 'rubberduck'].includes(k));
         if (unowned.length && Math.random() < 0.35) { const k = unowned[Math.floor(Math.random() * unowned.length)]; S.relics[k] = true; summary.relic = k; }
+      } else if (sc.story >= 0) {
+        const st = chapterState(S), ch = CHAPTERS[sc.story];
+        st.done = Math.max(st.done, sc.story + 1);
+        summary.story = sc.story;
+        if (ch.final) {
+          if (!S.relics.seacrown) { S.relics.seacrown = true; summary.relic = 'seacrown'; }
+          summary.gear.push(this.dropGear(lv + 6, { quiet: true, rarity: 3, from: ch.name }));
+        }
+        this.log(`The Drowned Crown, chapter ${sc.story + 1}: ${ch.name} is won.`);
       } else if (!sc.rival && sc.n === S.frontier) { S.frontier++; S.cleared = Math.max(S.cleared, sc.n); }
       S.stats.voyagesWon = (S.stats.voyagesWon || 0) + 1;
       const squadTypes = sc.squadTypes || [];
       this.chal.note('voyage', { squad: squadTypes, lost: squadTypes.length - survivors.length });
       if (sc.rival || sc.info.boss) this.chal.note('boss', {});
       // gear: one piece per victory, more from bosses and capitals
-      summary.gear = [];
       const big = sc.rival || (sc.info.boss && !sc.bounty);
       summary.gear.push(this.dropGear(lv, { quiet: true, from: sc.islandName }));
       if (big) summary.gear.push(this.dropGear(lv + 2, { quiet: true, min: 1, from: sc.islandName }));

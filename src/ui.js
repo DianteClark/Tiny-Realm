@@ -10,6 +10,7 @@ import { FEATS } from './tutorial.js';
 import { upcomingHolidays } from './calendar.js';
 import * as Gear from './gear.js';
 import { NEEDS, MOODS, EXCHANGE } from './needs.js';
+import { CHAPTERS, nextChapter, chapterOpen, chapterState } from './campaign.js';
 
 export const VERSION = '3.3';
 
@@ -612,7 +613,16 @@ export class UI {
     let html = `<canvas id="chart" class="chart"></canvas><p class="muted" style="text-align:center;font-size:12px;margin:2px 0 6px">Tap an island on the chart to choose your destination.</p>`;
     // destination card
     let title, sub, desc, av, blocked = false;
-    if (target === 'bounty') { title = 'Bounty Isle'; sub = bountyDone ? 'Plundered today. A new one appears tomorrow.' : 'Double loot and a chance at a relic. Once per day.'; desc = 'A different island every day.'; av = 'av_thief'; blocked = bountyDone; }
+    if (target.startsWith('story:')) {
+      const i = +target.slice(6), ch = CHAPTERS[i];
+      if (i !== nextChapter(S)) target = this.voyageTarget = 'frontier';
+    }
+    if (target.startsWith('story:')) {
+      const i = +target.slice(6), ch = CHAPTERS[i], open = chapterOpen(S, i);
+      title = `Chapter ${i + 1}: ${ch.name}`; sub = `The Drowned Crown - Level ${ch.level}${ch.boss ? ' - Boss: ' + ENEMIES[ch.boss].name : ''}`;
+      desc = open ? ch.intro : `Clear ${ch.need} frontier islands to reach it. You have cleared ${S.cleared}.`;
+      av = ch.final ? 'av_troll' : 'av_h' + (5 + i); blocked = !open;
+    } else if (target === 'bounty') { title = 'Bounty Isle'; sub = bountyDone ? 'Plundered today. A new one appears tomorrow.' : 'Double loot and a chance at a relic. Once per day.'; desc = 'A different island every day.'; av = 'av_thief'; blocked = bountyDone; }
     else if (target.startsWith('rival:')) {
       const rv = rivalDef(target.slice(6)), lv = R.rivalLevel(rv.key), tr = R.tributeRate(rv.key);
       title = `${rv.name} Capital`; sub = `Ruled by ${rv.ruler} - Level ${lv}`; av = `av_h${rv.avatarRow}`;
@@ -634,7 +644,7 @@ export class UI {
   drawChart(target) {
     const cv = $('#chart'); if (!cv) return;
     const R = this.R, S = R.state, dpr = Math.min(2, window.devicePixelRatio || 1);
-    const W = cv.clientWidth || 340, H = 230;
+    const W = cv.clientWidth || 340, H = 272;
     if (cv.width !== W * dpr) { cv.width = W * dpr; cv.height = H * dpr; }
     const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.imageSmoothingEnabled = false;
     c.fillStyle = '#47aba9'; c.fillRect(0, 0, W, H);
@@ -675,6 +685,20 @@ export class UI {
       if (st.subjugated) { c.fillStyle = '#4a90c0'; c.fillRect(x - 22, y + 20, 44, 10); c.fillStyle = '#fff'; c.font = '9px BoldPixels, monospace'; c.textAlign = 'center'; c.fillText('VASSAL', x, y + 28); }
       if (open && !st.subjugated) nodes.push({ k: 'rival:' + rv.key, x, y, r: 26 });
     });
+    // The Drowned Crown: a row of story islands along the bottom
+    {
+      const nx = nextChapter(S), y0 = H - 30, x0 = 26, step = (W - 104) / (CHAPTERS.length - 1);
+      c.strokeStyle = 'rgba(255,230,160,0.6)'; c.setLineDash([3, 4]); c.lineWidth = 2; c.beginPath(); c.moveTo(x0, y0); c.lineTo(x0 + step * (CHAPTERS.length - 1), y0); c.stroke(); c.setLineDash([]);
+      CHAPTERS.forEach((ch, i) => {
+        const x = x0 + i * step, y = y0 + (i % 2 ? -6 : 6), done = i < chapterState(S).done, cur = i === nx, open = cur && chapterOpen(S, i);
+        isle(x, y, cur ? 30 : 22, SHEETS['tiles' + (ch.final ? 2 : 3)].img, done ? 0.55 : 1);
+        if (done) img('icon_shield', x, y, 14);
+        else if (cur) img(ch.final ? 'av_troll' : ch.boss ? 'av_' + (ch.boss === 'moonbear' ? 'bear' : ch.boss) : 'av_h' + (5 + i), x, y - 4, 32);
+        else img('cloud' + (1 + i % 8), x, y, 40);
+        if (cur) nodes.push({ k: 'story:' + i, x, y, r: 22 });
+      });
+      c.fillStyle = '#ffe9a8'; c.font = '10px BoldPixels, monospace'; c.textAlign = 'right'; c.fillText('THE DROWNED CROWN', W - 8, H - 8); c.textAlign = 'left';
+    }
     // selection ring
     const sel = nodes.find(n => n.k === target);
     if (sel) { const s = 0.5 + Math.sin(t * 5) * 0.05; img('cursorRing', sel.x, sel.y, 128 * s); }
@@ -717,6 +741,8 @@ export class UI {
     const orders = O ? `<p class="section-title">${O.kind === 'night' ? 'Night orders' : 'Day orders'} <span class="muted">(new ones at ${O.kind === 'night' ? 'dawn' : 'dusk'})</span></p>` + O.list.map(o => `<div class="card ${o.done ? '' : 'light'}"><i class="ic ${o.done ? 'ic-shield' : 'ic-sword'}"></i><div class="grow"><h3>${esc(o.text)}</h3><p>${o.done ? 'Done.' : `${Math.floor(o.have || 0)} / ${o.n}`}</p>${o.done ? '' : `<div class="xpbar"><i style="width:${Math.min(100, (o.have || 0) / o.n * 100)}%"></i></div>`}${this.costHtml(o.reward).replace(/lack/g, '')}</div></div>`).join('') : '';
     return this.chalHtml() + orders + `<p class="section-title">Chronicle</p><div class="card"><i class="ic ic-info" style="width:40px;height:40px"></i><div class="grow"><h3>${esc(q.text)}</h3><p>${Math.min(v, q.n)} / ${q.n}</p><div class="xpbar"><i style="width:${pct}%"></i></div>
       <p style="margin-top:4px">Reward</p>${this.costHtml(q.reward).replace(/lack/g, '')}</div></div>
+      ${(() => { const nx = nextChapter(S); if (nx < 0) return '<p class="section-title">The Drowned Crown</p><div class="card"><div class="grow"><p>Complete. The crown of the Sea Kings is yours.</p></div></div>'; const ch = CHAPTERS[nx];
+        return `<p class="section-title">The Drowned Crown</p><div class="card light"><div class="grow"><h3>Chapter ${nx + 1}: ${esc(ch.name)}</h3><p>${chapterOpen(S, nx) ? 'Ready. Find it along the bottom of the sea chart in Voyage.' : `Clear ${ch.need} frontier islands to reach it (${S.cleared} so far).`}</p><div class="xpbar"><i style="width:${nx / CHAPTERS.length * 100}%"></i></div></div></div>`; })()}
       <p class="section-title">Goals that never end</p>
       <div class="card light"><div class="grow"><p>Push the frontier: island ${S.frontier} awaits. Every fifth island holds a boss and a relic.</p></div></div>
       <div class="card light"><div class="grow"><p>Raise the castle: ${S.tier < 5 ? 'next is ' + TIERS[S.tier + 1].name : 'Citadel reached. Raise your Renown without limit.'}</p></div></div>
@@ -905,7 +931,7 @@ export class UI {
     if (k === 'launch') {
       const ids = [...this.squadPick];
       const vt = this.voyageTarget || 'frontier';
-      const bounty = vt === 'bounty' ? true : vt.startsWith('rival:') ? vt : false;
+      const bounty = vt === 'bounty' ? true : (vt.startsWith('rival:') || vt.startsWith('story:')) ? vt : false;
       this.squadPick.clear();
       R.startExpedition(R.state.frontier, ids, bounty);
       this.banner(R.exp.islandName, `${R.exp.region.name}, level ${R.exp.level}. Destroy every camp. Tap a soldier or All, then tap the ground or a foe.`, 'blue');
@@ -943,7 +969,11 @@ export class UI {
         ${s.annexed ? `<p>The conquered land will join your island when you return${s.province ? `, a ${s.province.name} province: ${s.province.desc}` : ''}.</p>` : ''}
         ${s.relic ? `<p>Relic found: <b>${RELICS[s.relic].name}</b>. ${RELICS[s.relic].desc}</p>` : ''}
         ${(s.gear || []).length ? `<p>Gear found: ${s.gear.map(g => `<b style="color:${Gear.RARITY[g.rarity].color}">${esc(g.name)}</b>`).join(', ')}. Equip it from Army.</p>` : ''}<p class="muted">Survivors: ${s.survivors.map(esc).join(', ') || 'none'}</p>`;
-      this.choice('Victory', div, [{ label: 'Home' }]);
+      if (s.story >= 0 && s.story != null) {
+        const ch = CHAPTERS[s.story], nx = CHAPTERS[s.story + 1];
+        div.innerHTML = `<p style="font-style:italic">${esc(ch.outro)}</p>` + div.innerHTML + (nx ? `<p class="muted">Next: Chapter ${s.story + 2}, ${esc(nx.name)}.</p>` : '<p><b>The Drowned Crown is complete.</b></p>');
+        this.choice(ch.final ? 'The crown is yours' : `Chapter ${s.story + 1} won`, div, [{ label: 'Home' }]);
+      } else this.choice('Victory', div, [{ label: 'Home' }]);
     } else if (s.result === 'lost') {
       div.innerHTML = `<p>No one returned from ${esc(s.name)}. Their names are kept in the Hall of the Fallen.</p>`;
       this.choice('The squad is lost', div, [{ label: 'Home' }]);
