@@ -52,6 +52,17 @@ Import, and Wipe Realm to start over.
   swarm in the forest, lambing season, and a rubber duck worth tapping.
 - **Chronicle**: a chain of goals with rewards that keeps going after the
   scripted ones run out. There's also a daily tribute with a streak bonus.
+- **Rival kingdoms**: four houses in the pack's other team colours (Ember,
+  Sunhold, Duskmere, Ashgrave) raid you with full human armies. Conquer their
+  capitals from the sea chart to make them vassals that pay tribute.
+- **Walls and gates**: drag out fence lines; gates close when foes come near;
+  raiders hack through walls when they cannot get around.
+- **Hero abilities and formations**: every soldier type has an ability on a
+  cooldown (Shield Wall, Volley, Charge, Blessing, Whirlwind, Bloodrage,
+  Trample, Firestone, Rally); squads march Loose, Line, Wedge or Column.
+- **Seasons, weather, day and night**: seasons follow the calendar, weather
+  changes range and sight, nights glow with torchlight.
+- **Feats and tutorial**: 27 achievements, and a guided first session.
 
 Controls: drag to pan, pinch or scroll to zoom. Tap a soldier (or All), then
 tap the ground to move or tap a foe to attack. Tap buildings to train and
@@ -67,6 +78,9 @@ upgrade.
   - `world.js`: units, buildings, camps, combat, AI, drawing
   - `game.js`: economy, saving, offline progress, raids, expeditions, quests
   - `events.js`: great and minor realm events
+  - `env.js`: seasons, weather, day and night
+  - `tutorial.js`: guided tutorial and Feats
+  - `audio.js`: synthesized sound effects and procedural music
   - `ui.js`: HUD and panels
   - `main.js`: boot, loop, camera, touch input
 - `assets/`: Tiny Swords art by Pixel Frog, BoldPixels font
