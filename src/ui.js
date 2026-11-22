@@ -8,6 +8,7 @@ import { MAJOR } from './events.js';
 import { audio } from './audio.js';
 import { FEATS } from './tutorial.js';
 import { upcomingHolidays } from './calendar.js';
+import * as Gear from './gear.js';
 
 export const VERSION = '3.3';
 
@@ -457,7 +458,7 @@ export class UI {
   // ------------------------------------------------------------ panels
   togglePanel(name, arg) { if (this.panel === name && !arg) this.closePanel(); else this.openPanel(name, arg); }
   openPanel(name, arg) {
-    if (this.R.exp && !['settings', 'army', 'chronicle'].includes(name)) return;
+    if (this.R.exp && !['settings', 'army', 'chronicle', 'hero'].includes(name)) return;
     if (name === 'nightmarket' && !this.R.events.market) return this.toast('The Night Market only opens after dark.');
     if (this.panel !== name) audio.play('open');
     this.panel = name; this.panelArg = arg; this.tab = null;
@@ -485,8 +486,8 @@ export class UI {
   renderPanel() {
     this.live = [];
     const p = this.panel;
-    const titles = { nightmarket: 'Night Market', build: 'Build', workers: 'Workers', army: 'Army', voyage: 'Voyage', chronicle: 'Chronicle', settings: 'Settings', merchant: 'Merchant', building: '' };
-    $('#panelTitle').textContent = p === 'building' ? (this.panelArg.def.name) : titles[p];
+    const titles = { hero: 'Hero', nightmarket: 'Night Market', build: 'Build', workers: 'Workers', army: 'Army', voyage: 'Voyage', chronicle: 'Chronicle', settings: 'Settings', merchant: 'Merchant', building: '' };
+    $('#panelTitle').textContent = p === 'building' ? (this.panelArg.def.name) : p === 'hero' ? this.panelArg.name : titles[p];
     this.setTabs(null);
     const fn = this['panel_' + p];
     this.body.innerHTML = fn ? fn.call(this) : '';
@@ -535,12 +536,45 @@ export class UI {
       <div class="thumb"><img src="${src(rec.avatar)}" class="av" alt=""></div>
       <div class="grow"><h3>${esc(rec.name)}</h3><p>Level ${rec.level} ${U.name} - ${rec.kills} kills - ${status}</p>
         <div>${rec.traits.map(t => `<span class="trait ${TRAITS[t].rare ? 'rare' : ''}" title="${TRAITS[t].desc}">${TRAITS[t].name}</span>`).join('')}</div>
+        ${this.gearRow(rec)}
         <div class="hpbar"><i style="width:${hpPct}%"></i></div><div class="xpbar"><i style="width:${xpPct}%"></i></div></div>
-      ${!opts.pick && rec.status === 'home' && !this.R.exp ? `<button class="btn small" data-act="find:${rec.id}">Find</button>` : ''}</div>`;
+      ${!opts.pick && !opts.noButtons ? `<div class="col-btns"><button class="btn small" data-act="hero:${rec.id}">Gear</button>${rec.status === 'home' && !this.R.exp ? `<button class="btn small" data-act="find:${rec.id}">Find</button>` : ''}</div>` : ''}</div>`;
+  }
+  gearRow(rec) {
+    const S = this.R.state;
+    return `<div class="gearrow">${Gear.SLOTS.map(([k, , ic]) => { const it = Gear.itemById(S, rec.gear && rec.gear[k]); return `<span class="gslot ${it ? 'r' + it.rarity : 'empty'}" title="${it ? esc(it.name) : 'Empty'}"><i class="ic ${ic}"></i></span>`; }).join('')}<span class="gscore">${Gear.heroScore(S, rec) ? 'Power ' + Gear.heroScore(S, rec) : ''}</span></div>`;
+  }
+  itemCard(it, btns) {
+    const S = this.R.state, o = Gear.ownerOf(S, it.id), ic = Gear.SLOTS.find(s => s[0] === it.slot)[2];
+    return `<div class="card light item r${it.rarity}"><span class="gslot big r${it.rarity}"><i class="ic ${ic}"></i></span>
+      <div class="grow"><h3 style="color:${Gear.RARITY[it.rarity].color}">${esc(it.name)}</h3><p>${Gear.RARITY[it.rarity].name} ${it.slot === 'armor' ? 'armour' : it.slot}, level ${it.level}. ${Gear.describe(it)}.</p>
+      ${o ? `<p class="muted">Worn by ${esc(o.name)}</p>` : it.found ? `<p class="muted">From ${esc(it.found)}</p>` : ''}</div>${btns}</div>`;
+  }
+  panel_hero() {
+    const R = this.R, S = R.state, rec = this.panelArg;
+    if (!S.soldiers.includes(rec)) { setTimeout(() => this.closePanel()); return ''; }
+    if (!Gear.SLOTS.some(s => s[0] === this.tab)) this.tab = 'weapon';
+    const slot = this.tab;
+    this.setTabs(Gear.SLOTS.map(([k, n]) => [k, n]));
+    const cur = Gear.itemById(S, rec.gear && rec.gear[slot]);
+    let html = this.soldierCard(rec, { noButtons: true });
+    html += `<div class="row-btns"><button class="btn small" data-act="autoeq:${rec.id}">Equip best</button></div>`;
+    html += `<p class="section-title">Wearing</p>` + (cur ? this.itemCard(cur, `<button class="btn small red" data-act="uneq:${rec.id}:${slot}">Remove</button>`) : '<p style="text-align:center;font-size:13px">Nothing in this slot.</p>');
+    const free = (S.gear || []).filter(g => g.slot === slot && g !== cur).sort((a, b) => Gear.score(b) - Gear.score(a));
+    html += `<p class="section-title">In the armoury (${free.length})</p>`;
+    html += free.length ? free.map(it => this.itemCard(it, `<button class="btn small" data-act="eq:${rec.id}:${it.id}">Equip</button>`)).join('') : '<p style="text-align:center;font-size:13px">Win voyages, survive great events and beat raids to find gear.</p>';
+    return html;
   }
   panel_army() {
     const R = this.R, S = R.state;
-    this.setTabs([['roster', 'Roster'], ['fallen', 'Fallen'], ['relics', 'Relics']]);
+    this.setTabs([['roster', 'Roster'], ['armory', 'Armoury'], ['fallen', 'Fallen'], ['relics', 'Relics']]);
+    if (this.tab === 'armory') {
+      const G = [...(S.gear || [])].sort((a, b) => b.rarity - a.rarity || Gear.score(b) - Gear.score(a));
+      if (!G.length) return '<p class="section-title">The armoury is empty.</p><p style="text-align:center;font-size:13px">Every voyage won brings back a piece of gear. Bosses, rival capitals, great events and the Moonlit Hunt bring better pieces. Raiders sometimes drop something too.</p>';
+      const spare = G.filter(g => !Gear.ownerOf(S, g.id) && g.rarity === 0).length;
+      return `<p class="section-title">${G.length} pieces of gear</p>${spare ? `<button class="btn wide" data-act="salvall">Sell ${spare} spare common pieces</button><p></p>` : ''}` +
+        G.map(it => this.itemCard(it, `<button class="btn small red" data-act="salv:${it.id}">Sell ${Gear.salvageValue(it)}</button>`)).join('');
+    }
     if (this.tab === 'fallen') {
       if (!S.fallen.length) return '<p class="section-title">No one has fallen yet. Keep it that way.</p>';
       return '<p class="section-title">The Hall of the Fallen</p>' + S.fallen.map(f => `<div class="card"><div class="thumb"><img src="${src(f.avatar)}" class="av" alt="" style="filter:grayscale(1)"></div>
@@ -814,6 +848,17 @@ export class UI {
       return;
     }
     if (k === 'selall') { this.closePanel(); this.selectAll(); return; }
+    if (k === 'hero') { const rec = R.state.soldiers.find(s => s.id === +x); if (rec) this.openPanel('hero', rec); return; }
+    if (k === 'eq') { const rec = R.state.soldiers.find(s => s.id === +x); Gear.equip(R, rec, +y); return this.refresh(); }
+    if (k === 'uneq') { const rec = R.state.soldiers.find(s => s.id === +x); Gear.unequip(R, rec, y); return this.refresh(); }
+    if (k === 'autoeq') { const rec = R.state.soldiers.find(s => s.id === +x); Gear.autoEquip(R, rec); return this.refresh(); }
+    if (k === 'salv') {
+      const it = Gear.itemById(R.state, +x); if (!it) return;
+      const go = () => { Gear.salvage(R, +x); this.refresh(); };
+      if (it.rarity >= 2 || Gear.ownerOf(R.state, it.id)) return this.confirm('Sell this gear?', `${it.name} sells for ${Gear.salvageValue(it)} gold.`, 'Sell', go);
+      return go();
+    }
+    if (k === 'salvall') { for (const g of [...R.state.gear]) if (g.rarity === 0 && !Gear.ownerOf(R.state, g.id)) Gear.salvage(R, g.id); return this.refresh(); }
     if (k === 'vt') { if (x === 'bounty' && R.state.daily.bounty === R.state.daily.last) return; this.voyageTarget = x; return this.refresh(); }
     if (k === 'pick') {
       const id = +x, cap = TIERS[R.state.tier].squad;
@@ -861,7 +906,8 @@ export class UI {
       div.innerHTML = `<p>${esc(s.name)} is cleared.</p><div class="cost" style="justify-content:center;font-size:18px"><span><i class="ic ic-gold"></i>+${s.loot.gold}</span><span><i class="ic ic-wood"></i>+${s.loot.wood}</span><span><i class="ic ic-meat"></i>+${s.loot.meat}</span></div>
         ${s.rival ? `<p><b>${rivalDef(s.rival).name}</b> bends the knee. They will pay tribute every hour and never raid you again.</p>` : ''}
         ${s.annexed ? `<p>The conquered land will join your island when you return${s.province ? `, a ${s.province.name} province: ${s.province.desc}` : ''}.</p>` : ''}
-        ${s.relic ? `<p>Relic found: <b>${RELICS[s.relic].name}</b>. ${RELICS[s.relic].desc}</p>` : ''}<p class="muted">Survivors: ${s.survivors.map(esc).join(', ') || 'none'}</p>`;
+        ${s.relic ? `<p>Relic found: <b>${RELICS[s.relic].name}</b>. ${RELICS[s.relic].desc}</p>` : ''}
+        ${(s.gear || []).length ? `<p>Gear found: ${s.gear.map(g => `<b style="color:${Gear.RARITY[g.rarity].color}">${esc(g.name)}</b>`).join(', ')}. Equip it from Army.</p>` : ''}<p class="muted">Survivors: ${s.survivors.map(esc).join(', ') || 'none'}</p>`;
       this.choice('Victory', div, [{ label: 'Home' }]);
     } else if (s.result === 'lost') {
       div.innerHTML = `<p>No one returned from ${esc(s.name)}. Their names are kept in the Hall of the Fallen.</p>`;

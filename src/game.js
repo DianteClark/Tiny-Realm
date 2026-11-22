@@ -9,6 +9,7 @@ import {
   RIVALS, rivalDef, rivalRoster, CAMP_STRUCTS, PROVINCES, provinceOf, NIGHT_CREATURES,
 } from './data.js';
 import { EventDirector } from './events.js';
+import * as Gear from './gear.js';
 import { SHEETS } from './assets.js';
 import { audio } from './audio.js';
 import { Environment } from './env.js';
@@ -43,6 +44,7 @@ function freshState() {
     timers: { raid: 330, minor: 150, major: 1500 },
     daily: { last: '', streak: 0, bounty: '' },
     log: [], introSeen: false,
+    gear: [], nextGear: 0,
   };
 }
 
@@ -129,6 +131,8 @@ export class Realm {
     return b;
   }
   get tierDef() { return TIERS[this.state.tier]; }
+  gearMods(rec) { return this.state && this.state.gear ? Gear.mods(this.state, rec) : {}; }
+  dropGear(level, opts = {}) { return Gear.grant(this, Gear.rollItem(this.state, level, opts), opts.quiet); }
   storage() { return this.tierDef.storage + this.state.renown * 2000; }
   popCap() { let n = castlePop(this.state.tier); for (const b of this.home.buildings) if (b.type === 'house' && b.done && !b.ruined) n += levelEffects('house', b.level).pop; return n; }
   popUsed() {
@@ -995,6 +999,7 @@ export class Realm {
       this.sfx('victory');
       this.ui.banner(R.kind === 'raid' ? 'Raid repelled' : R.title + ' survived', `The raiders are beaten. You recover ${reward} gold from the field.`, 'blue');
       this.log(`Repelled a ${R.region ? R.region.name : ''} raid. +${reward} gold.`);
+      if (Math.random() < 0.15 + R.level * 0.005) this.dropGear(R.level, { from: 'a raider' });
     }
     if (R.onEnd) R.onEnd(won);
     this.raid = null;
@@ -1102,7 +1107,8 @@ export class Realm {
       const killer = src && src.def ? (src.def.name || 'a monster') : 'unknown hands';
       S.fallen.unshift({ name: rec.name, type: rec.type, level: rec.level, kills: rec.kills, avatar: rec.avatar, traits: rec.traits, where, killer, date: Date.now() });
       S.fallen.length = Math.min(S.fallen.length, 100);
-      this.ui.toast(`${rec.name} has fallen ${where}.`, 'red');
+      const gearNote = Gear.onFall(this, rec, scene === this.home);
+      this.ui.toast(`${rec.name} has fallen ${where}.${gearNote}`, 'red');
       this.log(`${rec.name} (level ${rec.level}, ${rec.kills} kills) fell ${where}, slain by ${killer}.`);
     }
   }
@@ -1287,6 +1293,12 @@ export class Realm {
         if (unowned.length && Math.random() < 0.35) { const k = unowned[Math.floor(Math.random() * unowned.length)]; S.relics[k] = true; summary.relic = k; }
       } else if (!sc.rival && sc.n === S.frontier) { S.frontier++; S.cleared = Math.max(S.cleared, sc.n); }
       S.stats.voyagesWon = (S.stats.voyagesWon || 0) + 1;
+      // gear: one piece per victory, more from bosses and capitals
+      summary.gear = [];
+      const big = sc.rival || (sc.info.boss && !sc.bounty);
+      summary.gear.push(this.dropGear(lv, { quiet: true, from: sc.islandName }));
+      if (big) summary.gear.push(this.dropGear(lv + 2, { quiet: true, min: 1, from: sc.islandName }));
+      if (sc.bounty && Math.random() < 0.5) summary.gear.push(this.dropGear(lv + 1, { quiet: true, from: sc.islandName }));
       for (const u of survivors) this.grantXp(sc, u, 15 + lv * 2);
       // conquered land joins the realm: rival capitals and boss islands slam into your coast
       if ((sc.rival || (sc.info.boss && !sc.bounty)) && this.canAnnex()) {

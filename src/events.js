@@ -204,6 +204,8 @@ export class EventDirector {
       R.addAll({ gold: g * (act.duelWon ? 2 : 1), meat: g });
       if (act.duelWon) { give('minotaurhorn'); R.ui.toast(`${act.champ.rec.name} is now a Champion.`); }
     }
+    // great events always leave a piece of gear on the field; the hunt leaves something special
+    R.dropGear(4 + S.tier * 3, { min: kind === 'moonhunt' ? 2 : 1, from: MAJOR[kind] ? MAJOR[kind].title : '' });
     if (relic) R.ui.banner('Relic claimed', `${RELICS[relic].name}: ${RELICS[relic].desc}`, 'gold');
   }
 
@@ -221,6 +223,7 @@ export class EventDirector {
       { id: 'fragment', name: 'Relic Fragment', desc: `A shard of something old. Gather 3 to forge a relic you do not have. You hold ${S.fragments || 0}.`, cost: { gold: 220 * T0 } },
       { id: 'sellsword', name: `Moonlit ${UNITS[type].name}`, desc: `A level ${4 + T0} ${UNITS[type].name} with three traits, no questions asked.`, cost: { gold: (UNITS[type].cost.gold || 30) * 3 + 120 * T0 }, type },
       { id: 'draught', name: "Soldier's Draught", desc: 'A bitter brew. One soldier at home gains a full level.', cost: { gold: 140 * T0, meat: 60 * T0 } },
+      { id: 'chest', name: 'Sealed War Chest', desc: 'Something heavy rattles inside. Always rare or better.', cost: { gold: 160 + 90 * T0 } },
       { id: 'timber', name: 'Smuggled Timber', desc: 'Wood of doubtful origin, cheap.', cost: { gold: 90 * T0 }, get: { wood: 260 * T0 } },
     ];
     this.market = { period: R.env.period, npc, offers, bought: {} };
@@ -236,7 +239,8 @@ export class EventDirector {
     if (!R.pay(o.cost)) return 'Not enough to pay.';
     M.bought[id] = true; R.sfx('coin');
     S.stats.marketBuys = (S.stats.marketBuys || 0) + 1;
-    if (id === 'fragment') {
+    if (id === 'chest') { R.dropGear(3 + S.tier * 3, { min: 1, from: 'the Night Market' }); }
+    else if (id === 'fragment') {
       S.fragments = (S.fragments || 0) + 1;
       if (S.fragments >= 3) {
         const unowned = Object.keys(RELICS).filter(k => !S.relics[k]);

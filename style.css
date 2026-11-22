@@ -251,3 +251,22 @@ body.exp #abilitybar { bottom: calc(var(--safe-bot) + 124px); }
 @keyframes navPop { 50% { transform: scale(1.18) translateY(-2px); } }
 .chip { animation: chipIn .25s ease-out; }
 @keyframes chipIn { from { transform: translateX(-12px); opacity: 0; } }
+
+/* gear (3.4) */
+.ic-gem { background-image: url('assets/free/Terrain/Resources/Gold/Gold Resource/Gold_Resource.png'); }
+.gearrow { display: flex; align-items: center; gap: 4px; margin: 3px 0 2px; }
+.gslot { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 5px; background: #3a2f2a; border: 2px solid #6b5a4c; }
+.gslot .ic { width: 18px; height: 18px; }
+.gslot.empty .ic { opacity: .25; filter: grayscale(1); }
+.gslot.big { width: 44px; height: 44px; flex: none; border-width: 3px; }
+.gslot.big .ic { width: 34px; height: 34px; }
+.gslot.r0 { border-color: #b9ad92; } .gslot.r1 { border-color: #4a90c0; } .gslot.r2 { border-color: #9b59c9; } .gslot.r3 { border-color: #e8a93a; box-shadow: 0 0 6px #e8a93a; }
+.gscore { font-size: 11px; color: inherit; opacity: .75; margin-left: 4px; }
+.col-btns { display: flex; flex-direction: column; gap: 4px; }
+.row-btns { display: flex; justify-content: center; gap: 6px; margin: 4px 0; }
+.card.item.r3 { box-shadow: inset 0 0 0 2px rgba(232,169,58,.5); }
+
+/* flat inner cards: cleaner than squeezing the paper frame into a 10px border */
+.card { border: 2px solid #3d444d; border-image: none; border-radius: 7px; background: #525b66; padding: 10px; box-shadow: 0 2px 0 rgba(0,0,0,.18); }
+.card.light { border-color: #d6c39c; background: #f7eedb; box-shadow: 0 2px 0 rgba(120,90,50,.18); }
+.ic-gem { background-size: 520%; background-position: center; }

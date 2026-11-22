@@ -47,6 +47,9 @@ export class Unit {
         armor += t.armor || 0; dodge += t.dodge || 0; this.bigDmg += t.bigDmg || 0;
         this.killHeal += t.killHeal || 0; this.xpMul += t.xp || 0;
       }
+      const G = this.scene.game && this.scene.game.gearMods ? this.scene.game.gearMods(this.rec) : {};
+      hp *= 1 + (G.hp || 0); dmg *= 1 + (G.dmg || 0); speed *= 1 + (G.speed || 0); cd *= 1 + (G.cd || 0);
+      armor += G.armor || 0; dodge += G.dodge || 0; this.killHeal += G.killHeal || 0; this.xpMul += G.xp || 0;
       hp *= 1 + (B.hp || 0); dmg *= 1 + (B.dmg || 0) + (d.proj ? (B.rangedDmg || 0) : (B.meleeDmg || 0)); cd *= 1 - (B.atkSpeed || 0);
     }
     if (this.team === 1) {
