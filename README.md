@@ -1,5 +1,7 @@
 # Tiny Realm
 
+**Play now: [dianteclark.github.io/tiny-realm](https://dianteclark.github.io/tiny-realm/)**
+
 A persistent kingdom builder that runs in the browser. Grow a village into a
 citadel, send squads of named soldiers on dangerous expeditions (death is
 permanent), hold the castle against monster raids, and survive great events
