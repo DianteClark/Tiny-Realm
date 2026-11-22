@@ -9,7 +9,7 @@ import { audio } from './audio.js';
 import { FEATS } from './tutorial.js';
 import { upcomingHolidays } from './calendar.js';
 
-export const VERSION = '3.2';
+export const VERSION = '3.3';
 
 const $ = s => document.querySelector(s);
 const src = k => SHEETS[k] ? encodeURI(SHEETS[k].src) : '';
@@ -117,6 +117,10 @@ export class UI {
     if (!info.fresh && localStorage.getItem('tinyrealm.seen') !== VERSION) {
       const div = document.createElement('div');
       div.innerHTML = `<p style="text-align:left;font-size:14px;line-height:1.4">
+        <b>3.3</b><br>
+        When placing a building, every spot it can go is shaded green, and the ghost starts on the nearest good spot.
+        Workers stand beside trees and rocks so their swings land. Ability buttons and the squad bar fit on phones.
+        Counters roll, buttons press in, and fireflies drift on warm nights.<br><br>
         <b>3.2</b><br>
         Seasons now follow the real calendar. A cleaner status strip and notice list replace the scrolling ribbons.<br>
         Holy days follow the real calendar: Advent, Christmas Eve and Christmas, Epiphany, Palm Sunday, Good Friday, Easter, Ascension and Pentecost, plus New Year, Thanksgiving and summer festivals. Holy days bring peace, gifts and blessings.<br>
@@ -159,6 +163,18 @@ export class UI {
 
   // ------------------------------------------------------------ per-frame HUD
   frame(dt) {
+    // resource numbers roll toward their real value
+    {
+      const S = this.R.state; if (!this.shown || this.shownFor !== S) { this.shown = { gold: 0, wood: 0, meat: 0 }; this.shownFor = S; }
+      for (const r of ['gold', 'wood', 'meat']) {
+        const want = S.res[r], cur = this.shown[r];
+        if (cur === want) continue;
+        const next = Math.abs(want - cur) < 1 ? want : cur + (want - cur) * Math.min(1, dt * 7);
+        this.shown[r] = next;
+        const txt = fmt(next), el = this.resEls?.[r] || ((this.resEls = this.resEls || {})[r] = document.querySelector(`.res[data-r="${r}"] span`));
+        if (el && el.textContent !== txt) el.textContent = txt;
+      }
+    }
     this.hudT = (this.hudT || 0) - dt;
     if (this.hudT > 0) return;
     this.hudT = 0.25;
@@ -168,7 +184,7 @@ export class UI {
       const el = document.querySelector(`.res[data-r="${r}"]`);
       if (S.res[r] > this.prevRes[r] + 0.5) { el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
       this.prevRes[r] = S.res[r];
-      el.querySelector('span').textContent = fmt(S.res[r]);
+      if (!this.shown) el.querySelector('span').textContent = fmt(S.res[r]);
       el.classList.toggle('full', S.res[r] >= cap);
     }
     document.querySelector('.res[data-r="pop"] span').textContent = `${R.popUsed()}/${R.popCap()}`;
@@ -212,13 +228,26 @@ export class UI {
     if (!R.exp && S.orders) { const o = S.orders.list, d = o.filter(x => x.done).length; if (d < o.length) N.push(['orders', S.orders.kind === 'night' ? 'purple' : 'gold', 'ic-sword', `${S.orders.kind === 'night' ? 'Night' : 'Day'} orders ${d}/${o.length}`]); }
     if (!R.exp) { const q = R.currentQuest(); N.push(['quest', 'blue', 'ic-info', `${q.text} ${Math.min(R.questValue(q.type), q.n)}/${q.n}`]); }
     const max = this.noticesOpen ? N.length : 3;
-    let html = N.slice(0, max).map(([k, c, ic, t]) => `<div class="chip ${c}" data-pill="${k}"><i class="ic ${ic}"></i><span>${esc(t)}</span></div>`).join('');
-    if (N.length > 3) html += `<div class="chip more" data-pill="more"><span>${this.noticesOpen ? 'Show less' : `+${N.length - 3} more`}</span></div>`;
-    if (html !== this.pillsHtml) { $('#pills').innerHTML = html; this.pillsHtml = html; }
+    const list = N.slice(0, max);
+    if (N.length > 3) list.push(['more', 'more', null, this.noticesOpen ? 'Show less' : `+${N.length - 3} more`]);
+    // keyed update so chips only animate in when they first appear
+    const box = $('#pills'), have = new Map([...box.children].map(el => [el.dataset.pill, el]));
+    let prev = null;
+    for (const [k, c, ic, t] of list) {
+      let el = have.get(k);
+      if (!el) { el = document.createElement('div'); el.dataset.pill = k; el.innerHTML = (ic ? `<i class="ic ${ic}"></i>` : '') + '<span></span>'; }
+      have.delete(k);
+      const cls = 'chip ' + c; if (el.className !== cls) el.className = cls;
+      const sp = el.lastChild; if (sp.textContent !== t) sp.textContent = t;
+      const want = prev ? prev.nextSibling : box.firstChild;
+      if (want !== el) box.insertBefore(el, want);
+      prev = el;
+    }
+    for (const el of have.values()) el.remove();
   }
   pillAction(k) {
     const R = this.R;
-    if (k === 'more') { this.noticesOpen = !this.noticesOpen; this.pillsHtml = null; return; }
+    if (k === 'more') { this.noticesOpen = !this.noticesOpen; this.renderPills(); return; }
     if (k === 'merchant') this.openPanel('merchant');
     else if (k === 'quest' || k === 'orders') this.openPanel('chronicle');
     else if (k === 'market') this.openPanel('nightmarket');
@@ -238,7 +267,7 @@ export class UI {
     el.classList.toggle('hidden', !keys.length || !!this.place);
     const key = keys.map(k => k + types[k].ready + ':' + Math.round(types[k].cd * 10)).join(',');
     if (key === this.abKey) return; this.abKey = key;
-    el.innerHTML = keys.map(k => { const t = types[k], ab = ABILITIES[k]; return `<button class="ab ${t.ready ? '' : 'cool'}" data-ab="${k}" title="${esc(ab.desc)}"><div class="cd" style="height:${t.ready ? 0 : t.cd * 100}%"></div><span>${ab.name}${t.n > 1 ? `<br>${t.ready}/${t.n}` : ''}</span></button>`; }).join('');
+    el.innerHTML = keys.map(k => { const t = types[k], ab = ABILITIES[k]; return `<button class="ab ${t.ready ? '' : 'cool'}" data-ab="${k}" title="${esc(ab.desc)}"><div class="cd" style="height:${t.ready ? 0 : t.cd * 100}%"></div><span class="abn">${ab.name}</span>${t.n > 1 ? `<b class="abc">${t.ready}/${t.n}</b>` : ''}</button>`; }).join('');
   }
   flashPop() {
     const el = document.querySelector('.res[data-r="pop"]');
@@ -403,6 +432,7 @@ export class UI {
     }
     this.place.cx = cellOf(wx) - Math.floor(d.fw / 2);
     this.place.cy = cellOf(wy) - d.fh + 1;
+    this.place.moved = true;
   }
   confirmPlace() {
     const p = this.place; if (!p) return;

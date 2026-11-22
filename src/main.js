@@ -14,7 +14,9 @@ const cam = { x: 0, y: 0, z: 1 };
 
 function resize() {
   dpr = Math.min(window.devicePixelRatio || 1, 3);
-  vw = window.innerWidth; vh = window.innerHeight;
+  // iOS home-screen apps can report a short innerHeight; measure the canvas, which is pinned to the full screen
+  const r = canvas.getBoundingClientRect();
+  vw = Math.max(1, Math.round(r.width || window.innerWidth)); vh = Math.max(1, Math.round(r.height || window.innerHeight));
   canvas.width = Math.round(vw * dpr); canvas.height = Math.round(vh * dpr);
   ctx.imageSmoothingEnabled = false;
   clampCam();
@@ -116,9 +118,48 @@ window.addEventListener('keydown', e => {
 });
 
 // ---------------- placement ghost
+// buildable-space grid: valid anchors are checked a few dozen per frame and cached per placement
+const grid = { key: '', res: new Map() };
+function drawGrid(p, d) {
+  const key = p.type + '|' + realm.home.buildings.length + '|' + realm.home.structs.length + '|' + (realm.state.annexed || []).length;
+  if (grid.key !== key) { grid.key = key; grid.res = new Map(); }
+  const single = d.wall || d.lantern;
+  const x0 = Math.floor(cam.x / T) - d.fw, y0 = Math.floor(cam.y / T) - d.fh;
+  const x1 = Math.ceil((cam.x + vw / cam.z) / T), y1 = Math.ceil((cam.y + vh / cam.z) / T);
+  let budget = 60;
+  const cover = new Set();
+  // check from the camera centre outward so the area you look at fills first
+  const mx = (x0 + x1) / 2, my = (y0 + y1) / 2, todo = [];
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    const k = x + ',' + y; let v = grid.res.get(k);
+    if (v === undefined) {
+      const quick = single ? null : realm.canPlace(p.type, x, y, true);
+      if (quick === false) { grid.res.set(k, false); continue; }
+      todo.push([Math.abs(x - mx) + Math.abs(y - my), x, y, k]); continue;
+    }
+    if (v) for (let yy = y; yy < y + d.fh; yy++) for (let xx = x; xx < x + d.fw; xx++) cover.add(xx + ',' + yy);
+  }
+  todo.sort((a, b) => a[0] - b[0]);
+  for (const [, x, y, k] of todo) { if (budget-- <= 0) break; grid.res.set(k, single ? realm.canPlaceWall(x, y, p.type) : realm.canPlace(p.type, x, y)); }
+  // until the player taps somewhere, park the ghost on the nearest good spot
+  if (!single && !p.moved && grid.res.get(p.cx + ',' + p.cy) !== true) {
+    let best = null, bd = 1e9;
+    for (const [k, v] of grid.res) if (v) { const [x, y] = k.split(',').map(Number); const dd = Math.hypot(x - p.cx, y - p.cy); if (dd < bd) { bd = dd; best = [x, y]; } }
+    if (best && !todo.length) { p.cx = best[0]; p.cy = best[1]; p.moved = true; }
+  }
+  ctx.fillStyle = 'rgba(150,230,120,0.16)'; ctx.strokeStyle = 'rgba(235,255,220,0.35)'; ctx.lineWidth = 1.5;
+  for (const k of cover) { const [x, y] = k.split(',').map(Number); ctx.fillRect(x * T, y * T, T, T); ctx.strokeRect(x * T + 3, y * T + 3, T - 6, T - 6); }
+}
+
 function drawGhost() {
   const p = ui.place; if (!p) return;
   const d = BUILDINGS[p.type];
+  {
+    const z = cam.z * dpr;
+    ctx.setTransform(z, 0, 0, z, Math.round(-cam.x * z), Math.round(-cam.y * z));
+    drawGrid(p, d);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
   if (d.wall || d.lantern) {
     const z = cam.z * dpr;
     ctx.setTransform(z, 0, 0, z, Math.round(-cam.x * z), Math.round(-cam.y * z));
@@ -176,6 +217,9 @@ async function boot() {
   await Promise.all([loadAll(p => { fill.style.width = `calc(${Math.round(p * 100)}% + 20px)`; }), fontP]);
   resize();
   window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', () => setTimeout(resize, 250));
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
+  setTimeout(resize, 400); setTimeout(resize, 1500);
   const info = realm.load();
   ui.bind(realm, view);
   cam.z = Math.max(0.6, Math.min(1, vw / (64 * 15)));

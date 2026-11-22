@@ -15,10 +15,10 @@
   --safe-bot: env(safe-area-inset-bottom, 0px);
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { margin: 0; height: 100%; overflow: hidden; background: var(--water); overscroll-behavior: none; }
-body { font-family: 'BoldPixels', monospace; color: var(--ink); -webkit-user-select: none; user-select: none; -webkit-font-smoothing: none; font-size: 16px; }
+html, body { margin: 0; height: 100%; min-height: 100dvh; overflow: hidden; background: var(--water); overscroll-behavior: none; }
+body { height: 100dvh; font-family: 'BoldPixels', monospace; color: var(--ink); -webkit-user-select: none; user-select: none; -webkit-font-smoothing: none; font-size: 16px; }
 #app { position: fixed; inset: 0; }
-#game { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; image-rendering: pixelated; }
+#game { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; height: 100lvh; touch-action: none; image-rendering: pixelated; }
 .hidden { display: none !important; }
 button { font-family: inherit; color: inherit; font-size: inherit; cursor: pointer; }
 img, .ic { image-rendering: pixelated; }
@@ -111,8 +111,10 @@ img, .ic { image-rendering: pixelated; }
 .navbtn:active, .navbtn.on { border-image-source: url('assets/ui/btn_blue_pressed.png'); }
 .navbtn .ic { width: 30px; height: 30px; }
 .navbtn .dot { position: absolute; }
-#squadbar { align-items: center; }
-#squadAvatars { flex: 1; display: flex; gap: 4px; overflow-x: auto; padding: 2px; }
+#squadbar { align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+#squadbar #squadAvatars { order: 2; flex: 1 1 100%; }
+#squadAvatars { flex: 1; display: flex; gap: 4px; overflow-x: auto; padding: 2px; justify-content: safe center; scrollbar-width: none; }
+#squadAvatars::-webkit-scrollbar { display: none; }
 .sq { position: relative; width: 50px; height: 58px; flex: none; border: 6px solid transparent; border-image: url('assets/ui/paper_dark.png') 64 fill / 6px stretch; padding: 0; background: none; }
 .sq { overflow: hidden; }
 .sq img { width: 100%; height: 38px; object-fit: cover; display: block; transform: scale(1.5); }
@@ -210,12 +212,13 @@ textarea { width: 100%; height: 90px; font-family: monospace; font-size: 11px; b
 
 /* ---------- 3.0 abilities and formations ---------- */
 #abilitybar { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-bot) + 150px); display: flex; flex-wrap: wrap-reverse; justify-content: center; gap: 4px; width: min(96vw, 520px); }
-body.exp #abilitybar { bottom: calc(var(--safe-bot) + 76px); }
-.ab { position: relative; width: 70px; height: 50px; border: 10px solid transparent; border-image: url('assets/ui/btn_red_regular.png') 64 fill / 10px stretch; background: none; color: #fff; font-size: 11px; line-height: 1.05; padding: 0; text-shadow: 0 2px 0 rgba(0,0,0,.35); overflow: hidden; }
+body.exp #abilitybar { bottom: calc(var(--safe-bot) + 124px); }
+.ab { position: relative; min-width: 92px; height: 44px; border: 10px solid transparent; border-image: url('assets/ui/btn_red_regular.png') 64 fill / 10px stretch; color: #fff; font-size: 11px; line-height: 1; padding: 0 4px; text-shadow: 0 2px 0 rgba(0,0,0,.35); overflow: visible; display: flex; align-items: center; justify-content: center; white-space: nowrap; }
+.ab .abn { position: relative; margin-top: -2px; }
+.ab .abc { position: absolute; top: -16px; right: -14px; min-width: 22px; padding: 2px 4px; font-size: 10px; font-weight: normal; color: #fff; background: #3a2f2a; border: 2px solid #eee1c6; border-radius: 9px; text-align: center; }
 .ab:active { border-image-source: url('assets/ui/btn_red_pressed.png'); }
 .ab.cool { filter: grayscale(.9) brightness(.85); }
 .ab .cd { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.45); }
-.ab span { position: relative; }
 #squadbar .btn.small { padding: 0 2px; min-width: 40px; }
 .chart { width: 100%; height: 230px; display: block; border: 6px solid transparent; border-image: url('assets/ui/paper_dark.png') 64 fill / 6px stretch; image-rendering: pixelated; cursor: pointer; }
 
@@ -239,3 +242,12 @@ body.exp #abilitybar { bottom: calc(var(--safe-bot) + 76px); }
 .wood { background: linear-gradient(#a47658, #a47658) center / calc(100% - 16px) calc(100% - 16px) no-repeat; }
 .sq.sel { background-image: linear-gradient(#4a6982, #4a6982); }
 #statusbar.night { color: #dfe6ff; }
+
+/* buttons press in a little */
+.btn, .navbtn, .ab, .chip, .sq { transition: transform .06s ease-out, filter .12s; }
+.btn:active:not(:disabled), .ab:active, .chip:active, .sq:active { transform: translateY(2px) scale(.97); }
+.navbtn:active { transform: translateY(2px); }
+.navbtn.on .ic { animation: navPop .25s ease-out; }
+@keyframes navPop { 50% { transform: scale(1.18) translateY(-2px); } }
+.chip { animation: chipIn .25s ease-out; }
+@keyframes chipIn { from { transform: translateX(-12px); opacity: 0; } }

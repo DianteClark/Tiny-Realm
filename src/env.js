@@ -101,6 +101,27 @@ export class Environment {
     }
     if (n <= 0.05 || scene.kind !== 'home') return;
     ctx.globalCompositeOperation = 'lighter';
+    // fireflies drift around the trees on dry, warm nights
+    if (n > 0.3 && !this.w.rain && this.season.key !== 'winter') {
+      const c = this.R.castle, t = scene.time; let k = 0;
+      for (const tr of scene.trees) {
+        if (k > 70) break;
+        const h = (tr.cx * 73856093 ^ tr.cy * 19349663) >>> 0;
+        const x0 = tr.cx * 64 + 32, y0 = tr.cy * 64;
+        if (Math.abs(x0 - c.x) > 1500 || Math.abs(y0 - c.y) > 1200) continue;
+        k++;
+        const ph = (h % 1000) / 159;
+        for (let j = 0; j < 1 + (h % 2); j++) {
+        const pj = ph + j * 2.3;
+        const x = x0 + Math.sin(t * 0.7 + pj) * 40 + Math.sin(t * 1.9 + pj * 2) * 8, y = y0 + Math.cos(t * 0.5 + pj) * 26 - 10;
+        const a = (0.55 + 0.45 * Math.sin(t * 3 + pj * 3)) * n;
+        const g = ctx.createRadialGradient(x, y, 0, x, y, 10);
+        g.addColorStop(0, `rgba(240,255,160,${a})`); g.addColorStop(0.35, `rgba(200,255,110,${0.45 * a})`); g.addColorStop(1, 'rgba(190,255,110,0)');
+        ctx.fillStyle = g; ctx.fillRect(x - 10, y - 10, 20, 20);
+        ctx.fillStyle = `rgba(255,255,210,${a})`; ctx.fillRect(Math.round(x) - 1, Math.round(y) - 1, 3, 3);
+        }
+      }
+    }
     for (const b of scene.buildings) {
       if (!b.done || b.ruined || (b.def.wall && !b.def.lantern)) continue;
       const r = b.type === 'castle' ? 170 : b.def.lantern ? 5 * 64 : 90;

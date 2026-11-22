@@ -374,12 +374,21 @@ export class Realm {
         u.task = 'go'; u.working = false;
       }
       if (!u.task) {
-        if (!u.setPath(center(u.node.cx), center(u.node.cy), scene.adjacentGoal([[u.node.cx, u.node.cy]]))) { u.node.tried = u.id; this.releaseNode(u); return; }
+        // stand beside the node, not above or diagonal to it, so the swing lines up
+        const ncx = u.node.cx, ncy = u.node.cy;
+        const side = (x, y) => y === ncy && Math.abs(x - ncx) === 1;
+        if (!u.setPath(center(ncx), center(ncy), side) && !u.setPath(center(ncx), center(ncy), scene.adjacentGoal([[ncx, ncy]]))) { u.node.tried = u.id; this.releaseNode(u); return; }
         u.task = 'go';
       }
       if (u.task === 'go') { if (u.stepPath(dt)) { u.task = 'work'; u.workT = (job === 'wood' ? 3.2 : 3.6) * this.nightPace(u); } return; }
       if (u.task === 'work') {
         u.working = true; u.flip = center(u.node.cx) < u.x;
+        { // ease in to striking distance: beside the trunk or rock, level with its base
+          const nx = center(u.node.cx), ny = center(u.node.cy);
+          const dx = u.x < nx ? -1 : 1;
+          const tx = nx + dx * (job === 'wood' ? 36 : 40), ty = ny + (job === 'wood' ? 24 : 6);
+          const k = Math.min(1, dt * 6); u.x += (tx - u.x) * k; u.y += (ty - u.y) * k;
+        }
         if (job === 'wood' && Math.random() < dt * 2) u.node.shake = 0.2;
         u.sndT = (u.sndT || 0) - dt;
         if (u.sndT <= 0) { u.sndT = 0.6; this.sfx(job === 'wood' ? 'chop' : 'mine', u, scene); }
@@ -532,7 +541,7 @@ export class Realm {
     return best;
   }
   countOf(type) { return this.home.buildings.filter(b => b.type === type).length; }
-  canPlace(type, cx, cy) {
+  canPlace(type, cx, cy, quick = false) {
     const d = BUILDINGS[type], m = this.home.map;
     if (this.slam) return false; // land is being annexed
     let lvl = null;
@@ -558,6 +567,7 @@ export class Realm {
     let open = false;
     for (let x = cx; x < cx + d.fw; x++) if (m.walkable(x, cy + d.fh) && m.level(x, cy + d.fh) === lvl) open = true;
     if (!open) return false;
+    if (quick) return true;
     // never wall off the castle: check reachability after placement
     for (let y = cy; y < cy + d.fh; y++) for (let x = cx; x < cx + d.fw; x++) m.block[m.i(x, y)]++;
     const re = reachable(m, this.door[0], this.door[1]);
@@ -755,7 +765,12 @@ export class Realm {
         b.buildEnd = 0; b.buildTotal = 0;
         S.stats['built_' + b.type] = (S.stats['built_' + b.type] || 0) + 1;
         b.pop = 1;
-        if (!quiet) { this.ui.toast(`${BUILDINGS[b.type].name} completed.`); h.fxAt('dust2', b.x, b.y, { scale: 1.8 }); this.sfx('complete'); }
+        if (!quiet) {
+          this.ui.toast(`${BUILDINGS[b.type].name} completed.`); h.fxAt('dust2', b.x, b.y, { scale: 1.8 }); this.sfx('complete');
+          b.pop = 0.45; // squash-and-stretch on completion
+          for (let i = 0; i < 3; i++) h.fxAt('dust1', b.x + (i - 1) * b.fw * 22, b.y + 4, { scale: 1.1 });
+          if (!b.def.wall && !b.def.lantern) h.floatText(BUILDINGS[b.type].name, b.x, b.y - 140, '#ffe066', 16);
+        }
         this.assignJobs();
       }
       if (b.upEnd && now >= b.upEnd) this.finishBuildingUpgrade(b, quiet);
