@@ -279,3 +279,8 @@ body.exp #abilitybar { bottom: calc(var(--safe-bot) + 124px); }
 .mood summary { cursor: pointer; opacity: .8; }
 .mood .why { display: flex; justify-content: space-between; margin: 2px 0; }
 .mood .why b { font-weight: normal; color: #9be37b; } .mood .why b.neg { color: #ff8a80; }
+/* long dialogs scroll inside, keeping the title ribbon and buttons on screen */
+#modal .dialog { max-height: calc(100dvh - var(--safe-top) - var(--safe-bot) - 60px); display: flex; flex-direction: column; overflow: visible; }
+#modal .dialog .ribbon { flex: none; margin-top: -26px; }
+#modalBody { overflow-y: auto; min-height: 0; flex: 1 1 auto; overscroll-behavior: contain; }
+#modalBtns { flex: none; }
