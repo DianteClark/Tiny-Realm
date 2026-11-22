@@ -3,7 +3,7 @@ import { T, generateIsland, rng, hashStr, reachable, boatSpots, K_LOW, K_WATER }
 import * as Annex from './annex.js';
 import { Scene, Unit, Building, cellOf } from './world.js';
 import {
-  UNITS, ENEMIES, BUILDINGS, TIERS, TRAITS, COMMON_TRAITS, XP_LEVELS, MAX_LEVEL, RELICS, REGIONS,
+  UNITS, ENEMIES, BUILDINGS, TIERS, TRAITS, COMMON_TRAITS, XP_LEVELS, MAX_LEVEL, RELICS, REGIONS, levelCap, PROMOTIONS, PROMO_COST,
   islandInfo, FIRST_NAMES, EPITHETS, QUESTS, endlessQuest, renownCost, RENOWN_BONUS,
   maxBuildingLevel, upgradeCost, upgradeTime, levelHp, levelEffects, castlePop,
   RIVALS, rivalDef, rivalRoster, CAMP_STRUCTS, PROVINCES, provinceOf, NIGHT_CREATURES,
@@ -74,6 +74,7 @@ export class Realm {
     this.state = Object.assign(freshState(), s || {});
     this.state.stats = Object.assign(freshState().stats, this.state.stats || {});
     this.state.timers = Object.assign(freshState().timers, this.state.timers || {});
+    for (const r of [...(this.state.soldiers || []), ...(this.state.fallen || [])]) if (r.avatar === 'av_horseman') r.avatar = 'av_horseman1';
     for (const r of this.state.soldiers || []) if (/ undefined$/.test(r.name)) r.name = r.name.replace(/ undefined$/, ' ' + EPITHETS[r.id % EPITHETS.length]);
     this.state.daily = Object.assign(freshState().daily, this.state.daily || {});
     this.state.rivals = this.state.rivals || {};
@@ -171,6 +172,41 @@ export class Realm {
     const x = EXCHANGE.find(e => e.id === id); if (!x) return;
     if (!this.pay(x.give)) return 'Not enough to trade.';
     this.addAll(x.get); this.sfx('coin');
+  }
+  promoteBlock(rec, to) {
+    if (!rec || rec.promoted) return 'Already promoted.';
+    if (rec.type === 'king' || rec.type === 'pawn') return 'The King needs no promotion.';
+    if (rec.level < 10) return 'Reach level 10 first.';
+    if (rec.status !== 'home') return 'They must be at home.';
+    if (to && !(PROMOTIONS[rec.type] || []).some(p => p.to === to)) return 'That path is not open to them.';
+    if (to && UNITS[to].pop > UNITS[rec.type].pop && this.popUsed() + UNITS[to].pop - UNITS[rec.type].pop > this.popCap()) return 'No room for a mount. Build more Houses.';
+    if (!this.canAfford(PROMO_COST)) return 'Not enough to pay.';
+    return null;
+  }
+  promote(rec, to) {
+    const err = this.promoteBlock(rec, to); if (err) return err;
+    this.pay(PROMO_COST);
+    const S = this.state, path = to && (PROMOTIONS[rec.type] || []).find(p => p.to === to);
+    rec.promoted = true; rec.title = path ? path.title : 'Elite';
+    const old = this.home.units.find(u => u.rec === rec && u.alive);
+    if (path) {
+      rec.type = to;
+      const av = UNITS[to].avatar; rec.avatar = /^h\d+$/.test(av) ? 'av_' + av : `av_${av}1`;
+    }
+    // a rare trait to mark the occasion
+    const rare = ['champion', 'trollbane'].filter(t => !rec.traits.includes(t));
+    if (rare.length && rec.traits.length < 5) rec.traits.push(rare[0]);
+    rec.hp = undefined;
+    let at = null;
+    if (old) { at = { x: old.x, y: old.y }; old.dead = true; old.hp = 0; this.home.selected.delete(old); }
+    const u = this.spawnSoldier(rec, true, at || undefined);
+    if (u) { u.hp = u.maxHp; u.home = at ? { ...at } : u.home; this.home.fxAt('healFx', u.x, u.y, { scale: 1.6 }); this.home.floatText(rec.title, u.x, u.y - 100, '#f2c14e', 18); }
+    S.stats.promotions = (S.stats.promotions || 0) + 1;
+    this.sfx('fanfare'); this.shake(3);
+    this.ui.banner('A soldier is promoted', `${rec.name} is now ${path ? 'a ' + UNITS[to].name : 'an Elite ' + UNITS[rec.type].name}. +20% health and damage, and they can now grow to level 15.`, 'gold');
+    this.log(`${rec.name} was promoted to ${rec.title}.`);
+    this.save();
+    return null;
   }
   gearMods(rec) { return this.state && this.state.gear ? Gear.mods(this.state, rec) : {}; }
   dropGear(level, opts = {}) { return Gear.grant(this, Gear.rollItem(this.state, level, opts), opts.quiet); }
@@ -338,7 +374,7 @@ export class Realm {
     const name = type === 'king' ? 'King ' + FIRST_NAMES[Math.floor(r() * FIRST_NAMES.length)] :
       FIRST_NAMES[Math.floor(r() * FIRST_NAMES.length)] + ' ' + EPITHETS[Math.floor(r() * EPITHETS.length)];
     const avKind = UNITS[type].avatar;
-    const avatar = avKind.startsWith('h') ? 'av_' + avKind : `av_${avKind}1`;
+    const avatar = /^h\d+$/.test(avKind) ? 'av_' + avKind : `av_${avKind}1`;
     const traits = [COMMON_TRAITS[Math.floor(r() * COMMON_TRAITS.length)]];
     const rec = { id: S.nextId++, name, type, level: 1, xp: 0, traits, kills: 0, avatar, status: 'home', joined: Date.now() };
     S.soldiers.push(rec);
@@ -1227,11 +1263,11 @@ export class Realm {
     }
   }
   grantXp(scene, u, xp) {
-    const rec = u.rec; if (!rec || rec.level >= MAX_LEVEL) return;
+    const rec = u.rec; if (!rec || rec.level >= levelCap(rec)) return;
     const holx = this.holiday();
     rec.xp += xp * ((u.xpMul || 1) + this.env.xpMul() + (this.bonus().xp || 0) + ((holx && holx.xp) || 0));
     let up = false;
-    while (rec.level < MAX_LEVEL && rec.xp >= XP_LEVELS[rec.level + 1]) {
+    while (rec.level < levelCap(rec) && rec.xp >= XP_LEVELS[rec.level + 1]) {
       rec.level++; up = true;
       if (rec.level % 3 === 0 && rec.traits.length < 4) {
         const options = COMMON_TRAITS.filter(t => !rec.traits.includes(t));
@@ -1240,6 +1276,7 @@ export class Realm {
         this.ui.toast(`${rec.name} gained the ${TRAITS[t].name} trait.`);
       }
     }
+    if (up && rec.level === 10 && !rec.promoted && rec.type !== 'king') this.ui.toast(`${rec.name} has reached level 10 and can be promoted. Open their Gear sheet in Army.`, 'gold');
     if (up) {
       const f = u.hp / u.maxHp; u.applyStats(); u.hp = Math.min(u.maxHp, u.maxHp * f + u.maxHp * 0.2);
       scene.floatText('Level ' + rec.level, u.x, u.y - 90, '#ffe066');

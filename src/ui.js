@@ -1,6 +1,6 @@
 // HUD, panels and dialogs. Plain DOM styled with the pack's UI art.
 import { SHEETS } from './assets.js';
-import { UNITS, ENEMIES, BUILDINGS, TIERS, TRAITS, RELICS, XP_LEVELS, MAX_LEVEL, islandInfo, renownCost, STORY, upgradeCost, upgradeTime, describeLevel, levelEffects, ABILITIES, RIVALS, rivalDef, provinceOf } from './data.js';
+import { levelCap, PROMOTIONS, PROMO_COST, UNITS, ENEMIES, BUILDINGS, TIERS, TRAITS, RELICS, XP_LEVELS, MAX_LEVEL, islandInfo, renownCost, STORY, upgradeCost, upgradeTime, describeLevel, levelEffects, ABILITIES, RIVALS, rivalDef, provinceOf } from './data.js';
 const FORMATIONS = ['Loose', 'Line', 'Wedge', 'Column'];
 import { Unit, Building, Struct, cellOf } from './world.js';
 import { T } from './terrain.js';
@@ -540,16 +540,16 @@ export class UI {
 
   soldierCard(rec, opts = {}) {
     const U = UNITS[rec.type];
-    const next = rec.level < MAX_LEVEL ? XP_LEVELS[rec.level + 1] : null;
+    const next = rec.level < levelCap(rec) ? XP_LEVELS[rec.level + 1] : null;
     const prev = XP_LEVELS[rec.level];
     const xpPct = next ? Math.min(100, (rec.xp - prev) / (next - prev) * 100) : 100;
-    const u = this.R.home.units.find(x => x.rec === rec) || (this.R.exp && this.R.exp.units.find(x => x.rec === rec));
+    const u = this.R.home.units.find(x => x.rec === rec && x.alive && !x.dead) || (this.R.exp && this.R.exp.units.find(x => x.rec === rec && x.alive));
     const hpPct = u ? u.hp / u.maxHp * 100 : 100;
     const status = rec.status === 'away' ? 'On expedition' : rec.status === 'wounded' ? `Wounded, ${time((rec.woundedUntil - Date.now()) / 1000)}` : 'At home';
     return `<div class="card ${opts.pick ? 'light' : ''}" ${opts.pick ? `data-act="pick:${rec.id}"` : ''}>
       ${opts.pick ? `<button class="check ${this.squadPick.has(rec.id) ? 'on' : ''}"></button>` : ''}
       <div class="thumb"><img src="${src(rec.avatar)}" class="av" alt=""></div>
-      <div class="grow"><h3>${esc(rec.name)}</h3><p>Level ${rec.level} ${U.name} - ${rec.kills} kills - ${status}</p>
+      <div class="grow"><h3>${rec.promoted ? `<span class="rank">${esc(rec.title || 'Elite')}</span> ` : ''}${esc(rec.name)}</h3><p>Level ${rec.level} ${U.name} - ${rec.kills} kills - ${status}</p>
         <div>${rec.traits.map(t => `<span class="trait ${TRAITS[t].rare ? 'rare' : ''}" title="${TRAITS[t].desc}">${TRAITS[t].name}</span>`).join('')}</div>
         ${this.gearRow(rec)}
         <div class="hpbar"><i style="width:${hpPct}%"></i></div><div class="xpbar"><i style="width:${xpPct}%"></i></div></div>
@@ -574,6 +574,14 @@ export class UI {
     const cur = Gear.itemById(S, rec.gear && rec.gear[slot]);
     let html = this.soldierCard(rec, { noButtons: true });
     html += `<div class="row-btns"><button class="btn small" data-act="autoeq:${rec.id}">Equip best</button></div>`;
+    if (!rec.promoted && rec.type !== 'king') {
+      const paths = PROMOTIONS[rec.type] || [{ to: '', title: 'Elite', desc: `Becomes an Elite ${UNITS[rec.type].name}, keeping their look and ability.` }];
+      html += `<p class="section-title">Promotion</p>`;
+      if (rec.level < 10) html += `<p style="text-align:center;font-size:13px">At level 10 this soldier can be promoted: +20% health and damage, and room to grow to level 15. Level ${rec.level} now.</p>`;
+      else html += paths.map(p => { const blk = R.promoteBlock(rec, p.to); return `<div class="card light"><div class="thumb"><img src="${src(p.to ? 'av_' + (/^h\d+$/.test(UNITS[p.to].avatar) ? UNITS[p.to].avatar : UNITS[p.to].avatar + '1') : rec.avatar)}" class="av" alt=""></div>
+        <div class="grow"><h3>${p.title}</h3><p>${p.desc} Also +20% health and damage, a rare trait, and levels up to 15.</p>${this.costHtml(PROMO_COST)}${blk && blk !== 'Not enough to pay.' ? `<p class="muted">${esc(blk)}</p>` : ''}</div>
+        <button class="btn small" data-act="promote:${rec.id}:${p.to}" ${blk ? 'disabled' : ''}>Promote</button></div>`; }).join('');
+    }
     html += `<p class="section-title">Wearing</p>` + (cur ? this.itemCard(cur, `<button class="btn small red" data-act="uneq:${rec.id}:${slot}">Remove</button>`) : '<p style="text-align:center;font-size:13px">Nothing in this slot.</p>');
     const free = (S.gear || []).filter(g => g.slot === slot && g !== cur).sort((a, b) => Gear.score(b) - Gear.score(a));
     html += `<p class="section-title">In the armoury (${free.length})</p>`;
@@ -822,7 +830,7 @@ export class UI {
     // village services (3.4)
     if (b.done && !b.ruined && b.type === 'tavern') {
       const t = R.tavernHero(), U = UNITS[t.type];
-      html += `<p class="section-title">Today at the Tavern</p><div class="card light"><div class="thumb"><img src="${src('av_' + U.avatar + (U.avatar.startsWith('h') ? '' : '1'))}" class="av" alt=""></div>
+      html += `<p class="section-title">Today at the Tavern</p><div class="card light"><div class="thumb"><img src="${src('av_' + U.avatar + (/^h\d+$/.test(U.avatar) ? '' : '1'))}" class="av" alt=""></div>
         <div class="grow"><h3>${esc(t.name)}</h3><p>Level ${t.level} ${U.name}, two traits, arrives wearing rare gear or better.</p>${t.hired ? '<p class="muted">Already hired. Someone new tomorrow.</p>' : this.costHtml(R.tavernCost())}</div>
         ${t.hired ? '' : `<button class="btn small" data-act="hire">Hire</button>`}</div>`;
     }
@@ -938,6 +946,7 @@ export class UI {
     if (k === 'tstop') { R.trade.stop(+x); return this.refresh(); }
     if (k === 'hire') { err(R.hireHero()); return this.refresh(); }
     if (k === 'xchg') { err(R.exchange(x)); return this.refresh(); }
+    if (k === 'promote') { const rec = R.state.soldiers.find(s => s.id === +x); err(R.promote(rec, y || null)); return this.refresh(); }
     if (k === 'hero') { const rec = R.state.soldiers.find(s => s.id === +x); if (rec) this.openPanel('hero', rec); return; }
     if (k === 'eq') { const rec = R.state.soldiers.find(s => s.id === +x); Gear.equip(R, rec, +y); return this.refresh(); }
     if (k === 'uneq') { const rec = R.state.soldiers.find(s => s.id === +x); Gear.unequip(R, rec, y); return this.refresh(); }

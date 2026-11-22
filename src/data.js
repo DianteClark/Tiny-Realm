@@ -97,7 +97,15 @@ export const TRAITS = {
 };
 export const COMMON_TRAITS = Object.keys(TRAITS).filter(k => !TRAITS[k].rare);
 
-export const XP_LEVELS = [0, 0, 30, 80, 160, 280, 450, 700, 1050, 1500, 2100];
+export const XP_LEVELS = [0, 0, 30, 80, 160, 280, 450, 700, 1050, 1500, 2100, 2900, 3900, 5100, 6600, 8400];
+// 3.5 promotions: level 10 soldiers can be promoted once; promoted soldiers can reach level 15
+export const levelCap = rec => (rec && rec.promoted ? 15 : 10);
+export const PROMOTIONS = {
+  warrior: [{ to: 'swordsman', title: 'Knight', desc: 'Becomes a Swordsman: a heavy blade that cleaves, and the Whirlwind ability.' }, { to: 'berserker', title: 'Berserker', desc: 'Becomes a Berserker: fast, furious strikes and the Bloodrage ability.' }],
+  lancer: [{ to: 'horseman', title: 'Cavalier', desc: 'Becomes a Horseman: fast charges and the Trample ability.' }],
+};
+export const PROMO_COST = { gold: 600, meat: 300 };
+export const ELITE = { hp: 0.2, dmg: 0.2 };
 export const MAX_LEVEL = 10;
 export const LEVEL_BONUS = 0.08; // per level above 1, to hp and damage
 
