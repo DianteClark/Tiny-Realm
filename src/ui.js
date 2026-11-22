@@ -1,6 +1,7 @@
 // HUD, panels and dialogs. Plain DOM styled with the pack's UI art.
 import { SHEETS } from './assets.js';
-import { UNITS, ENEMIES, BUILDINGS, TIERS, TRAITS, RELICS, XP_LEVELS, MAX_LEVEL, islandInfo, renownCost, STORY, upgradeCost, upgradeTime, describeLevel, levelEffects } from './data.js';
+import { UNITS, ENEMIES, BUILDINGS, TIERS, TRAITS, RELICS, XP_LEVELS, MAX_LEVEL, islandInfo, renownCost, STORY, upgradeCost, upgradeTime, describeLevel, levelEffects, ABILITIES } from './data.js';
+const FORMATIONS = ['Loose', 'Line', 'Wedge', 'Column'];
 import { Unit, Building, Struct, cellOf } from './world.js';
 import { T } from './terrain.js';
 import { MAJOR } from './events.js';
@@ -36,6 +37,18 @@ export class UI {
     $('#btnSquadAll').onclick = () => this.selectAll();
     $('#btnRetreat').onclick = () => this.confirm('Retreat?', 'Your squad sails home with no loot from this island.', 'Retreat', () => this.R.endExpedition('retreat'));
     $('#btnPlaceOk').onclick = () => this.confirmPlace();
+    this.formation = localStorage.getItem('tinyrealm.formation') || 'Loose';
+    const cycleForm = () => { this.formation = FORMATIONS[(FORMATIONS.indexOf(this.formation) + 1) % FORMATIONS.length]; localStorage.setItem('tinyrealm.formation', this.formation); this.toast(`Formation: ${this.formation}. Melee forms the front, archers and monks the rear.`); this.syncFormButtons(); };
+    $('#btnForm').onclick = cycleForm; $('#btnSquadForm').onclick = cycleForm;
+    this.syncFormButtons();
+    $('#btnSpeed').onclick = () => { this.R.speed = this.R.speed === 2 ? 1 : 2; $('#btnSpeed').textContent = this.R.speed + 'x'; };
+    $('#abilitybar').addEventListener('click', e => {
+      const b = e.target.closest('[data-ab]'); if (!b) return;
+      const sc = this.R.scene; let used = 0;
+      for (const u of sc.selected) if (u.type === b.dataset.ab && sc.useAbility(u)) used++;
+      if (!used) this.toast('Not ready yet.');
+      this.abKey = null;
+    });
     $('#btnPlaceCancel').onclick = () => this.cancelPlace();
     this.body.addEventListener('click', e => { const el = e.target.closest('[data-act]'); if (el && !el.disabled) this.act(el.dataset.act, el); });
     this.tabs.addEventListener('click', e => { const el = e.target.closest('[data-tab]'); if (el) { this.tab = el.dataset.tab; this.renderPanel(); } });
@@ -177,6 +190,17 @@ export class UI {
     else if (k === 'upgrade') this.openPanel('building', R.castle);
     else if (k === 'raidsoon' || k === 'event') this.toast('Keep soldiers near the castle and towers on high ground.');
   }
+  syncFormButtons() { $('#btnForm').textContent = this.formation; $('#btnSquadForm').textContent = this.formation; }
+  renderAbilities() {
+    const sc = this.R.scene, el = $('#abilitybar');
+    const types = {};
+    for (const u of sc.selected) if (ABILITIES[u.type] && u.alive) { const t = types[u.type] || (types[u.type] = { n: 0, ready: 0, cd: 0 }); t.n++; if (u.abT <= 0) t.ready++; else t.cd = Math.max(t.cd, u.abT / ABILITIES[u.type].cd); }
+    const keys = Object.keys(types);
+    el.classList.toggle('hidden', !keys.length || !!this.place);
+    const key = keys.map(k => k + types[k].ready + ':' + Math.round(types[k].cd * 10)).join(',');
+    if (key === this.abKey) return; this.abKey = key;
+    el.innerHTML = keys.map(k => { const t = types[k], ab = ABILITIES[k]; return `<button class="ab ${t.ready ? '' : 'cool'}" data-ab="${k}" title="${esc(ab.desc)}"><div class="cd" style="height:${t.ready ? 0 : t.cd * 100}%"></div><span>${ab.name}${t.n > 1 ? `<br>${t.ready}/${t.n}` : ''}</span></button>`; }).join('');
+  }
   flashPop() {
     const el = document.querySelector('.res[data-r="pop"]');
     el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
@@ -189,6 +213,7 @@ export class UI {
     $('#selbar').classList.toggle('hidden', !show || !!this.R.exp);
     if (show) $('#selText').textContent = n === 1 ? [...sc.selected][0].rec.name : `${n} soldiers`;
     if (this.R.exp) this.renderSquad();
+    this.renderAbilities();
   }
   selectAll() {
     const sc = this.R.scene;
@@ -203,6 +228,8 @@ export class UI {
     $('#squadbar').classList.toggle('hidden', !exp);
     $('#exphud').classList.toggle('hidden', !exp);
     $('#subbar').classList.toggle('hidden', exp);
+    document.body.classList.toggle('exp', exp);
+    this.R.speed = 1; $('#btnSpeed').textContent = '1x';
     $('#selbar').classList.add('hidden');
     this.view.focusScene();
     if (exp) this.renderSquad(true);
@@ -265,16 +292,47 @@ export class UI {
   order(o) {
     const sc = this.R.scene;
     const us = [...sc.selected];
+    if (o.type !== 'move') {
+      for (const u of us) { u.target = null; u.stop(); u.giveUp = 0; u.order = { type: 'attack', target: o.target }; }
+      return;
+    }
+    const spots = this.formationSpots(us, o.x, o.y);
+    let failed = 0;
     us.forEach((u, i) => {
       u.target = null; u.stop(); u.giveUp = 0;
-      if (o.type === 'move') {
-        const ring = i === 0 ? [0, 0] : [Math.cos(i * 2.4) * (22 + i * 4), Math.sin(i * 2.4) * (16 + i * 3)];
-        let x = o.x + ring[0], y = o.y + ring[1];
-        if (!sc.map.walkable(cellOf(x), cellOf(y)) && !u.flying) { x = o.x; y = o.y; }
-        u.order = { type: 'move', x, y };
-        if (!u.setPath(x, y)) { u.order = null; if (i === 0) this.toast('They cannot reach that spot.'); }
-      } else u.order = { type: 'attack', target: o.target };
+      let [x, y] = spots.get(u);
+      if (!sc.map.walkable(cellOf(x), cellOf(y)) && !u.flying) { x = o.x; y = o.y; }
+      u.order = { type: 'move', x, y };
+      if (!u.setPath(x, y)) { u.order = null; failed++; }
     });
+    if (failed === us.length) this.toast('They cannot reach that spot.');
+  }
+  // Melee in front, ranged and monks behind, facing the direction of travel
+  formationSpots(us, tx, ty) {
+    const out = new Map();
+    const cx = us.reduce((a, u) => a + u.x, 0) / us.length, cy = us.reduce((a, u) => a + u.y, 0) / us.length;
+    let fx = tx - cx, fy = ty - cy; const fl = Math.hypot(fx, fy) || 1; fx /= fl; fy /= fl;
+    const px = -fy, py = fx; // sideways
+    const back = u => !!(u.def.proj || u.def.heal);
+    const sorted = [...us].sort((a, b) => back(a) - back(b));
+    const S = 44;
+    const f = this.formation;
+    sorted.forEach((u, i) => {
+      let side = 0, depth = 0;
+      if (f === 'Line') {
+        const front = sorted.filter(v => !back(v)), rear = sorted.filter(back);
+        const row = back(u) ? rear : front, k = row.indexOf(u);
+        side = (k - (row.length - 1) / 2); depth = back(u) && front.length ? -1 : 0;
+      } else if (f === 'Wedge') {
+        const k = i, ring = Math.ceil(k / 2); side = k === 0 ? 0 : (k % 2 ? -ring : ring) * 0.8; depth = -ring * 0.8;
+      } else if (f === 'Column') {
+        side = (i % 2) - 0.5; depth = -Math.floor(i / 2);
+      } else {
+        const a = i * 2.4, r = i ? 0.5 + i * 0.12 : 0; side = Math.cos(a) * r; depth = Math.sin(a) * r;
+      }
+      out.set(u, [tx + (px * side + fx * depth) * S, ty + (py * side + fy * depth) * S]);
+    });
+    return out;
   }
 
   // ------------------------------------------------------------ placement

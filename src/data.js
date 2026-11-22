@@ -214,3 +214,17 @@ export function describeLevel(type, L) {
   return '';
 }
 export const castlePop = tier => 6 + tier * 2;
+
+// ---------- hero abilities (3.0) ----------
+// cd seconds, dur seconds for buffs. Triggered from the ability bar when units are selected.
+export const ABILITIES = {
+  warrior: { name: 'Shield Wall', cd: 25, dur: 6, desc: 'Takes 60% less damage for 6 seconds.' },
+  archer: { name: 'Volley', cd: 20, desc: 'Rains 6 arrows on the nearest pack of foes.' },
+  lancer: { name: 'Charge', cd: 18, dur: 4, desc: 'Doubles speed; the next 3 strikes deal double damage.' },
+  monk: { name: 'Blessing', cd: 30, desc: 'Heals every ally within 4 tiles for 60.' },
+  swordsman: { name: 'Whirlwind', cd: 16, desc: 'Strikes every foe around him for 1.6x damage.' },
+  berserker: { name: 'Bloodrage', cd: 28, dur: 8, desc: 'Attacks 60% faster and heals from damage dealt.' },
+  horseman: { name: 'Trample', cd: 22, dur: 3, desc: 'Gallops through foes, trampling each one.' },
+  catapult: { name: 'Firestone', cd: 30, desc: 'The next stone bursts into flames that burn the area.' },
+  king: { name: 'Rally', cd: 45, dur: 10, desc: 'Allies within 6 tiles deal 25% more damage and heal 20%.' },
+};

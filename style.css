@@ -199,3 +199,13 @@ textarea { width: 100%; height: 90px; font-family: monospace; font-size: 11px; b
 .pill[data-pill="quest"] { max-width: 62vw; overflow: hidden; text-overflow: ellipsis; display: inline-block; line-height: 25px; }
 .btn, .navbtn, .tiny-btn { transition: transform .06s; }
 .btn:active:not(:disabled), .navbtn:active, .tiny-btn:active { transform: scale(.95); }
+
+/* ---------- 3.0 abilities and formations ---------- */
+#abilitybar { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-bot) + 150px); display: flex; flex-wrap: wrap-reverse; justify-content: center; gap: 4px; width: min(96vw, 520px); }
+body.exp #abilitybar { bottom: calc(var(--safe-bot) + 76px); }
+.ab { position: relative; width: 70px; height: 50px; border: 10px solid transparent; border-image: url('assets/ui/btn_red_regular.png') 64 fill / 10px stretch; background: none; color: #fff; font-size: 11px; line-height: 1.05; padding: 0; text-shadow: 0 2px 0 rgba(0,0,0,.35); overflow: hidden; }
+.ab:active { border-image-source: url('assets/ui/btn_red_pressed.png'); }
+.ab.cool { filter: grayscale(.9) brightness(.85); }
+.ab .cd { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.45); }
+.ab span { position: relative; }
+#squadbar .btn.small { padding: 0 2px; min-width: 40px; }

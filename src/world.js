@@ -1,7 +1,7 @@
 // Scenes hold a map plus every live object on it, run the AI and draw it all.
 import { SHEETS, drawSprite, animDuration } from './assets.js';
 import { T, findPath, renderTerrain, foamCells, rng, K_WATER } from './terrain.js';
-import { UNITS, ENEMIES, BUILDINGS, CAMP_STRUCTS, TRAITS, levelEffects } from './data.js';
+import { UNITS, ENEMIES, BUILDINGS, CAMP_STRUCTS, TRAITS, levelEffects, ABILITIES } from './data.js';
 
 const WATER = '#47aba9';
 let NEXT_ID = 1;
@@ -28,6 +28,7 @@ export class Unit {
     this.ox = (Math.random() - 0.5) * 18; this.oy = (Math.random() - 0.5) * 14;
     this.campId = opts.campId ?? null; this.mode = opts.mode || 'guard';
     this.charged = true;
+    this.buffs = {}; this.abT = 0; this.trampled = new Set();
     this.applyStats(opts);
     this.hp = opts.hp != null ? Math.min(opts.hp, this.maxHp) : this.maxHp;
   }
@@ -87,7 +88,7 @@ export class Unit {
     if (this.flyTo && this.path.length === 1) { tx = this.flyTo.x; ty = this.flyTo.y; }
     else { const [cx, cy] = this.path[0]; tx = center(cx) + (this.path.length === 1 ? this.ox : 0); ty = center(cy) + 8 + (this.path.length === 1 ? this.oy : 0); }
     const dx = tx - this.x, dy = ty - this.y, d = Math.hypot(dx, dy);
-    const sp = this.speed * (this.cursed > 0 ? 0.5 : 1) * dt;
+    const sp = this.speed * (this.cursed > 0 ? 0.5 : 1) * this.speedMul * dt;
     if (Math.abs(dx) > 1) this.flip = dx < 0;
     if (d <= sp) { this.x = tx; this.y = ty; this.path.shift(); }
     else { this.x += dx / d * sp; this.y += dy / d * sp; }
@@ -111,6 +112,8 @@ export class Unit {
     return r + (t.big ? 18 : 0);
   }
   canAttack() { return this.atkT <= 0 && this.atkAnim < 0 && this.cursed <= 0; }
+  buff(k) { return (this.buffs[k] || 0) > 0; }
+  get speedMul() { return (this.buff('charge') ? 2 : 1) * (this.buff('trample') ? 2.2 : 1) * (this.scene.game.weatherSpeed ? this.scene.game.weatherSpeed(this) : 1); }
   startAttack(t) {
     this.atkAnim = 0; this.hitDone = false; this.atkTarget = t;
     const tx = t.x ?? (t.cx + t.fw / 2) * T;
@@ -133,7 +136,7 @@ export class Unit {
       const t = this.atkTarget;
       if (t && (t.alive ?? true)) this.scene.doHit(this, t);
     }
-    if (this.atkAnim >= dur) { this.atkAnim = -1; this.atkT = this.cd; }
+    if (this.atkAnim >= dur) { this.atkAnim = -1; this.atkT = this.cd * (this.buff('rage') ? 0.4 : 1); }
   }
 
   takeDamage(amount, src) {
@@ -142,6 +145,7 @@ export class Unit {
     let a = amount * (1 - this.armor);
     if (this.def.armorRanged && src && src.def && src.def.proj) a *= 1 - this.def.armorRanged;
     if (this.anim === 'warrior' && this.state === 'idle') a *= 0.85;
+    if (this.buff('shield')) a *= 0.4;
     this.hp -= a; this.flash = 0.12;
     this.lastHitBy = src;
     if (this.team === 1 && src) this.scene.alertCamp(this, src);
@@ -305,12 +309,15 @@ export class Scene {
     if (a.def.charge && a.charged) { dmg *= 2; a.charged = false; }
     if (t.big && a.bigDmg) dmg *= 1 + a.bigDmg;
     if (a.team === 0 && a.scene.kingAura(a)) dmg *= 1.15;
+    if (a.buff('rally')) dmg *= 1.25;
+    if (a.charges > 0) { dmg *= 2; a.charges--; }
     if (d.proj) {
       const tx = t.x, ty = (t.bodyY ?? t.y - 30);
       const arc = d.proj === 'stone' || d.proj === 'bomb' ? 70 : (d.proj === 'arrow' ? 18 : 10);
       const sy = a.y - (a.big ? 60 : 38);
       this.game.sfx(d.proj === 'stone' ? 'thud' : 'arrow', a, this);
-      this.projectiles.push({ key: d.proj, x: a.x, y: sy, sx: a.x, sy, tx, ty, target: t, t: 0, dur: Math.max(0.25, dist(a.x, sy, tx, ty) / (d.proj === 'stone' ? 260 : 460)), arc, dmg, src: a, splash: d.splash ? d.splash * T : 0, team: a.team });
+      const fire = a.firestone; a.firestone = false;
+      this.projectiles.push({ fire, key: d.proj, x: a.x, y: sy, sx: a.x, sy, tx, ty, target: t, t: 0, dur: Math.max(0.25, dist(a.x, sy, tx, ty) / (d.proj === 'stone' ? 260 : 460)), arc, dmg, src: a, splash: d.splash ? d.splash * T : 0, team: a.team });
       return;
     }
     this.applyDamage(a, t, dmg);
@@ -327,6 +334,7 @@ export class Scene {
     const before = t.hp;
     t.takeDamage(dmg, a);
     const done = Math.round(before - Math.max(0, t.hp));
+    if (done > 0 && a.buff && a.buff('rage')) a.hp = Math.min(a.maxHp, a.hp + done * 0.3);
     if (done > 0 && !(t instanceof Building)) this.floatText(String(done), t.x + (Math.random() - 0.5) * 20, (t.bodyY ?? t.y) - 26, a.team === 0 ? '#ffffff' : '#ff8a80', 13);
   }
   kingAura(u) {
@@ -370,6 +378,7 @@ export class Scene {
     this.updateSheep(dt);
     this.updateTrees(dt);
     for (const f of this.fx) { f.t += dt; if (f.follow) { f.x = f.follow.x; f.y = f.follow.y; } }
+    if (this.fires) { for (const f of this.fires) f.t -= dt; this.fires = this.fires.filter(f => f.t > 0); }
     this.fx = this.fx.filter(f => f.t < f.dur);
     for (const t of this.texts) t.t += dt;
     this.texts = this.texts.filter(t => t.t < 1.4);
@@ -384,6 +393,10 @@ export class Scene {
     if (u.flash > 0) u.flash -= dt;
     if (u.atkT > 0) u.atkT -= dt;
     if (u.cursed > 0) { u.cursed -= dt; if (u.cursed <= 0) this.fxAt('dust1', u.x, u.y); }
+    if (u.abT > 0) u.abT -= dt;
+    for (const k in u.buffs) if (u.buffs[k] > 0) u.buffs[k] -= dt;
+    if (u.buff('trample')) for (const o of this.units) if (o.team !== u.team && o.alive && !o.hidden && o.kind !== 'pawn' && !u.trampled.has(o) && dist(o.x, o.y, u.x, u.y) < 36) { u.trampled.add(o); this.applyDamage(u, o, u.dmg * 1.5); this.fxAt('dust1', o.x, o.y); this.game.sfx('hit', o, this); }
+    for (const f of this.fires || []) if (f.t > 0 && u.team !== 0 && dist(f.x, f.y, u.x, u.y) < 64) { u.burnT = (u.burnT || 0) - dt; if (u.burnT <= 0) { u.burnT = 0.5; this.applyDamage(f.src, u, 6); } }
     u.updateAttack(dt);
     if (u.kind === 'pawn') return this.game.pawnAI(this, u, dt);
     if (u.type === 'monk') return this.monkAI(u, dt);
@@ -619,6 +632,7 @@ export class Scene {
   updateProjectiles(dt) {
     for (const p of this.projectiles) {
       p.t += dt;
+      if (p.t < 0) continue;
       if (p.target && p.target.alive !== false) { p.tx = p.target.x; p.ty = p.target.bodyY ?? p.target.y - 30; }
       const k = Math.min(1, p.t / p.dur);
       const nx = p.sx + (p.tx - p.sx) * k, ny = p.sy + (p.ty - p.sy) * k - Math.sin(k * Math.PI) * p.arc;
@@ -626,6 +640,7 @@ export class Scene {
       p.x = nx; p.y = ny;
       if (k >= 1) {
         p.done = true;
+        if (p.fire) { this.fires = this.fires || []; for (let k = 0; k < 5; k++) this.fires.push({ x: p.tx + (Math.random() - 0.5) * 100, y: p.ty + 40 + (Math.random() - 0.5) * 60, t: 5, src: p.src, v: 1 + (k % 3) }); }
         if (p.splash) {
           this.fxAt(p.key === 'bomb' ? 'explosion1' : 'dust2', p.tx, p.ty + 20, { scale: p.key === 'bomb' ? 0.8 : 1.4 });
           this.game.sfx(p.key === 'bomb' ? 'explosion' : 'thud', { x: p.tx, y: p.ty }, this); this.game.shake(p.key === 'bomb' ? 4 : 3, this);
@@ -667,6 +682,36 @@ export class Scene {
     for (const t of this.trees) if (t.wood <= 0 && t.regrow && now >= t.regrow) { t.wood = 25; t.regrow = 0; this.fxAt('dust1', center(t.cx), center(t.cy) + 20); }
     for (const g of this.golds) g.t += dt;
     for (const t of this.trees) t.t += dt;
+  }
+
+  // ---------- hero abilities
+  useAbility(u) {
+    const ab = ABILITIES[u.type]; if (!ab || u.abT > 0 || !u.alive || u.cursed > 0) return false;
+    u.abT = ab.cd;
+    const G = this.game, foes = () => this.units.filter(o => o.team !== u.team && o.alive && !o.hidden && o.kind !== 'pawn');
+    const allies = r => this.units.filter(o => o.team === u.team && o.alive && !o.hidden && o.kind !== 'pawn' && dist(o.x, o.y, u.x, u.y) < r);
+    this.floatText(ab.name, u.x, u.y - 92, '#ffe066', 15);
+    if (u.type === 'warrior') { u.buffs.shield = ab.dur; this.fxAt('dust1', u.x, u.y); G.sfx('build', u, this); }
+    else if (u.type === 'archer') {
+      let near = null, bd = u.range + 3 * T;
+      for (const o of foes()) { const d = dist(o.x, o.y, u.x, u.y); if (d < bd) { bd = d; near = o; } }
+      if (!near) { u.abT = 1; this.floatText('No foes in range', u.x, u.y - 70, '#ffffff', 13); return false; }
+      const pack = foes().filter(o => dist(o.x, o.y, near.x, near.y) < 1.8 * T);
+      for (let i = 0; i < 6; i++) {
+        const t = pack[i % pack.length], sy = u.y - 38, delay = i * 0.07;
+        this.projectiles.push({ key: 'arrow', x: u.x, y: sy, sx: u.x, sy, tx: t.x, ty: t.bodyY, target: t, t: -delay, dur: Math.max(0.3, dist(u.x, sy, t.x, t.bodyY) / 420), arc: 60, dmg: u.dmg * 1.2, src: u, splash: 0, team: u.team });
+      }
+      u.startAttack(near); G.sfx('arrow', u, this);
+    } else if (u.type === 'lancer') { u.buffs.charge = ab.dur; u.charges = 3; G.sfx('horn', u, this); }
+    else if (u.type === 'monk') { for (const o of allies(4 * T)) { o.hp = Math.min(o.maxHp, o.hp + 60); this.fxAt('healFx', o.x, o.y, {}); } G.sfx('heal', u, this); }
+    else if (u.type === 'swordsman') {
+      for (const o of foes()) if (dist(o.x, o.y, u.x, u.y) < 1.6 * T) this.applyDamage(u, o, u.dmg * 1.6);
+      this.fxAt('dust2', u.x, u.y, { scale: 2 }); u.atkAnim = 0; u.hitDone = true; u.atkTarget = null; G.sfx('sword', u, this); G.shake(3, this);
+    } else if (u.type === 'berserker') { u.buffs.rage = ab.dur; G.sfx('roar', u, this); }
+    else if (u.type === 'horseman') { u.buffs.trample = ab.dur; u.trampled = new Set(); G.sfx('thud', u, this); }
+    else if (u.type === 'catapult') { u.firestone = true; G.sfx('build', u, this); }
+    else if (u.type === 'king') { for (const o of allies(6 * T)) { o.buffs.rally = ab.dur; o.hp = Math.min(o.maxHp, o.hp + o.maxHp * 0.2); this.fxAt('healFx', o.x, o.y, {}); } G.sfx('victory', u, this); }
+    return true;
   }
 
   // ---------- picking
@@ -739,6 +784,7 @@ export class Scene {
       if (!u.alive || u.hidden || !vis(u.x, u.y)) continue;
       list.push({ y: u.y, d: () => this.drawUnit(ctx, u) });
     }
+    for (const f of this.fires || []) list.push({ y: f.y, d: () => drawSprite(ctx, 'fire' + f.v, f.x, f.y, this.time + f.v, { alpha: Math.min(1, f.t) }) });
     for (const f of this.fx) list.push({ y: f.y + 1, d: () => drawSprite(ctx, f.key, f.x, f.y, f.t, { once: true, scale: f.scale, flip: f.flip, alpha: f.alpha }) });
     list.sort((a, b) => a.y - b.y);
     for (const o of list) o.d();
@@ -824,9 +870,15 @@ export class Scene {
         const dy = (u.atkTarget.y ?? u.atkTarget.y) - u.y, dx = Math.abs((u.atkTarget.x ?? 0) - u.x);
         if (dy < -dx * 0.8) key = 'lancer_attack_up'; else if (dy > dx * 0.8) key = 'lancer_attack_down';
       }
-    } else if (u.kind === 'pawn' && u.working) key = u.animKey('work');
+    } else if (u.buff('shield') && !u.moving && (u.anim === 'warrior' || u.anim === 'lancer')) key = u.anim + '_guard';
+    else if (u.kind === 'pawn' && u.working) key = u.animKey('work');
     else key = u.animKey(u.moving ? 'run' : 'idle');
     drawSprite(ctx, key, u.x, u.y, tt, opts);
+    if (u.buff('rage') || u.buff('rally') || u.buff('charge') || u.buff('trample')) { // glow while buffed
+      ctx.globalCompositeOperation = 'lighter';
+      drawSprite(ctx, key, u.x, u.y, tt, { ...opts, alpha: 0.18 + Math.sin(this.time * 8) * 0.08 });
+      ctx.globalCompositeOperation = 'source-over';
+    }
     if (u.flash > 0) { // brighten on hit
       ctx.globalCompositeOperation = 'lighter';
       drawSprite(ctx, key, u.x, u.y, tt, { ...opts, alpha: Math.min(0.7, u.flash * 6) });

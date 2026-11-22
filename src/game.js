@@ -725,7 +725,7 @@ export class Realm {
   // ------------------------------------------------------------ main tick
   update(dt) {
     const S = this.state;
-    if (this.exp) this.exp.update(dt);
+    if (this.exp) { const n = this.speed === 2 ? 2 : 1; for (let k = 0; k < n; k++) this.exp.update(dt); } // battle speed only speeds up the voyage
     this.home.update(dt);
     this.tickTimersT = (this.tickTimersT || 0) - dt;
     if (this.tickTimersT <= 0) { this.tickTimersT = 0.5; this.tickTimers(false); this.checkDaily(); }
