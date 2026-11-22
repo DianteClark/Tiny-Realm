@@ -62,7 +62,26 @@ Import, and Wipe Realm to start over.
   Trample, Firestone, Rally); squads march Loose, Line, Wedge or Column.
 - **Seasons, weather, day and night**: seasons follow the real calendar (winter is December to February), weather
   changes range and sight, nights glow with torchlight.
-- **Feats and tutorial**: 27 achievements, and a guided first session.
+- **Hero gear**: weapons, armour and trinkets in four rarities drop from
+  voyages, bosses, great events, raids and the Night Market. Gear comes home
+  with a soldier who falls at home, and sinks with one who falls at sea.
+- **Challenges**: a daily challenge with a twist and a bigger weekly one. A
+  daily streak pays rare gear, an epic piece every third day and a legendary
+  piece every seventh.
+- **Villager needs**: Tavern, Market and Chapel (the pack's red and yellow
+  buildings) keep people happy. Happy realms gather faster and attract
+  newcomers. The Tavern hires a daily hero, the Market exchanges goods, the
+  Chapel heals and blesses holy days.
+- **The Drowned Crown**: an eight chapter story campaign along the bottom of
+  the sea chart, ending with the Troll King.
+- **Sieges**: rival capitals sit behind a palisade with a gate and corner
+  towers. Break in to reach the castle.
+- **Trade routes**: Market boats sail to Lantern Bay, your provinces and your
+  vassals, and return with cargo. Pirates sometimes follow them home.
+- **Holy days and the moon**: Advent, Christmas, Epiphany, Palm Sunday, Good
+  Friday, Easter, Ascension and Pentecost on the real calendar with verses;
+  a full-moon Moonlit Hunt and a Night Market after dark.
+- **Feats and tutorial**: 41 achievements, and a guided first session.
 
 Controls: drag to pan, pinch or scroll to zoom. Tap a soldier (or All), then
 tap the ground to move or tap a foe to attack. Tap buildings to train and
@@ -80,6 +99,9 @@ upgrade.
   - `events.js`: great and minor realm events
   - `env.js`: seasons, weather, day and night
   - `tutorial.js`: guided tutorial and Feats
+  - `gear.js`, `challenges.js`, `needs.js`, `campaign.js`, `trade.js`: the 3.4 systems
+  - `calendar.js`: holy days, festivals and moon phases
+  - `orders.js`: Day and Night Orders
   - `audio.js`: synthesized sound effects and procedural music
   - `ui.js`: HUD and panels
   - `main.js`: boot, loop, camera, touch input

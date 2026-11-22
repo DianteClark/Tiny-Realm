@@ -13,7 +13,7 @@ import { NEEDS, MOODS, EXCHANGE } from './needs.js';
 import { CHAPTERS, nextChapter, chapterOpen, chapterState } from './campaign.js';
 import { ports } from './trade.js';
 
-export const VERSION = '3.3';
+export const VERSION = '3.4';
 
 const $ = s => document.querySelector(s);
 const src = k => SHEETS[k] ? encodeURI(SHEETS[k].src) : '';
@@ -121,6 +121,12 @@ export class UI {
     if (!info.fresh && localStorage.getItem('tinyrealm.seen') !== VERSION) {
       const div = document.createElement('div');
       div.innerHTML = `<p style="text-align:left;font-size:14px;line-height:1.4">
+        <b>3.4</b><br>
+        Hero gear: weapons, armour and trinkets drop from voyages and great events. Equip them from Army.<br>
+        Daily and weekly challenges with a streak: every 7th day in a row brings a legendary piece.<br>
+        Tavern, Market and Chapel keep your people happy. Happy realms gather faster and grow on their own.<br>
+        The Drowned Crown: an eight chapter story along the bottom of the sea chart.<br>
+        Rival capitals now stand behind walls and a gate. Trade boats sail from your Market.<br><br>
         <b>3.3</b><br>
         When placing a building, every spot it can go is shaded green, and the ghost starts on the nearest good spot.
         Workers stand beside trees and rocks so their swings land. Ability buttons and the squad bar fit on phones.
