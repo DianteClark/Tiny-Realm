@@ -69,7 +69,7 @@ img, .ic { image-rendering: pixelated; }
 .ic-x { background-image: url('assets/free/UI Elements/UI Elements/Icons/Icon_09.png'); }
 .ic-gear { background-image: url('assets/free/UI Elements/UI Elements/Icons/Icon_10.png'); }
 .ic-info { background-image: url('assets/free/UI Elements/UI Elements/Icons/Icon_11.png'); }
-.ic-pop, .ic-pawn { background-image: url('assets/free/UI Elements/UI Elements/Human Avatars/Avatars_01.png'); border-radius: 4px; }
+.ic-pop, .ic-pawn { background-image: url('assets/free/UI Elements/UI Elements/Human Avatars/Avatars_05.png'); background-size: 150%; }
 .ic-boat { background-image: url('assets/enemy/Extra/Boat/Boat_Idle.png'); background-size: 1100% 137%; background-position: 1.2% 55%; }
 
 /* ---------- HUD ---------- */
@@ -103,7 +103,8 @@ img, .ic { image-rendering: pixelated; }
 #squadbar { align-items: center; }
 #squadAvatars { flex: 1; display: flex; gap: 4px; overflow-x: auto; padding: 2px; }
 .sq { position: relative; width: 50px; height: 58px; flex: none; border: 6px solid transparent; border-image: url('assets/ui/paper_dark.png') 64 fill / 6px stretch; padding: 0; background: none; }
-.sq img { width: 100%; height: 38px; object-fit: cover; display: block; }
+.sq { overflow: hidden; }
+.sq img { width: 100%; height: 38px; object-fit: cover; display: block; transform: scale(1.5); }
 .sq .hpb { height: 5px; background: #5a4636; margin-top: 2px; }
 .sq .hpb i { display: block; height: 100%; background: var(--green); }
 .sq.sel { border-image-source: url('assets/ui/btn_blue_pressed.png'); }
@@ -116,8 +117,9 @@ img, .ic { image-rendering: pixelated; }
 
 /* ---------- panels ---------- */
 #panel, #modal { position: absolute; inset: 0; display: flex; align-items: flex-end; justify-content: center; background: rgba(30, 40, 50, .35); }
+#panel { bottom: calc(var(--safe-bot) + 80px); background: none; }
 #modal { align-items: center; z-index: 5; }
-.sheet { width: min(100%, 560px); max-height: calc(100% - var(--safe-top) - 70px); margin-bottom: calc(var(--safe-bot)); display: flex; flex-direction: column; animation: sheetUp .22s ease-out; }
+.sheet { width: min(100%, 560px); max-height: calc(100% - var(--safe-top) - 64px); display: flex; flex-direction: column; animation: sheetUp .22s ease-out; }
 @keyframes sheetUp { from { transform: translateY(40px); opacity: 0; } }
 .sheet-head { display: flex; justify-content: center; position: relative; margin: -36px 0 4px; }
 .sheet-head .close { position: absolute; right: -10px; top: 4px; }
@@ -133,6 +135,8 @@ img, .ic { image-rendering: pixelated; }
 .card.light { border-image-source: url('assets/ui/paper.png'); color: var(--ink); }
 .card .thumb { width: 56px; height: 56px; flex: none; display: flex; align-items: flex-end; justify-content: center; overflow: hidden; }
 .card .thumb img { max-width: 100%; max-height: 100%; }
+.card .thumb img.av, .queue .qi img { transform: scale(1.55); }
+.card .thumb:has(img.av) { align-items: center; }
 .card .grow { flex: 1; min-width: 0; }
 .card h3 { margin: 0 0 2px; font-size: 16px; font-weight: normal; }
 .card p { margin: 0; font-size: 13px; line-height: 1.25; opacity: .9; }

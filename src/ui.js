@@ -10,7 +10,7 @@ const src = k => SHEETS[k] ? encodeURI(SHEETS[k].src) : '';
 const fmt = n => n >= 10000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1) + 'k' : String(Math.floor(n));
 const time = s => { s = Math.max(0, Math.ceil(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return h ? `${h}h ${m}m` : `${m}:${String(x).padStart(2, '0')}`; };
 const ago = t => { const s = (Date.now() - t) / 1000; return s < 60 ? 'just now' : s < 3600 ? Math.floor(s / 60) + 'm ago' : s < 86400 ? Math.floor(s / 3600) + 'h ago' : Math.floor(s / 86400) + 'd ago'; };
-const UNIT_AV = { pawn: 'av_h1', warrior: 'av_h2', archer: 'av_h6', lancer: 'av_h4', monk: 'av_h9', swordsman: 'av_swordsman1', berserker: 'av_berserker1', horseman: 'av_horseman1', catapult: 'av_catapult1', king: 'av_king1' };
+const UNIT_AV = { pawn: 'av_h5', warrior: 'av_h1', archer: 'av_h3', lancer: 'av_h2', monk: 'av_h4', swordsman: 'av_swordsman1', berserker: 'av_berserker1', horseman: 'av_horseman1', catapult: 'av_catapult1', king: 'av_king1' };
 const BLD_IMG = { castle: 'b_Castle', house: 'b_House1', barracks: 'b_Barracks', archery: 'b_Archery', monastery: 'b_Monastery', tower: 'b_Tower' };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -329,7 +329,7 @@ export class UI {
     return `<p class="section-title">${S.pawns} pawns - ${S.pawns - busy} idle</p>` +
       jobs.map(([k, n, ic, d]) => `<div class="job card light"><i class="ic ${ic}"></i><div class="name"><h3>${n}</h3><p>${d}</p></div>
         <button class="tiny-btn red" data-act="job:${k}:-1">-</button><span class="count">${J[k]}</span><button class="tiny-btn" data-act="job:${k}:1">+</button></div>`).join('') +
-      `<div class="card"><div class="thumb"><img src="${src('av_h1')}" alt=""></div><div class="grow"><h3>Train a Pawn</h3><p>New hands for the realm. Trained at the Castle.${q ? ` ${q} in training.` : ''}</p>${this.costHtml(UNITS.pawn.cost)}</div>
+      `<div class="card"><div class="thumb"><img src="${src('av_h5')}" class="av" alt=""></div><div class="grow"><h3>Train a Pawn</h3><p>New hands for the realm. Trained at the Castle.${q ? ` ${q} in training.` : ''}</p>${this.costHtml(UNITS.pawn.cost)}</div>
         <button class="btn small" data-act="train:${castle.id}:pawn">Train</button></div>
        <p class="muted" style="font-size:13px;text-align:center">While you are away, assigned pawns keep working at half pace until the stores are full.</p>`;
   }
@@ -344,7 +344,7 @@ export class UI {
     const status = rec.status === 'away' ? 'On expedition' : rec.status === 'wounded' ? `Wounded, ${time((rec.woundedUntil - Date.now()) / 1000)}` : 'At home';
     return `<div class="card ${opts.pick ? 'light' : ''}" ${opts.pick ? `data-act="pick:${rec.id}"` : ''}>
       ${opts.pick ? `<button class="check ${this.squadPick.has(rec.id) ? 'on' : ''}"></button>` : ''}
-      <div class="thumb"><img src="${src(rec.avatar)}" alt=""></div>
+      <div class="thumb"><img src="${src(rec.avatar)}" class="av" alt=""></div>
       <div class="grow"><h3>${esc(rec.name)}</h3><p>Level ${rec.level} ${U.name} - ${rec.kills} kills - ${status}</p>
         <div>${rec.traits.map(t => `<span class="trait ${TRAITS[t].rare ? 'rare' : ''}" title="${TRAITS[t].desc}">${TRAITS[t].name}</span>`).join('')}</div>
         <div class="hpbar"><i style="width:${hpPct}%"></i></div><div class="xpbar"><i style="width:${xpPct}%"></i></div></div>
@@ -355,7 +355,7 @@ export class UI {
     this.setTabs([['roster', 'Roster'], ['fallen', 'Fallen'], ['relics', 'Relics']]);
     if (this.tab === 'fallen') {
       if (!S.fallen.length) return '<p class="section-title">No one has fallen yet. Keep it that way.</p>';
-      return '<p class="section-title">The Hall of the Fallen</p>' + S.fallen.map(f => `<div class="card"><div class="thumb"><img src="${src(f.avatar)}" alt="" style="filter:grayscale(1)"></div>
+      return '<p class="section-title">The Hall of the Fallen</p>' + S.fallen.map(f => `<div class="card"><div class="thumb"><img src="${src(f.avatar)}" class="av" alt="" style="filter:grayscale(1)"></div>
         <div class="grow"><h3>${esc(f.name)}</h3><p>Level ${f.level} ${UNITS[f.type].name}, ${f.kills} kills. Fell ${esc(f.where)}, slain by ${esc(f.killer)}. ${ago(f.date)}.</p></div></div>`).join('');
     }
     if (this.tab === 'relics') {
@@ -380,7 +380,7 @@ export class UI {
     const bountyDone = S.daily.bounty === S.daily.last;
     const target = this.voyageTarget || 'frontier';
     const isle = (k, title, sub, desc, enabled) => `<div class="card ${target === k ? '' : 'light'}" data-act="vt:${k}" style="${enabled ? '' : 'opacity:.5'}">
-      <div class="thumb"><img src="${src(k === 'bounty' ? 'av_thief' : 'av_' + info.region.boss)}" alt=""></div>
+      <div class="thumb"><img src="${src(k === 'bounty' ? 'av_thief' : 'av_' + info.region.boss)}" class="av" alt=""></div>
       <div class="grow"><h3>${title}</h3><p>${sub}</p><p class="muted">${desc}</p></div></div>`;
     let html = '<p class="section-title">Choose an island</p>';
     html += isle('frontier', `Island ${info.n}: ${info.name}`, `${info.region.name} - Level ${info.level}${info.boss ? ' - Boss: ' + ENEMIES[info.region.boss].name : ''}`, info.boss ? `The boss guards a relic: ${RELICS[info.region.bossRelic].name}.` : 'Clear every camp to push the frontier onward.', true);
@@ -449,7 +449,7 @@ export class UI {
     const opts = R.trainOptions(b);
     if (opts.length) {
       html += '<p class="section-title">Train</p>';
-      html += opts.map(o => `<div class="card ${o.locked ? 'light' : ''}"><div class="thumb"><img src="${src(UNIT_AV[o.key])}" alt=""></div>
+      html += opts.map(o => `<div class="card ${o.locked ? 'light' : ''}"><div class="thumb"><img src="${src(UNIT_AV[o.key])}" class="av" alt=""></div>
         <div class="grow"><h3>${o.def.name}</h3><p>${o.def.desc}</p>${o.locked ? `<p class="muted">Requires a ${TIERS[o.def.tier].name}</p>` : this.costHtml(o.def.cost)}<p class="muted">${o.def.hp} health${o.def.dmg ? ', ' + o.def.dmg + ' damage' : ''}${o.def.heal ? ', heals ' + o.def.heal : ''} - ${o.def.time}s</p></div>
         <button class="btn small" data-act="train:${b.id}:${o.key}" ${o.locked ? 'disabled' : ''}>Train</button></div>`).join('');
       html += `<div class="queue" id="bqueue"></div>`;

@@ -6,10 +6,10 @@ export const RES = ['gold', 'wood', 'meat'];
 // range in tiles; speed px/s; cd seconds between attacks; hit = fraction of the attack anim where damage lands
 export const UNITS = {
   pawn: { name: 'Pawn', hp: 40, speed: 72, worker: true, cost: { meat: 25 }, time: 12, from: 'castle', tier: 1, pop: 1, anim: 'pawn', desc: 'Gathers wood, gold and meat, and raises buildings.' },
-  warrior: { name: 'Warrior', hp: 130, dmg: 14, range: 0.95, cd: 1.0, speed: 74, cost: { gold: 15, meat: 25 }, time: 20, from: 'barracks', tier: 1, pop: 1, anim: 'warrior', hit: 0.5, desc: 'Sturdy shield fighter. Blocks a share of every blow.', armor: 0.15, avatar: 'human' },
-  archer: { name: 'Archer', hp: 75, dmg: 11, range: 5, cd: 1.35, speed: 72, cost: { gold: 20, wood: 30 }, time: 22, from: 'archery', tier: 1, pop: 1, anim: 'archer', hit: 0.55, proj: 'arrow', desc: 'Ranged. Gains extra range on high ground.', avatar: 'human' },
-  lancer: { name: 'Lancer', hp: 160, dmg: 19, range: 1.4, cd: 1.3, speed: 78, cost: { gold: 35, meat: 30, wood: 10 }, time: 30, from: 'barracks', tier: 2, pop: 1, anim: 'lancer', hit: 0.5, desc: 'Long reach. Deals bonus damage to large monsters.', bigBonus: 0.5, avatar: 'human' },
-  monk: { name: 'Monk', hp: 70, heal: 16, range: 3.5, cd: 2.0, speed: 68, cost: { gold: 45, meat: 15 }, time: 32, from: 'monastery', tier: 2, pop: 1, anim: 'monk', hit: 0.6, desc: 'Heals the most wounded ally in reach.', avatar: 'human' },
+  warrior: { name: 'Warrior', hp: 130, dmg: 14, range: 0.95, cd: 1.0, speed: 74, cost: { gold: 15, meat: 25 }, time: 20, from: 'barracks', tier: 1, pop: 1, anim: 'warrior', avatar: 'h1', hit: 0.5, desc: 'Sturdy shield fighter. Blocks a share of every blow.', armor: 0.15 },
+  archer: { name: 'Archer', hp: 75, dmg: 11, range: 5, cd: 1.35, speed: 72, cost: { gold: 20, wood: 30 }, time: 22, from: 'archery', tier: 1, pop: 1, anim: 'archer', avatar: 'h3', hit: 0.55, proj: 'arrow', desc: 'Ranged. Gains extra range on high ground.' },
+  lancer: { name: 'Lancer', hp: 160, dmg: 19, range: 1.4, cd: 1.3, speed: 78, cost: { gold: 35, meat: 30, wood: 10 }, time: 30, from: 'barracks', tier: 2, pop: 1, anim: 'lancer', avatar: 'h2', hit: 0.5, desc: 'Long reach. Deals bonus damage to large monsters.', bigBonus: 0.5 },
+  monk: { name: 'Monk', hp: 70, heal: 24, range: 3.5, cd: 2.0, speed: 68, cost: { gold: 45, meat: 15 }, time: 32, from: 'monastery', tier: 2, pop: 1, anim: 'monk', avatar: 'h4', hit: 0.6, desc: 'Heals the most wounded ally in reach.' },
   swordsman: { name: 'Swordsman', hp: 210, dmg: 24, range: 1.1, cd: 1.2, speed: 72, cost: { gold: 60, meat: 45 }, time: 40, from: 'barracks', tier: 3, pop: 1, anim: 'swordsman', hit: 0.55, cleave: 0.5, desc: 'Heavy blade. Cleaves nearby foes for half damage.', avatar: 'swordsman' },
   berserker: { name: 'Berserker', hp: 175, dmg: 28, range: 1.0, cd: 0.85, speed: 82, cost: { gold: 70, meat: 55 }, time: 40, from: 'barracks', tier: 3, pop: 1, anim: 'berserker', hit: 0.5, rage: true, desc: 'Hits harder the more wounded he is.', avatar: 'berserker' },
   horseman: { name: 'Horseman', hp: 250, dmg: 27, range: 1.2, cd: 1.1, speed: 118, cost: { gold: 110, meat: 70, wood: 30 }, time: 55, from: 'barracks', tier: 4, pop: 2, anim: 'horseman', hit: 0.5, charge: true, desc: 'Fast rider. First strike after a charge deals double damage.', avatar: 'horseman' },
@@ -35,7 +35,7 @@ export const ENEMIES = {
   panda: { name: 'Panda Master', hp: 340, dmg: 20, range: 1.1, cd: 0.8, speed: 74, hit: 0.5, big: true, cost: 6, xp: 34, gold: 24 },
   turtle: { name: 'Turtle', hp: 460, dmg: 18, range: 1.1, cd: 1.5, speed: 48, hit: 0.5, big: true, armorRanged: 0.5, cost: 6, xp: 36, gold: 24 },
   minotaur: { name: 'Minotaur', hp: 950, dmg: 42, range: 1.4, cd: 1.6, speed: 66, hit: 0.55, big: true, boss: true, splash: 1.2, cost: 18, xp: 120, gold: 120 },
-  troll: { name: 'Troll', hp: 1500, dmg: 58, range: 1.6, cd: 2.6, speed: 52, hit: 0.5, big: true, boss: true, splash: 1.5, windup: true, cost: 25, xp: 180, gold: 180 },
+  troll: { name: 'Troll', hp: 950, dmg: 34, range: 1.6, cd: 2.8, speed: 52, hit: 0.5, big: true, boss: true, splash: 1.0, windup: true, cost: 25, xp: 180, gold: 180 },
   harpoonshark: { name: 'Harpoon Shark', hp: 80, dmg: 12, range: 4.5, cd: 1.6, speed: 74, hit: 0.6, proj: 'harpoon', cost: 1.4, xp: 8, gold: 5 },
   paddleshark: { name: 'Paddle Shark', hp: 95, dmg: 13, range: 0.95, cd: 1.1, speed: 76, hit: 0.5, cost: 1.3, xp: 8, gold: 5 },
   bombfish: { name: 'Bomb Fish', hp: 60, dmg: 26, range: 4, cd: 2.6, speed: 70, hit: 0.6, proj: 'bomb', splash: 1.1, cost: 1.8, xp: 10, gold: 6 },

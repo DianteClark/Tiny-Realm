@@ -237,7 +237,7 @@ export class Realm {
     const name = type === 'king' ? 'King ' + FIRST_NAMES[Math.floor(r() * FIRST_NAMES.length)] :
       FIRST_NAMES[Math.floor(r() * FIRST_NAMES.length)] + ' ' + EPITHETS[Math.floor(r() * EPITHETS.length)];
     const avKind = UNITS[type].avatar;
-    const avatar = avKind === 'human' ? 'av_h' + (1 + Math.floor(r() * 25)) : `av_${avKind}${1 + Math.floor(r() * 5)}`;
+    const avatar = avKind.startsWith('h') ? 'av_' + avKind : `av_${avKind}1`;
     const traits = [COMMON_TRAITS[Math.floor(r() * COMMON_TRAITS.length)]];
     const rec = { id: S.nextId++, name, type, level: 1, xp: 0, traits, kills: 0, avatar, status: 'home', joined: Date.now() };
     S.soldiers.push(rec);
@@ -668,7 +668,7 @@ export class Realm {
     const region = opts.region || REGIONS[Math.floor(Math.random() * unlocked)];
     const days = (Date.now() - S.created) / 86400000;
     const budget = opts.budget ?? (3 + S.tier * 2.5 + S.stats.raidsSurvived * 0.7 + Math.min(days, 60) * 0.25 + S.renown * 2);
-    const level = 1 + Math.floor(S.stats.raidsSurvived / 3) + (S.tier - 1) * 2 + S.renown;
+    const level = 1 + Math.floor(S.stats.raidsSurvived / 4) + (S.tier - 1) + S.renown;
     // landing spots far from the castle
     const far = this.shore.filter(s => dist(s.lx, s.ly, CASTLE.x + 2, CASTLE.y + 1) > 11);
     const pool = far.length ? far : this.shore;
@@ -733,7 +733,7 @@ export class Realm {
     if (R.onEnd) R.onEnd(false);
     this.raid = null; this.home.boats = [];
     this.state.timers.raid = 540 + Math.random() * 300;
-    this.castle.hp = 1;
+    this.castle.hp = Math.round(this.castle.maxHp * 0.3);
     this.assignJobs(); this.save();
   }
   raidTarget(scene, u) {

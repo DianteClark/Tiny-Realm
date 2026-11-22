@@ -49,8 +49,8 @@ export class Unit {
       hp *= 1 + (B.hp || 0); dmg *= 1 + (B.dmg || 0) + (d.proj ? (B.rangedDmg || 0) : (B.meleeDmg || 0)); cd *= 1 - (B.atkSpeed || 0);
     }
     if (this.team === 1) {
-      const s = 1 + (this.level - 1) * 0.12;
-      hp *= s; dmg *= 1 + (this.level - 1) * 0.09;
+      const boss = d.boss || d.big;
+      hp *= 1 + (this.level - 1) * (boss ? 0.07 : 0.12); dmg *= 1 + (this.level - 1) * (boss ? 0.05 : 0.09);
       if (opts.elite) { hp *= 1.6; dmg *= 1.3; }
     }
     this.maxHp = Math.round(hp); this.dmg = dmg; this.speed = speed; this.cd = cd;
@@ -396,6 +396,19 @@ export class Scene {
       return;
     }
     if (u.atkAnim >= 0) return;
+    // close the last stretch in a straight line (pathing only gets us to a neighbouring cell)
+    if (d < 2.2 * T) {
+      let tx = t.x, ty = t.y;
+      if (t instanceof Building || t instanceof Struct) {
+        tx = Math.max(t.cx * T, Math.min(u.x, (t.cx + t.fw) * T)); ty = Math.max(t.cy * T, Math.min(u.y, (t.cy + t.fh) * T));
+      }
+      const m = this.map, myL = m.level(cellOf(u.x), cellOf(u.y));
+      const a = Math.atan2(ty - u.y, tx - u.x), sp = u.speed * dt;
+      const nx = u.x + Math.cos(a) * sp, ny = u.y + Math.sin(a) * sp;
+      const ok = u.flying || (m.walkable(cellOf(nx), cellOf(ny)) && m.level(cellOf(nx), cellOf(ny)) === myL &&
+        (t instanceof Building || t instanceof Struct || m.level(cellOf(t.x), cellOf(t.y)) === myL || t.flying));
+      if (ok) { u.stop(); u.x = nx; u.y = ny; u.moving = true; if (Math.abs(tx - u.x) > 2) u.flip = tx < u.x; return; }
+    }
     u.pathT -= dt;
     if (!u.path || !u.path.length || u.pathT <= 0) {
       u.pathT = 0.5 + Math.random() * 0.4;
@@ -439,14 +452,16 @@ export class Scene {
     // auto targeting
     if (u.target && (!u.target.alive || u.target.hidden || u.distTo(u.target) > 9 * T)) u.target = null;
     if (!u.target && (u.giveUp || 0) <= 0) {
-      const aggro = this.kind === 'home' ? 8 * T : 5.5 * T;
+      const raiding = this.kind === 'home' && this.game.raid && this.game.raid.active;
+      const aggro = this.kind === 'home' ? (raiding ? 15 : 8) * T : 5.5 * T;
       let best = this.nearestFoe(u, aggro);
       if (!best && u.def.siege) best = this.nearestStruct(u, u.range + T);
       if (best) u.target = best;
     }
     if (u.target) {
       // leash on home island: don't chase forever
-      if (this.kind === 'home' && dist(u.x, u.y, u.home.x, u.home.y) > 12 * T && !u.target.big) { u.target = null; }
+      const leash = this.game.raid && this.game.raid.active ? 20 : 12;
+      if (this.kind === 'home' && dist(u.x, u.y, u.home.x, u.home.y) > leash * T && !u.target.big) { u.target = null; }
       else return this.engage(u, u.target, dt);
     }
     // return to post

@@ -77,13 +77,13 @@ export class EventDirector {
   announce(kind) {
     const R = this.R, S = R.state, ev = MAJOR[kind];
     let plan;
-    const lvl = 1 + Math.floor(S.stats.raidsSurvived / 3) + (S.tier - 1) * 2 + S.renown;
+    const lvl = 1 + Math.floor(S.stats.raidsSurvived / 4) + (S.tier - 1) + S.renown;
     if (kind === 'troll') {
-      const n = 1 + Math.ceil(S.tier / 2);
-      plan = R.planRaid('troll', { region: regionBy('goblin'), units: [...Array(n).fill('troll'), 'speargoblin', 'torchgoblin', 'torchgoblin', 'speargoblin', 'pigrider'], gap: 1.1 });
+      const n = S.tier < 4 ? 1 : S.tier < 5 ? 2 : 3;
+      plan = R.planRaid('troll', { region: regionBy('goblin'), units: [...Array(n).fill('troll'), 'speargoblin', 'torchgoblin', 'torchgoblin', ...(S.tier >= 3 ? ['speargoblin', 'pigrider'] : [])], gap: 1.1 });
     } else if (kind === 'armada') {
       const base = R.planRaid('raid', { region: regionBy('reef') });
-      plan = R.planRaid('armada', { region: regionBy('reef'), boats: 3, units: [...base.queue, ...base.queue.slice(0, Math.ceil(base.queue.length * 0.5))].map(e => e.type).concat(['turtle']) });
+      plan = R.planRaid('armada', { region: regionBy('reef'), boats: 3, units: base.queue.map(e => e.type).concat(S.tier >= 3 ? ['turtle'] : []) });
     } else if (kind === 'bones') {
       plan = R.planRaid('bones', { region: regionBy('crypt'), units: [] });
       const spots = [];
@@ -140,7 +140,7 @@ export class EventDirector {
   }
   askChampion(act) {
     const R = this.R;
-    const units = R.home.units.filter(u => u.rec && u.alive && u.kind === 'soldier');
+    const units = R.home.units.filter(u => u.rec && u.alive && u.kind === 'soldier' && u.type !== 'monk' && u.type !== 'catapult' && u.cursed <= 0);
     if (!units.length) return this.refuseDuel(act);
     R.ui.choice("The Minotaur's Challenge", 'Choose a champion to face the Minotaur alone. If your champion falls, they are gone for good. Refuse and the beast will rampage through your realm.', [
       ...units.sort((a, b) => b.rec.level - a.rec.level).slice(0, 6).map(u => ({ label: `${u.rec.name} (${UNITS[u.type].name}, lvl ${u.rec.level})`, fn: () => this.startDuel(act, u) })),
