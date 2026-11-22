@@ -575,10 +575,76 @@ export class Realm {
       b.pop = 1; n++;
     }
     this.home.wallMap = null;
+    // never fence anyone in: if the new line seals people or buildings off, turn one of its pieces into a gate
+    let gateNote = '';
+    if (n && type === 'wall' && this.sealedOff()) {
+      const fresh = cells.map(([x, y]) => this.home.wallAt(x, y)).filter(b => b && b.type === 'wall' && !b.done);
+      let fixed = false;
+      if (this.countOf('gate') < this.limitFor('gate')) {
+        for (const w of fresh.slice(1, -1).concat(fresh)) {
+          this.home.removeBuilding(w);
+          const g = this.home.addBuilding('gate', w.cx, w.cy, { buildEnd: w.buildEnd, buildTotal: w.buildTotal });
+          this.home.wallMap = null;
+          if (!this.sealedOff()) { fixed = true; break; }
+          this.home.removeBuilding(g); this.home.addBuilding('wall', w.cx, w.cy, { buildEnd: w.buildEnd, buildTotal: w.buildTotal }); this.home.wallMap = null;
+        }
+      }
+      if (fixed) gateNote = 'A gate was added so your people are not fenced in.';
+      else { // undo the whole line and refund it
+        for (const w of cells.map(([x, y]) => this.home.wallAt(x, y)).filter(b => b && !b.done)) { this.home.removeBuilding(w); this.addAll(d.cost); }
+        this.home.wallMap = null;
+        this.reach = reachable(this.home.map, this.door[0], this.door[1]);
+        return 'That fence would trap your people. Leave a gap, or grow the castle for another gate.';
+      }
+    }
     this.reach = reachable(this.home.map, this.door[0], this.door[1]);
+    this.rescueTrapped();
+    if (gateNote) this.ui.toast(gateNote, 'gold');
     if (n) { this.sfx('place'); this.home.fxAt('dust2', center(cells[0][0]), center(cells[0][1]) + 20); }
     this.save();
     return n ? null : (blocked ? 'That spot is blocked.' : 'Nothing was built.');
+  }
+  // reachability from the castle door for your own people: gates count as open
+  friendlyReach() {
+    const h = this.home, m = h.map, shut = h.buildings.filter(b => b.def.gate && !b.open);
+    for (const g of shut) h.placeBlock([[g.cx, g.cy]], -1);
+    const re = reachable(m, this.door[0], this.door[1]);
+    for (const g of shut) h.placeBlock([[g.cx, g.cy]], 1);
+    return re;
+  }
+  // would the current walls cut a building or one of your people off from the castle?
+  sealedOff() {
+    const h = this.home, m = h.map, re = this.friendlyReach();
+    for (const b of h.buildings) {
+      if (b.def.wall || b.type === 'castle') continue;
+      let ok = false;
+      for (let x = b.cx - 1; x <= b.cx + b.fw && !ok; x++) for (let y = b.cy - 1; y <= b.cy + b.fh && !ok; y++) if (m.in(x, y) && re[m.i(x, y)]) ok = true;
+      if (!ok) return true;
+    }
+    for (const u of h.units) {
+      if (u.team !== 0 || !u.alive || u.hidden) continue;
+      const cx = cellOf(u.x), cy = cellOf(u.y);
+      if (m.in(cx, cy) && !re[m.i(cx, cy)] && !m.block[m.i(cx, cy)]) return true;
+    }
+    return false;
+  }
+  // anyone already stuck behind a fence (or standing on one) hops back to open ground
+  rescueTrapped() {
+    const h = this.home, m = h.map; if (!h.buildings.some(b => b.def.wall)) return 0;
+    const re = this.friendlyReach(); let n = 0;
+    for (const u of h.units) {
+      if (u.team !== 0 || !u.alive || u.hidden || u.flying) continue;
+      const cx = cellOf(u.x), cy = cellOf(u.y);
+      if (m.in(cx, cy) && re[m.i(cx, cy)]) continue;
+      const c = h.nearestWalkable(cx, cy, 14, (x, y) => re[m.i(x, y)]);
+      if (!c) continue;
+      h.fxAt('dust1', u.x, u.y);
+      u.x = center(c[0]); u.y = center(c[1]) + 8; u.stop && u.stop(); u.path = null; u.task = null;
+      if (u.rec) u.home = { x: u.x, y: u.y };
+      if (u.kind === 'pawn') this.releaseNode(u);
+      n++;
+    }
+    return n;
   }
   breachTarget(scene, u) {
     let best = null, bd = 1e9;
@@ -913,7 +979,7 @@ export class Realm {
     this.env.update(dt);
     this.updateAnnex(dt); // annexed land slam (src/annex.js)
     this.tickTimersT = (this.tickTimersT || 0) - dt;
-    if (this.tickTimersT <= 0) { this.tickTimersT = 0.5; this.tickTimers(false); this.checkDaily(); this.tickTribute(); this.orders.update(); this.chal.update(); this.trade.update(); this.holidayTick(); }
+    if (this.tickTimersT <= 0) { this.tickTimersT = 0.5; this.tickTimers(false); this.checkDaily(); this.tickTribute(); this.orders.update(); this.chal.update(); this.trade.update(); this.holidayTick(); this.rescueT = (this.rescueT || 0) - 0.5; if (this.rescueT <= 0 && !this.exp) { this.rescueT = 4; this.rescueTrapped(); } }
     // sheep breed
     this.sheepT = (this.sheepT || 0) + dt;
     if (this.env.breed() > 0 && this.sheepT > 35 / this.env.breed()) { this.sheepT = 0; if (this.home.sheep.length < this.maxSheep()) this.spawnSheep(); }
