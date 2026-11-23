@@ -27,6 +27,12 @@ Import, and Wipe Realm to start over.
 
 ## How the game works
 
+**5.0, Living Rivals.**
+- **Kingdoms that think:** every kingdom near your waters has its own strength, temper (warlike, greedy, cautious or pious) and stance toward you: war, peace, truce, alliance or vassal.
+- **A sea that moves:** war fleets sail between kingdoms, islands change hands and fly their conqueror's colours, and the world keeps turning while you are away.
+- **Diplomacy:** gifts, truces, peace, alliances, tribute demands and declarations of war from each kingdom's court. Envoys bring offers and threats; trade pacts and allies pay harbour dues.
+- **Consequences:** kingdoms at war with you raid your island, a kingdom must be at war with you before you can besiege it, breaking your word angers every court, and neglected vassals rebel. Chronicle, Courts holds the news.
+
 **4.0, A World of Your Own.**
 - **From hamlet to Kingdom:** every realm starts as a hamlet (a hall, one house, three pawns and two heroes) and grows into a Village, a Castle, a Stronghold and finally a Kingdom, where the Founder is crowned.
 - **An endless sea:** Voyage opens a world grown from your realm's seed, with fog of war and rings of danger that get harder the farther you sail.

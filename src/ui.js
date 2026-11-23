@@ -23,8 +23,8 @@ import { temperWord } from './kingdoms.js';
 import { SPEED } from './sea.js';
 import { parseSeedWords, normalizeSeedWords } from './ocean.js';
 
-export const VERSION = '4.0';
-const NOTES_SEEN = '3.6'; // the what's-new notes below were last changed in 3.6; 4.0 is introduced by the 'A new age' dialog
+export const VERSION = '5.0';
+const NOTES_SEEN = '5.0'; // the what's-new notes below were last changed in 5.0
 
 const $ = s => document.querySelector(s);
 const src = k => SHEETS[k] ? encodeURI(SHEETS[k].src) : '';
@@ -204,6 +204,12 @@ export class UI {
     if (!info.fresh && localStorage.getItem('tinyrealm.seen') !== NOTES_SEEN) {
       const div = document.createElement('div');
       div.innerHTML = `<p style="text-align:left;font-size:14px;line-height:1.4">
+        <b>5.0 Living Rivals</b><br>
+        Every kingdom on the sea now has its own strength, temper and stance toward you: at war, at peace, in a truce, allied, or your vassal.<br>
+        Watch their war fleets sail. Kingdoms seize each other's islands, and a taken island flies its conqueror's colours.<br>
+        Diplomacy: tap a kingdom on the sea, then Diplomacy, to send gifts, offer truces, make peace, swear alliances, demand tribute or declare war.<br>
+        Envoys arrive with offers and threats. Kingdoms at war with you send raiders, and neglected vassals may rebel.<br>
+        Chronicle, Courts lists every court you know, with news from across the sea.<br><br>
         <b>4.0</b><br>
         Every realm begins as a hamlet with two heroes and grows into a Kingdom.<br>
         Voyage opens the open sea: sail your fleet to islands, kingdoms, ports and ruins with a crew of your choosing.<br>
