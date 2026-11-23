@@ -68,7 +68,7 @@ export const BUILDINGS = {
 // ---------- kingdom tiers ----------
 export const TIERS = [
   null,
-  { name: 'Hamlet', storage: 400, squad: 4, castleHp: 1500, limits: { house: 3, barracks: 1, archery: 1, tower: 1, monastery: 0, tavern: 1, market: 0, chapel: 0 } },
+  { name: 'Hamlet', storage: 600, squad: 4, castleHp: 1500, limits: { house: 3, barracks: 1, archery: 1, tower: 1, monastery: 0, tavern: 1, market: 0, chapel: 0 } },
   { name: 'Village', storage: 1200, squad: 6, castleHp: 2400, cost: { gold: 250, wood: 300, meat: 120 }, time: 180, limits: { house: 6, barracks: 1, archery: 1, tower: 2, monastery: 1, tavern: 1, market: 1, chapel: 1 } },
   { name: 'Castle', storage: 3000, squad: 8, castleHp: 3600, cost: { gold: 800, wood: 900, meat: 400 }, time: 600, limits: { house: 9, barracks: 2, archery: 2, tower: 4, monastery: 1, tavern: 2, market: 1, chapel: 1 } },
   { name: 'Stronghold', storage: 7000, squad: 10, castleHp: 5200, cost: { gold: 2000, wood: 2200, meat: 1000 }, time: 1800, limits: { house: 12, barracks: 2, archery: 2, tower: 6, monastery: 2, tavern: 2, market: 2, chapel: 2 } },

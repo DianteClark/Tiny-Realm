@@ -52,7 +52,7 @@ function freshState() {
     relics: {}, frontier: 1, cleared: 0,
     stats: { raidsSurvived: 0, raidsLost: 0, trollsSlain: 0, kills: 0, eventsSurvived: 0, wood: 0, gold: 0, meat: 0 },
     questIdx: 0,
-    timers: { raid: 330, minor: 150, major: 1500 },
+    timers: { raid: 480, minor: 150, major: 1500 },
     daily: { last: '', streak: 0, bounty: '' },
     log: [], introSeen: false,
     gear: [], nextGear: 0,
@@ -109,11 +109,19 @@ export class Realm {
     const away = fresh ? 0 : this.applyOffline();
     this.scene = this.home;
     this.checkDaily();
-    return { fresh, away, inherit, newAge };
+    // closing the app does not make raiders go away: they are still on the beach
+    if (!fresh && this.state.raidAshore) { this.state.raidAshore = false; this.state.timers.raid = 3; this.raidWarned = true; this.pendingRaid = this.planRaid(); this.resumedRaid = true; }
+    // a battle cut short by closing the app is abandoned; the crew is back aboard
+    const abandoned = !fresh && this.state.battleAt; if (abandoned) { this.log(`The landing at ${this.state.battleAt} was abandoned.`); this.state.battleAt = null; }
+    // a trade boat that was fighting pirates when the app closed lands its cargo now
+    for (const sl of (this.state.trade && this.state.trade.slots) || []) if (sl.waiting) { sl.waiting = false; sl.back = Date.now() - 1; }
+    return { fresh, away, inherit, newAge, abandoned };
   }
   save() {
     if (!this.state) return;
     this.syncState();
+    this.state.raidAshore = !!(this.raid && this.raid.active && this.raid.kind !== 'pirates');
+    this.state.battleAt = this.exp && !this.exp.ended ? this.exp.islandName : null;
     this.state.lastSeen = Date.now();
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(this.state)); } catch (e) { console.error(e); }
   }
@@ -741,6 +749,8 @@ export class Realm {
       const o = vis(b.type, b.cx, b.cy);
       if (me.x0 <= o.x1 && me.x1 >= o.x0 && me.y0 <= o.y1 && me.y1 >= o.y0) return false;
     }
+    // keep a clear yard in front of the hall/castle door so buildings never crowd the walkway
+    if (type !== 'castle' && this.door) { const [dx0, dy0] = this.door; for (let y = cy; y < cy + d.fh; y++) for (let x = cx; x < cx + d.fw; x++) if (Math.abs(x - dx0) <= 2 && y >= dy0 - 1 && y <= dy0 + 2) return false; }
     // an open row in front so the door stays reachable
     let open = false;
     for (let x = cx; x < cx + d.fw; x++) if (m.walkable(x, cy + d.fh) && m.level(x, cy + d.fh) === lvl) open = true;
@@ -966,7 +976,7 @@ export class Realm {
     if (recruit > 1) { rec.level = recruit; rec.xp = XP_LEVELS[recruit]; }
     const c = this.home.nearestWalkable(b.cx + Math.floor(b.fw / 2), b.cy + b.fh) || this.door;
     this.spawnSoldier(rec, false, { x: center(c[0]), y: center(c[1]) + 8 });
-    if (!quiet) { this.ui.toast(`${rec.name} the ${UNITS[q.unit].name} is ready.`); this.sfx('ready'); this.home.fxAt('dust1', center(c[0]), center(c[1]) + 8); }
+    if (!quiet) { this.ui.toast(`${rec.name} joins the army: a new ${UNITS[q.unit].name}.`); this.sfx('ready'); this.home.fxAt('dust1', center(c[0]), center(c[1]) + 8); }
     this.log(`${rec.name} joined as ${/^[AEIOU]/.test(UNITS[q.unit].name) ? 'an' : 'a'} ${UNITS[q.unit].name}.`);
   }
   upgradeCastle() {
@@ -1228,7 +1238,7 @@ export class Realm {
       S.rivals[rv.key].raids++;
     }
     const days = (Date.now() - S.created) / 86400000;
-    const budget = (opts.budget ?? (3 + S.tier * 2.5 + S.stats.raidsSurvived * 0.7 + Math.min(days, 60) * 0.25 + S.renown * 2)) * (1 + this.decrees.fx('raidSize'));
+    const budget = (opts.budget ?? (3 + S.tier * 2.5 + S.stats.raidsSurvived * 0.7 + Math.min(days, 60) * 0.25 + S.renown * 2)) * (1 + this.decrees.fx('raidSize')) * (S.stats.raidsSurvived + S.stats.raidsLost < 3 && !opts.units ? 0.7 : 1);
     const level = 1 + Math.floor(S.stats.raidsSurvived / 4) + (S.tier - 1) + S.renown;
     // landing spots far from the castle
     const far = this.shore.filter(s => dist(s.lx, s.ly, CASTLE.x + 2, CASTLE.y + 1) > 11);
@@ -1390,16 +1400,18 @@ export class Realm {
     }
     if (u.kind === 'soldier' && u.rec) {
       const rec = u.rec;
-      if (rec.type === 'king') {
-        rec.status = 'wounded'; rec.woundedUntil = Date.now() + 30 * 60000; rec.hp = undefined;
-        this.ui.banner('The King has fallen wounded', 'He is carried home to recover for 30 minutes.', 'red');
+      if (rec.type === 'king' || (rec.hero && rec.title === 'Founder')) { // the realm's founder, like its King, is carried home rather than lost
+        const mins = rec.type === 'king' ? 30 : 20;
+        rec.status = 'wounded'; rec.woundedUntil = Date.now() + mins * 60000; rec.hp = undefined;
+        if (S.world && S.world.crew) S.world.crew = S.world.crew.filter(id => id !== rec.id);
+        this.ui.banner(rec.type === 'king' ? 'The King has fallen wounded' : 'The Founder has fallen wounded', `${rec.type === 'king' ? 'He' : rec.name.split(' ')[0]} is carried home to recover for ${mins} minutes.`, 'red');
         this.log(`${rec.name} was wounded.`);
         return;
       }
       S.soldiers = S.soldiers.filter(s => s !== rec);
       const where = scene === this.home ? 'defending the realm' : `on ${scene.islandName}`;
-      const killer = src && src.def ? (src.def.name || 'a monster') : 'unknown hands';
-      S.fallen.unshift({ name: rec.name, type: rec.type, level: rec.level, kills: rec.kills, avatar: rec.avatar, traits: rec.traits, where, killer, date: Date.now() });
+      const killer = src && src.def ? ((this.ui.foeName ? this.ui.foeName(src.def) : src.def.name) || 'a monster') : 'unknown hands';
+      S.fallen.unshift({ name: rec.name, type: rec.type, level: rec.level, kills: rec.kills, avatar: rec.avatar, traits: rec.traits, title: rec.title || null, hero: !!rec.hero, where, killer, date: Date.now() });
       S.fallen.length = Math.min(S.fallen.length, 100);
       const gearNote = Gear.onFall(this, rec, scene === this.home);
       this.ui.toast(`${rec.name} has fallen ${where}.${gearNote}`, 'red');
@@ -1500,7 +1512,7 @@ export class Realm {
       const boss = abyss % 25 === 0 ? 'trollking' : BOSSES[(abyss / 5 - 1) % BOSSES.length];
       const pool = [...new Set(REGIONS.flatMap(r => r.enemies))];
       region = { key: 'abyss', name: 'Every Shore', colors: [2, 5, 4], enemies: pool, boss: isBoss ? boss : null, bossRelic: null };
-      level = Math.round(3 + abyss * 1.4 + S.tier);
+      level = Math.round(2 + abyss * 1.4 + S.tier * 0.5);
       info = { ...info, boss: isBoss, name: `The Abyss, floor ${abyss}`, abyss };
     }
     if (storyIdx >= 0) {

@@ -32,6 +32,15 @@ export function realmScore(R) {
 
 export const canFound = R => R.state.tier >= 3;
 
+// wiping starts over completely, but the realm (and its seed) is still remembered in the Hall
+export function recordWipe(R) {
+  const S = R.state, L = loadLegacy();
+  L.realms.unshift({ seed: R.sea && R.sea.ocean ? R.sea.words() : null, ended: Date.now(), days: Math.floor((Date.now() - S.created) / 86400000) + 1, tier: S.tier, renown: S.renown, cleared: S.cleared, abyss: (S.abyss && S.abyss.best) || 0, chapters: (S.story && S.story.done) || 0, points: 0, wiped: true });
+  L.realms.length = Math.min(L.realms.length, 20);
+  L.points = 0; L.founder = null;
+  saveLegacy(L);
+}
+
 // write the legacy record; the caller then wipes the save and reloads
 export function foundNewRealm(R, founderId) {
   const S = R.state, L = loadLegacy(), sc = realmScore(R);

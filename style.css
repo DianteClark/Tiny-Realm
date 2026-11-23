@@ -410,3 +410,6 @@ body.exp #hud:has(#abilitybar:not(.hidden)) #toasts { bottom: calc(var(--safe-bo
 .card .thumb.dec { align-items: center; } .card .thumb.dec img { max-width: 48px; max-height: 48px; }
 /* panels with tabs keep one height, so switching tabs never makes the sheet jump */
 .sheet:has(#panelTabs:not(:empty)) { height: calc(100% - var(--safe-top) - 108px); }
+/* only the ability buttons take taps; the strip around them lets taps reach the ground */
+#abilitybar { pointer-events: none; } #abilitybar .ab { pointer-events: auto; }
+body.sea #tut, body.sea #tutHand { display: none !important; }

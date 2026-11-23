@@ -4,7 +4,7 @@ import { Ocean, Fog, SEED_SPACE, wordsFromSeed } from './ocean.js';
 import { RIVALS, REGIONS } from './data.js';
 import { CHAPTERS } from './campaign.js';
 
-const SPEED = 150;          // world units per second
+export const SPEED = 95;    // world units per second
 const SIGHT = 320;          // fog revealed around the fleet
 const HOME_SIGHT = 760;     // known waters at the start
 
@@ -20,6 +20,16 @@ export class Sea {
     this.fog = new Fog(S.world.fog);
     this.fog.reveal(0, 0, HOME_SIGHT);
     this.placeHouses();
+    // story names, levels and the great houses are applied to every chunk as it is generated
+    const gen = this.ocean._gen.bind(this.ocean);
+    this.ocean._gen = (cx, cy) => { const c = gen(cx, cy); for (const is of c.islands) this.decorate(is); return c; };
+    for (const c of this.ocean.cache.values()) for (const is of c.islands) this.decorate(is);
+  }
+  decorate(is) {
+    if (is.kind === 'story' && CHAPTERS[is.chapter - 1]) { const ch = CHAPTERS[is.chapter - 1]; is.name = ch.name; is.level = ch.level; }
+    if (is.kind === 'abyss') is.name = 'The Abyss';
+    const key = this.W && this.W.houses && Object.keys(this.W.houses).find(k => this.W.houses[k] === is.id);
+    if (key && is.kingdom) { const rv = RIVALS.find(r => r.key === key); is.kingdom.name = rv.name; is.kingdom.color = key; is.kingdom.ruler = rv.ruler; is.kingdom.motto = rv.motto; is.house = key; }
   }
   // the four great houses sit on real islands: the nearest kingdom of their colour (stable once chosen)
   placeHouses() {
@@ -34,11 +44,6 @@ export class Sea {
         const pick = ks.find(k => !used.has(k.id) && k.kingdom.color === rv.key && Math.hypot(k.x, k.y) >= min) || ks.find(k => !used.has(k.id) && Math.hypot(k.x, k.y) >= min) || ks.find(k => !used.has(k.id));
         if (pick) { used.add(pick.id); W.houses[rv.key] = pick.id; }
       });
-    }
-    for (const [key, id] of Object.entries(W.houses)) {
-      const is = this.ocean.islandById(id); if (!is || !is.kingdom) continue;
-      const rv = RIVALS.find(r => r.key === key);
-      is.kingdom.name = rv.name; is.kingdom.color = key; is.kingdom.ruler = rv.ruler; is.kingdom.motto = rv.motto; is.house = key;
     }
   }
   houseOf(is) { return is && is.house ? RIVALS.find(r => r.key === is.house) : null; }
@@ -55,9 +60,10 @@ export class Sea {
   // set sail toward an island: stop just off its shore on the side we approach from
   sail(is) {
     const f = this.W.fleet, a = Math.atan2(f.y - is.y, f.x - is.x), d = is.r + 34;
-    this.W.dest = { x: is.x + Math.cos(a) * d, y: is.y + Math.sin(a) * d, id: is.id };
+    this.W.dest = { x: is.x + Math.cos(a) * d, y: is.y + Math.sin(a) * d, id: is.id }; this.W.rested = null;
     this.R.sfx('sail');
   }
+  sailTo(x, y) { this.W.dest = { x, y, id: null }; this.W.rested = null; this.R.sfx('sail'); }
   stop() { this.W.dest = null; }
   eta() { const d = this.W.dest, f = this.W.fleet; return d ? Math.hypot(d.x - f.x, d.y - f.y) / SPEED : 0; }
   update(dt) {
@@ -69,7 +75,8 @@ export class Sea {
         f.x = d.x; f.y = d.y; W.dest = null;
         const is = this.ocean.islandById(d.id);
         this.fog.reveal(f.x, f.y, SIGHT);
-        if (is) { W.seen[is.id] = 1; this.R.ui.onFleetArrive && this.R.ui.onFleetArrive(is); }
+        if (is) { W.seen[is.id] = 1; if (is.kind === 'home' && W.crew.length) { this.disembark(); this.R.ui.toast('Home again. The crew comes ashore.', 'gold'); } this.R.ui.onFleetArrive && this.R.ui.onFleetArrive(is); }
+        else this.R.ui.toast('The fleet drops anchor in open water.');
         this.persist();
       } else { f.x += dx / L * step; f.y += dy / L * step; f.flip = dx < 0; }
       this.revealT -= dt; if (this.revealT <= 0) { this.revealT = 0.2; this.fog.reveal(f.x, f.y, SIGHT); }

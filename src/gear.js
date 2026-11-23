@@ -2,7 +2,7 @@
 // Items live in state.gear; a soldier record holds equipped ids in rec.gear = { weapon, armor, trinket }.
 
 export const RARITY = [
-  { key: 'common', name: 'Common', color: '#b9ad92' },
+  { key: 'common', name: 'Common', color: '#857759' },
   { key: 'rare', name: 'Rare', color: '#4a90c0' },
   { key: 'epic', name: 'Epic', color: '#9b59c9' },
   { key: 'legendary', name: 'Legendary', color: '#e8a93a' },

@@ -19,6 +19,7 @@ import * as Legacy from './legacy.js';
 import { COLORS, STANCES, DISTRICTS, districtAt } from './squads.js';
 import { minimapOn, setMinimap } from './minimap.js';
 import { sigilCanvas } from './heraldry.js';
+import { SPEED } from './sea.js';
 import { parseSeedWords, normalizeSeedWords } from './ocean.js';
 
 export const VERSION = '4.0';
@@ -178,8 +179,9 @@ export class UI {
   welcome(info) {
     const R = this.R, S = R.state;
     if (info.newAge) this.choice('A new age', 'Tiny Realm 4.0 begins a new age. Every realm now starts as a hamlet with two heroes and grows into a Kingdom, and the old saves have been set aside. Your past realms are still remembered in the Hall of Realms.', [{ label: 'Begin anew' }]);
+    if (info.abandoned) setTimeout(() => this.banner('Landing abandoned', `The battle at ${info.abandoned} was left unfinished when the realm was closed. The crew is back aboard the ship.`, 'red'), 900);
+    if (R.resumedRaid) setTimeout(() => this.banner('The raiders are still ashore', 'They were landing when you left. To arms!', 'red'), 700);
     if (info.fresh || !S.introSeen) {
-      S.introSeen = true;
       const intro = document.createElement('div');
       let legacyLine = '';
       if (info.inherit && (info.inherit.rank || info.inherit.founder)) {
@@ -187,7 +189,7 @@ export class UI {
         legacyLine = `<p style="font-size:14px"><b>Legacy rank ${info.inherit.rank}.</b> ${info.inherit.rank ? `Every realm you found starts with ${lb.start} of each resource${lb.pawns ? ` and ${lb.pawns} extra pawn${lb.pawns > 1 ? 's' : ''}` : ''}, and gathers and fights ${Math.round(lb.gather * 100)}% better.` : ''}${f ? ` ${esc(f.name)} sailed with you as the realm's Founder${f.heirloom ? `, carrying ${esc(f.heirloom.name)}` : ''}.` : ''}</p>`;
       }
       intro.innerHTML = `<p>${esc(STORY.intro)}</p>${legacyLine}<p class="muted" style="font-size:13px">Drag to look around, pinch or scroll to zoom. Tap a soldier then tap the ground to move them. Tap buildings to train and upgrade.</p>`;
-      this.choice('Tiny Realm', intro, [{ label: 'Begin', fn: () => this.toast('Follow the Chronicle for your first goals.') }]);
+      this.choice('Tiny Realm', intro, [{ label: 'Begin', fn: () => { S.introSeen = true; R.save(); this.toast('Follow the Chronicle for your first goals.'); } }]);
     } else if (info.away && info.away.secs >= 30) {
       const a = info.away;
       const div = document.createElement('div');
@@ -662,8 +664,12 @@ export class UI {
   }
   seaTap(wx, wy) {
     const Z = this.R.sea, is = Z.ocean.islandAt(wx, wy, 26);
-    this.seaSel = is && (Z.fog.isRevealed(is.x, is.y) || is.kind === 'home') ? is : null;
-    if (this.seaSel) audio.play('click');
+    // an island counts as seen when any part of it is out of the fog (that is when its label shows)
+    const seen = i => i.kind === 'home' || [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => Z.fog.isRevealed(i.x + dx * i.r, i.y + dy * i.r));
+    if (is && seen(is)) this.seaSel = is;
+    else if (this.seaSel && this.seaSel.kind === 'water' && Math.hypot(this.seaSel.x - wx, this.seaSel.y - wy) < 40) this.seaSel = null;
+    else this.seaSel = { kind: 'water', id: null, x: wx, y: wy, name: Z.fog.isRevealed(wx, wy) ? 'Open sea' : 'Uncharted water' };
+    audio.play('click');
     this.seaKey = null; this.renderSeaCard();
   }
   onFleetArrive(is) {
@@ -682,9 +688,13 @@ export class UI {
     const is = this.seaSel, sail = W.dest, docked = Z.fleetIsland(), crew = Z.crewRecs();
     let html = '';
     if (sail) { const to = Z.ocean.islandById(sail.id); html += `<div class="sea-status"><span>Sailing to <b>${esc(to ? to.name : 'open sea')}</b>, ${time(Z.eta())}</span><button class="btn small red" data-sea="stop">Stop</button></div>`; }
-    if (is) {
+    if (is && is.kind === 'water') {
+      const d = Math.round(Math.hypot(is.x - W.fleet.x, is.y - W.fleet.y)), rg = Z.ocean.ringOf(is.x, is.y);
+      html += `<div class="isle"><div class="isle-head"><div class="grow"><h3>${is.name}</h3><p>${esc(rg.name)}, danger ${rg.level}. Sail out to see what lies there.</p></div><button class="tiny-btn" data-sea="close" aria-label="Close"><i class="ic ic-x"></i></button></div>
+        <div class="isle-acts">${sail ? '' : `<button class="btn" data-sea="goto">Sail here (${time(d / SPEED)})</button>`}</div></div>`;
+    } else if (is) {
       const rel = is.kingdom ? Z.relation(is) : null, here = !sail && docked && docked.id === is.id;
-      const d = Math.round(Math.hypot(is.x - W.fleet.x, is.y - W.fleet.y)), eta = time(d / 150);
+      const d = Math.round(Math.hypot(is.x - W.fleet.x, is.y - W.fleet.y)), eta = time(d / SPEED);
       const sub = is.kind === 'home' ? `The ${TIERS[S.tier].name.toLowerCase()} of your realm` : is.kind === 'kingdom' ? `${esc(is.kingdom.name)}, ${esc(is.kingdom.realm || '')}` : is.kind === 'lair' ? `${(REGION_NAMES[is.region] || 'Monsters')}${is.boss ? ', with a boss' : ''}` : is.kind === 'story' ? `The Drowned Crown, chapter ${is.chapter}` : { port: 'Trade routes, and rest for the crew', ruins: 'Old stones that may still hold treasure', abyss: 'Monsters from every shore, floor after floor', wild: 'Unclaimed land with good soil' }[is.kind] || this.kindLabel(is);
       const L = Z.landing(is);
       let acts = '';
@@ -693,12 +703,12 @@ export class UI {
         else if (L.act === 'home') acts = `<button class="btn" data-sea="crew">Choose crew</button>${crew.length ? `<button class="btn red" data-sea="disembark">Disembark (${crew.length})</button>` : ''}`;
         else if (L.act === 'port') acts = `<button class="btn" data-sea="rest" ${crew.length ? '' : 'disabled'}>Rest the crew</button><button class="btn" data-sea="trade">Trade routes</button>`;
         else acts = `<p class="note">${esc(L.note)}</p>`;
-      } else if (is.kind !== 'home' || !Z.atHome()) acts = `<button class="btn" data-sea="go">${is.kind === 'home' ? 'Sail home' : 'Sail here'} (${eta})</button>`;
+      } else if ((is.kind !== 'home' || !Z.atHome()) && !(sail && sail.id === is.id)) acts = `<button class="btn" data-sea="go">${is.kind === 'home' ? 'Sail home' : 'Sail here'} (${eta})</button>`;
       const relHtml = rel ? `<span class="rel ${rel}">${{ enemy: 'Enemy', neutral: 'Neutral', ally: 'Vassal' }[rel]}</span>` : '';
-      html += `<div class="isle"><div class="isle-head"><div class="sig" data-sig></div><div class="grow"><h3>${esc(is.name)} ${relHtml}</h3><p>${sub}</p>${is.kind !== 'home' ? `<p class="muted">${this.kindLabel(is)} - level ${is.level} - ${esc(Z.ocean.ringOf(is.x, is.y).name)}${W.cleared[is.id] ? ' - cleared' : ''}</p>` : ''}</div><button class="tiny-btn red" data-sea="close" aria-label="Close"><i class="ic ic-x"></i></button></div>
+      html += `<div class="isle"><div class="isle-head"><div class="sig" data-sig></div><div class="grow"><h3>${esc(is.name)} ${relHtml}</h3><p>${sub}</p>${is.kind !== 'home' ? `<p class="muted">${this.kindLabel(is)} - ${is.kind === 'abyss' ? `floor ${(S.abyss && S.abyss.depth) || 1} awaits` : `level ${is.level}`} - ${esc(Z.ocean.ringOf(is.x, is.y).name)}${W.cleared[is.id] ? ' - cleared' : ''}</p>` : ''}</div><button class="tiny-btn red" data-sea="close" aria-label="Close"><i class="ic ic-x"></i></button></div>
         <div class="isle-acts">${acts}</div></div>`;
     }
-    html += `<div class="sea-bar"><button class="btn small" data-sea="fleet">Fleet${crew.length ? ` (${crew.length} aboard)` : ''}</button><button class="btn small" data-sea="crewview">Crew</button><button class="btn small" data-sea="trade">Trade</button><button class="btn small" data-sea="homeview">Home</button></div>`;
+    html += `<div class="sea-bar"><button class="btn small" data-sea="fleet">Fleet${crew.length ? ` (${crew.length})` : ''}</button><button class="btn small" data-sea="crewview">Crew</button><button class="btn small" data-sea="trade">Trade</button><button class="btn small" data-sea="homeview">Home</button></div>`;
     const key = html + (is ? is.id : '');
     if (key === this.seaKey) { this.seaCardPx = window.innerHeight - el.getBoundingClientRect().top + 8; return; } this.seaKey = key;
     el.innerHTML = html; el.classList.remove('hidden');
@@ -712,6 +722,7 @@ export class UI {
     const R = this.R, Z = R.sea, is = this.seaSel, S = R.state;
     if (a === 'close') { this.seaSel = null; }
     else if (a === 'go' && is) { Z.sail(is); if (!Z.crewRecs().length && is.kind !== 'home' && Z.atHome()) this.toast('Sailing without a crew: you can scout, but not land. Choose a crew at home first.'); }
+    else if (a === 'goto' && is) Z.sailTo(is.x, is.y);
     else if (a === 'stop') Z.stop();
     else if (a === 'fleet') this.view.seaFocus(Z.W.fleet.x, Z.W.fleet.y);
     else if (a === 'homeview') { this.closeSea(); return; }
@@ -719,16 +730,16 @@ export class UI {
     else if (a === 'crew' || a === 'crewview') { this.closeSea(true); this.openPanel('crew'); return; }
     else if (a === 'disembark') { Z.disembark(); this.toast('The crew comes ashore.'); }
     else if (a === 'rest') {
-      const k = 'rest:' + (is && is.id); if (this.restedAt === k) return this.toast('They have rested here already.');
-      this.restedAt = k; for (const r of Z.crewRecs()) { const U = UNITS[r.type]; r.hp = Math.min(Math.round((r.hp ?? U.hp) + U.hp * 0.4), Math.round(U.hp * 3)); }
-      this.toast('The crew eats well and patches their wounds.', 'gold');
+      if (Z.W.rested === (is && is.id)) return this.toast('They have rested here already. Sail on, and rest at the next port.');
+      Z.W.rested = is && is.id; for (const r of Z.crewRecs()) r.hp = undefined; // undefined means full health when they next take the field
+      R.save(); this.toast('The crew eats well and sleeps in real beds. Everyone is back to full health.', 'gold');
     }
     else if (a === 'land' && is) {
       const L = Z.landing(is); if (L.act !== 'land') return;
       const ids = Z.crewRecs().map(r => r.id);
       this.closeSea(true);
       R.startExpedition(S.frontier, ids, L.mode);
-      this.banner(R.exp.islandName, `${R.exp.region.name}, level ${R.exp.level}. ${is.kind === 'kingdom' ? 'Break the walls and take the castle.' : 'Destroy every camp.'} Tap a soldier or All, then tap the ground or a foe.`, 'blue');
+      this.banner(R.exp.islandName, `${R.exp.region.name}, level ${R.exp.level}. ${is.kind === 'kingdom' ? 'Break the walls and take the castle.' : R.exp.structs.length ? 'Destroy every camp.' : 'Defeat every monster.'} Tap a soldier or All, then tap the ground or a foe.`, 'blue');
       return;
     }
     this.seaKey = null; this.renderSeaCard();
@@ -842,7 +853,7 @@ export class UI {
     const xpPct = next ? Math.min(100, (rec.xp - prev) / (next - prev) * 100) : 100;
     const u = this.R.home.units.find(x => x.rec === rec && x.alive && !x.dead) || (this.R.exp && this.R.exp.units.find(x => x.rec === rec && x.alive));
     const hpPct = u ? u.hp / u.maxHp * 100 : 100;
-    const status = rec.status === 'away' ? 'On expedition' : rec.status === 'wounded' ? `Wounded, ${time((rec.woundedUntil - Date.now()) / 1000)}` : 'At home';
+    const status = rec.status === 'away' ? (this.R.exp && this.R.exp.units.some(u => u.rec === rec) ? 'In battle' : 'Aboard the ship') : rec.status === 'wounded' ? `Wounded, ${time((rec.woundedUntil - Date.now()) / 1000)}` : 'At home';
     return `<div class="card ${opts.pick ? 'light' : ''}" ${opts.pick ? `data-act="pick:${rec.id}"` : ''}>
       ${opts.pick ? `<button class="check ${this.squadPick.has(rec.id) ? 'on' : ''}"></button>` : ''}
       <div class="thumb"><img src="${src(rec.avatar)}" class="av" alt=""></div>
@@ -1029,7 +1040,7 @@ export class UI {
     });
     const idle = C.slots.slice(0, n).some(s => !s.port);
     html += `<p class="section-title">Ports</p>` + ports(R).map(p => `<div class="card light"><div class="grow"><h3>${esc(p.name)}</h3><p>${esc(p.sub)}. ${p.mins} minute round trip, ${Math.round(p.risk * 100)}% chance of pirates on the way home.</p>
-      <div class="cost">${Object.entries(p.cargo).map(([k, v]) => `<span><i class="ic ic-${k}"></i>${v}</span>`).join('')}</div></div>
+      <div class="cost"><span class="muted" style="font-size:12px">Brings back</span>${Object.entries(p.cargo).map(([k, v]) => `<span><i class="ic ic-${k}"></i>${v}</span>`).join('')}</div></div>
       <button class="btn small" data-act="tsend:${p.key}" ${idle ? '' : 'disabled'}>Send</button></div>`).join('');
     html += `<p class="muted" style="text-align:center;font-size:13px">Boats keep sailing their route until stopped, even while you are away. Conquer provinces and rival capitals to open more ports.</p>`;
     this.live.push(() => document.querySelectorAll('.tline').forEach(el => { const s = C.slots[+el.dataset.slot]; if (s && s.port && s.back && !s.waiting && now < s.back) { const p = R.trade.port(s.port); el.textContent = `Sailing to ${p ? p.name : 'sea'}. Back in ${time((s.back - Date.now()) / 1000)}.${s.stopAfter ? ' Docking after this trip.' : ''}`; } }));
@@ -1131,7 +1142,8 @@ export class UI {
       const moon = R.moon();
       const hols = upcomingHolidays(5).map(h => `<div class="card light"><div class="grow"><h3>${h.name}</h3><p>${h.date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}. ${esc(h.desc)}</p></div></div>`).join('');
       const moonHtml = `<div class="card"><div class="grow"><h3>${moon.name}</h3><p>${moon.full ? 'Full moon tonight: the Moonlit Hunt stirs.' : moon.dark ? "A thieves' moon: dark nights bring extra thieves." : `Full moon in about ${Math.round(((29.53 / 2) - moon.age + 29.53) % 29.53)} days.`}</p></div></div>`;
-      return `<div class="stat-grid">${rows.map(([a, b]) => `<span>${a}</span><span>${b}</span>`).join('')}</div><p class="section-title">The moon</p>${moonHtml}<p class="section-title">Holy days and festivals</p>${hols}<p class="section-title">Provinces</p>${provHtml}<p class="section-title">Rival houses</p>${rv}${this.legacyHtml(true)}`;
+      const seedCard = `<p class="section-title">This world</p><div class="card light"><div class="grow"><h3 class="seedw">${esc(R.sea.words())}</h3><p class="muted">Your world's seed. Paste it when you start a new realm to sail these same seas again.</p></div><button class="btn small" data-act="copyseed:${esc(R.sea.words())}">Copy</button></div>`;
+      return seedCard + `<div class="stat-grid">${rows.map(([a, b]) => `<span>${a}</span><span>${b}</span>`).join('')}</div><p class="section-title">The moon</p>${moonHtml}<p class="section-title">Holy days and festivals</p>${hols}<p class="section-title">Provinces</p>${provHtml}<p class="section-title">Rival houses</p>${rv}${this.legacyHtml(true)}`;
     }
     if (this.tab === 'log') {
       if (!S.log.length) return '<p class="section-title">Your tale has yet to be told.</p>';
@@ -1172,7 +1184,7 @@ export class UI {
   // before a new realm begins: a random world, or a seed you liked
   askSeed(done) {
     const div = document.createElement('div');
-    div.innerHTML = `<p>Every realm sails its own world. Leave this empty for a new one, or paste a seed from the Hall of Realms to sail a world you enjoyed.</p><input id="seedIn" class="seed-in" placeholder="e.g. SALT-RAVEN-4821" autocomplete="off" autocapitalize="characters" spellcheck="false"><p class="muted" id="seedNote" style="font-size:12px;min-height:16px"></p>`;
+    div.innerHTML = `<p>Every realm sails its own world. Leave this empty for a new one, or paste a seed (from Chronicle, Realm, or the Hall of Realms) to sail a world you enjoyed.</p><input id="seedIn" class="seed-in" placeholder="e.g. SALT-RAVEN-4821" autocomplete="off" autocapitalize="characters" spellcheck="false"><p class="muted" id="seedNote" style="font-size:12px;min-height:16px"></p>`;
     this.choice('Choose a world', div, [
       { label: 'Begin', fn: () => { const v = (document.getElementById('seedIn') || {}).value || ''; done(v.trim() ? normalizeSeedWords(v) : null); } },
       { label: 'Cancel', cls: 'red' },
@@ -1186,7 +1198,7 @@ export class UI {
       ${next ? `<div class="xpbar"><i style="width:${(L.points % 100)}%"></i></div>` : ''}<p class="muted">This realm is worth ${sc.total} points: ${sc.parts.map(p => `${p[0].toLowerCase()} ${p[1]}`).join(', ') || 'nothing yet'}.</p></div></div>`;
     html += Legacy.canFound(R) ? `<button class="btn wide" data-act="found">Found a new realm</button><p class="muted" style="text-align:center;font-size:12px">Bank this realm's points, choose a hero to sail with you, and begin again on a new island.</p>`
       : `<p style="text-align:center;font-size:13px">Raise the Castle to found a new realm and bank your Legacy.</p>`;
-    if (full) html = `<p class="section-title">This world</p><div class="card light"><div class="grow"><h3 class="seedw">${esc(R.sea.words())}</h3><p class="muted">Your world's seed. Paste it when you start a new realm to sail these same seas again.</p></div><button class="btn small" data-act="copyseed:${esc(R.sea.words())}">Copy</button></div><p class="section-title">Legacy</p>` + html;
+    // (this world's seed card is shown at the top of the Realm tab)
     if (full && L.realms.length) html += '<p class="section-title">Hall of Realms</p>' + L.realms.map((r, i) => `<div class="card light"><div class="grow"><h3>Realm ${L.realms.length - i}${r.seed ? ` <span class="seedw small">${esc(r.seed)}</span>` : ''}</h3><p>${r.days} days, ${(TIERS[r.tier] || TIERS[1]).name}${r.renown ? ` renown ${r.renown}` : ''}, ${r.cleared} islands, Abyss floor ${r.abyss}, ${r.chapters} story chapters. Worth ${r.points} points. Ended ${ago(r.ended)}.</p></div>${r.seed ? `<button class="btn small" data-act="copyseed:${esc(r.seed)}">Copy seed</button>` : ''}</div>`).join('');
     return html;
   }
@@ -1225,8 +1237,8 @@ export class UI {
         this.live.push(() => { const e = $('#bup'); if (e) { if (!S.upgradeEnd) return this.refresh(); e.textContent = `Growing into a ${TIERS[S.tier + 1].name}: ${time((S.upgradeEnd - Date.now()) / 1000)}`; } });
       } else if (S.tier < 5) {
         const nt = TIERS[S.tier + 1];
-        const unlock = Object.entries(nt.limits).filter(([k, v]) => v > (TIERS[S.tier].limits[k] || 0)).map(([k, v]) => `${v} ${BUILDINGS[k].name}${v > 1 ? 's' : ''}`).join(', ');
-        const units = Object.values(UNITS).filter(u => u.tier === S.tier + 1).map(u => u.name).join(', ');
+        const unlock = Object.entries(nt.limits).filter(([k, v]) => v > (TIERS[S.tier].limits[k] || 0)).map(([k, v]) => { const n = BUILDINGS[k].name; return `${v} ${v === 1 || /s$/.test(n) ? n : /y$/.test(n) ? n.slice(0, -1) + 'ies' : n + 's'}`; }).join(', ');
+        const units = Object.values(UNITS).filter(u => u.tier === S.tier + 1 && u.from !== 'crown').map(u => u.name).join(', ');
         html += `<div class="card"><div class="grow"><h3>Grow into a ${nt.name}</h3><p>Storage ${fmt(nt.storage)}, squad of ${nt.squad}, ${S.tier + 1 >= 3 ? 'castle' : 'hall'} health ${nt.castleHp}. Allows ${unlock}.${units ? ' New soldiers: ' + units + '.' : ''} Takes ${time(nt.time)}.</p>${this.costHtml(nt.cost)}</div>
           <button class="btn small" data-act="upgrade" ${R.canAfford(nt.cost) ? '' : 'disabled'}>Grow</button></div>`;
       } else {
@@ -1331,7 +1343,7 @@ export class UI {
       <p class="section-title">Legacy</p>
       ${this.legacyHtml()}
       <p class="section-title">Start over</p>
-      <p style="text-align:center;font-size:13px">Wiping erases your castle, soldiers, relics, every record and your Legacy. This cannot be undone.</p>
+      <p style="text-align:center;font-size:13px">Wiping erases your realm, soldiers, relics and your Legacy points. Its seed is kept in the Hall of Realms. This cannot be undone.</p>
       <button class="btn wide red" data-act="wipe">Wipe realm</button>
       <p class="section-title">Credits</p>
       <p style="text-align:center;font-size:13px">Art: Tiny Swords by Pixel Frog. Font: BoldPixels by YukiPixels (CC BY-SA 4.0). Music and sound are synthesized in your browser.</p>
@@ -1460,13 +1472,14 @@ export class UI {
     if (k === 'wipe') {
       return this.confirm('Wipe your realm?', 'Everything will be erased and a new island will rise from the sea.', 'Wipe it all', () => {
         this.confirm('Are you certain?', 'Last chance. Your soldiers, relics and records will be gone forever.', 'Yes, start over', () => {
-          this.askSeed(words => { this.wiping = true; try { localStorage.removeItem('tinyrealm.legacy'); if (words) localStorage.setItem('tinyrealm.nextSeed', words); } catch (e) { /* ignore */ } R.wipe(); location.reload(); });
+          this.askSeed(words => { this.wiping = true; try { Legacy.recordWipe(R); if (words) localStorage.setItem('tinyrealm.nextSeed', words); } catch (e) { /* ignore */ } R.wipe(); location.reload(); });
         });
       });
     }
   }
 
   expeditionResult(s) {
+    if (s.fromSea && !s.shipHome) this.openSea(); // the result is read from the deck, not from home
     const div = document.createElement('div');
     if (s.result === 'won') {
       div.innerHTML = `<p>${esc(s.name)} is cleared.</p><div class="cost" style="justify-content:center;font-size:18px"><span><i class="ic ic-gold"></i>+${s.loot.gold}</span><span><i class="ic ic-wood"></i>+${s.loot.wood}</span><span><i class="ic ic-meat"></i>+${s.loot.meat}</span></div>
@@ -1487,13 +1500,13 @@ export class UI {
         const ch = CHAPTERS[s.story], nx = CHAPTERS[s.story + 1];
         div.innerHTML = `<p style="font-style:italic">${esc(ch.outro)}</p>` + div.innerHTML + (nx ? `<p class="muted">Next: Chapter ${s.story + 2}, ${esc(nx.name)}.</p>` : '<p><b>The Drowned Crown is complete.</b></p>');
         this.choice(ch.final ? 'The crown is yours' : `Chapter ${s.story + 1} won`, div, [{ label: 'Home' }]);
-      } else this.choice(s.conquered ? 'The kingdom kneels' : 'Victory', div, [{ label: s.fromSea ? 'Back to the ship' : 'Home', fn: () => { if (s.fromSea) this.openSea(); } }]);
+      } else this.choice(s.conquered ? 'The kingdom kneels' : 'Victory', div, [{ label: s.fromSea ? 'Continue' : 'Home', fn: () => { if (s.fromSea && !this.seaOpen) this.openSea(); } }]);
     } else if (s.result === 'lost') {
       div.innerHTML = `<p>No one returned from ${esc(s.name)}. Their names are kept in the Hall of the Fallen.</p>${s.shipHome ? '<p class="muted">With no one left aboard, the ship drifts home on the tide.</p>' : ''}`;
       this.choice('The squad is lost', div, [{ label: 'Home' }]);
     } else {
       div.innerHTML = `<p>The squad pulls back to the ship from ${esc(s.name)}.</p><p class="muted">Aboard: ${s.survivors.map(esc).join(', ')}</p>`;
-      this.choice('Retreat', div, [{ label: s.fromSea ? 'Back to the ship' : 'Home', fn: () => { if (s.fromSea) this.openSea(); } }]);
+      this.choice('Retreat', div, [{ label: s.fromSea ? 'Continue' : 'Home', fn: () => { if (s.fromSea && !this.seaOpen) this.openSea(); } }]);
     }
   }
 }

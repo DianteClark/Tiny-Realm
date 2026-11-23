@@ -950,7 +950,7 @@ export class Scene {
       const W = vw / k, H = vh / k, pad = 34;
       if (sx < 0 || sy < 90 || sx > W || sy > H - 100) {
         const a = Math.atan2(sy - H / 2, sx - W / 2);
-        const ex = Math.max(pad, Math.min(W - pad, sx)), ey = Math.max(130, Math.min(H - 150, sy));
+        const ex = Math.max(pad, Math.min(W - pad, sx)), ey = Math.max(sx < W / 2 ? 260 : 210, Math.min(H - 150, sy)); // clear of the notices and minimap
         ctx.save(); ctx.setTransform(k, 0, 0, k, 0, 0);
         ctx.translate(ex, ey); const p = 1 + Math.sin(this.time * 6) * 0.08; ctx.scale(p, p);
         ctx.fillStyle = 'rgba(43,43,58,0.85)'; ctx.beginPath(); ctx.arc(0, 0, 21, 0, Math.PI * 2); ctx.fill();
