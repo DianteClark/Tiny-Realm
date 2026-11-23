@@ -36,6 +36,20 @@ const ago = t => { const s = (Date.now() - t) / 1000; return s < 60 ? 'just now'
 const UNIT_AV = { pawn: 'av_h5', warrior: 'av_h1', archer: 'av_h3', lancer: 'av_h2', monk: 'av_h4', swordsman: 'av_swordsman1', berserker: 'av_berserker1', horseman: 'av_horseman1', catapult: 'av_catapult1', king: 'av_king1' };
 const REGION_NAMES = Object.fromEntries(REGIONS.map(r => [r.key, r.name]));
 const BLD_IMG = { lantern: 'fire1', wall: 'fence', gate: 'fence', castle: 'b_Castle', house: 'b_House1', barracks: 'b_Barracks', archery: 'b_Archery', monastery: 'b_Monastery', tower: 'b_Tower', tavern: 'b_Tavern', market: 'b_Market', chapel: 'b_Chapel', bush: 'bush1', rock: 'rock1', stump: 'stump1' };
+// a crisp thumbnail of a sprite's first frame, trimmed to its visible pixels and scaled by a whole number
+const thumbCache = new Map();
+const spriteThumb = (k, box = 48) => {
+  if (thumbCache.has(k)) return thumbCache.get(k);
+  const S = SHEETS[k]; if (!S || !S.img) return src(k);
+  const fw = S.fw || S.img.width, fh = S.fh || S.img.height, c = document.createElement('canvas'); c.width = fw; c.height = fh;
+  const x = c.getContext('2d'); x.drawImage(S.img, 0, 0, fw, fh, 0, 0, fw, fh);
+  const d = x.getImageData(0, 0, fw, fh).data; let x0 = fw, y0 = fh, x1 = -1, y1 = -1;
+  for (let y = 0; y < fh; y++) for (let i = 0; i < fw; i++) if (d[(y * fw + i) * 4 + 3] > 8) { if (i < x0) x0 = i; if (i > x1) x1 = i; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  if (x1 < 0) return src(k);
+  const w = x1 - x0 + 1, h = y1 - y0 + 1, sc = Math.max(1, Math.floor(box / Math.max(w, h))), o = document.createElement('canvas');
+  o.width = w * sc; o.height = h * sc; const ox = o.getContext('2d'); ox.imageSmoothingEnabled = false; ox.drawImage(c, x0, y0, w, h, 0, 0, w * sc, h * sc);
+  const url = o.toDataURL(); thumbCache.set(k, url); return url;
+};
 const cap1 = s => s && !/^x\d/.test(s) ? s[0].toUpperCase() + s.slice(1) : s; // "x1.35 damage" stays as it is
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -403,10 +417,17 @@ export class UI {
     this.view.focusScene();
     if (exp) this.renderSquad(true);
   }
+  // a kingdom of the open sea borrows a great house's colours: name its troops after its own house
+  foeName(def) {
+    const k = this.R.exp && this.R.exp.isle && this.R.exp.isle.kingdom;
+    if (!k || !def || !def.rival || this.R.exp.isle.house) return def ? def.name : '';
+    const own = (RIVALS.find(r => r.key === def.rival) || { name: 'House Azure' }).name.split(' ')[1];
+    return def.name.replace(own, String(k.name).replace(/^House /, ''));
+  }
   renderExpHud() {
     const st = this.R.expStatus(); if (!st) return;
     $('#expName').textContent = `${st.name} - ${st.region} - Level ${st.level}`;
-    const stat = `<span>Camps ${st.camps}</span><span>Foes ${st.foes}</span>` + (st.boss && st.boss.alive ? `<span>Boss: ${esc(ENEMIES[st.boss.type].name)}</span>` : '');
+    const stat = `<span>Camps ${st.camps}</span><span>Foes ${st.foes}</span>` + (st.boss && st.boss.alive ? `<span>Boss: ${esc(this.foeName(ENEMIES[st.boss.type]))}</span>` : '');
     if (stat !== this.expStatKey) { this.expStatKey = stat; $('#expStat').innerHTML = stat; }
   }
   renderSquad(force) {
@@ -454,13 +475,13 @@ export class UI {
       if (o.kind === 'pawn') { this.toast(`A Pawn, working as ${o.job === 'idle' ? 'an idle hand' : 'a ' + { wood: 'woodcutter', gold: 'miner', meat: 'shepherd', build: 'builder' }[o.job]}.`); return; }
       if (o.team === 1) {
         if (sc.selected.size) { this.order({ type: 'attack', target: o }); sc.fxAt('cursorRing', o.x, o.bodyY + 16, { dur: 0.35, scale: 0.7 }); return; }
-        this.toast(`${ENEMIES[o.type].name}, level ${o.level}. ${Math.ceil(o.hp)} health.`);
+        this.toast(`${this.foeName(ENEMIES[o.type])}, level ${o.level}. ${Math.ceil(o.hp)} health.`);
         return;
       }
     }
     if (o instanceof Struct) {
       if (sc.selected.size) { this.order({ type: 'attack', target: o }); return; }
-      this.toast(`${o.def.name}. Destroy every camp to clear the island.`); return;
+      this.toast(`${this.foeName(o.def)}. ${o.def.palisade ? 'Break through to reach the castle.' : 'Destroy every camp to clear the island.'}`); return;
     }
     if (o instanceof Building) {
       if (sc.selected.size) { sc.selected.clear(); this.refreshSel(); }
@@ -664,7 +685,7 @@ export class UI {
     if (is) {
       const rel = is.kingdom ? Z.relation(is) : null, here = !sail && docked && docked.id === is.id;
       const d = Math.round(Math.hypot(is.x - W.fleet.x, is.y - W.fleet.y)), eta = time(d / 150);
-      const sub = is.kind === 'home' ? `The ${TIERS[S.tier].name.toLowerCase()} of your realm` : is.kind === 'kingdom' ? `${esc(is.kingdom.name)}, ${esc(is.kingdom.realm || '')}` : is.kind === 'lair' ? `${(REGION_NAMES[is.region] || 'Monsters')}${is.boss ? ', with a boss' : ''}` : is.kind === 'story' ? `The Drowned Crown, chapter ${is.chapter}` : this.kindLabel(is);
+      const sub = is.kind === 'home' ? `The ${TIERS[S.tier].name.toLowerCase()} of your realm` : is.kind === 'kingdom' ? `${esc(is.kingdom.name)}, ${esc(is.kingdom.realm || '')}` : is.kind === 'lair' ? `${(REGION_NAMES[is.region] || 'Monsters')}${is.boss ? ', with a boss' : ''}` : is.kind === 'story' ? `The Drowned Crown, chapter ${is.chapter}` : { port: 'Trade routes, and rest for the crew', ruins: 'Old stones that may still hold treasure', abyss: 'Monsters from every shore, floor after floor', wild: 'Unclaimed land with good soil' }[is.kind] || this.kindLabel(is);
       const L = Z.landing(is);
       let acts = '';
       if (here) {
@@ -782,7 +803,7 @@ export class UI {
       if (d.decor) {
         const head = decoHead ? '' : (decoHead = true, `<p class="section-title">Decorations</p><p style="text-align:center;font-size:13px">They never block anyone's path. Every two make your people a little happier. Tap one later to clear it.</p>`);
         const n = R.decorList().filter(o => o.type === k).length, lim = R.limitFor(k), ok = n < lim && R.canAfford(d.cost);
-        return head + `<div class="card light"><div class="thumb"><div class="dthumb" style="background-image:url('${src(d.decor[0])}')"></div></div><div class="grow"><h3>${d.name}</h3>${this.costHtml(d.cost)}<p class="muted">${n} / ${lim} placed</p></div>
+        return head + `<div class="card light"><div class="thumb dec"><img src="${spriteThumb(d.decor[0])}" alt=""></div><div class="grow"><h3>${d.name}</h3>${this.costHtml(d.cost)}<p class="muted">${n} / ${lim} placed</p></div>
           <button class="btn small" data-act="place:${k}" ${ok ? '' : 'disabled'}>Place</button></div>`;
       }
       const lim = R.limitFor(k), n = R.countOf(k);

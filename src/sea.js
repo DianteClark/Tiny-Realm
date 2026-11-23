@@ -109,7 +109,7 @@ export class Sea {
     }
     if (is.kind === 'abyss') return S.tier < 3 ? { act: 'none', note: 'The Abyss swallows small realms whole. Raise the Castle before you descend.' } : { act: 'land', mode: 'abyss', label: `Descend to floor ${(S.abyss && S.abyss.depth) || 1}` };
     if (is.kind === 'port') return { act: 'port' };
-    if (is.kind === 'wild') return { act: 'none', note: 'Unclaimed land with good soil. Founding colonies arrives in a later update.' };
+    if (is.kind === 'wild') return { act: 'none', note: 'Nothing to fight and nothing to take. Settling new land comes in a later update.' };
     if (is.kind === 'kingdom') {
       const h = this.houseOf(is);
       if (h) {

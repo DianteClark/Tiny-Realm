@@ -407,3 +407,4 @@ body.exp #minimap { top: calc(var(--safe-top) + 116px); }
 .tiny-link { padding: 8px 6px; margin: -8px 0; }
 #hud:has(#abilitybar:not(.hidden)) #toasts { bottom: calc(var(--safe-bot) + 250px); }
 body.exp #hud:has(#abilitybar:not(.hidden)) #toasts { bottom: calc(var(--safe-bot) + 226px); }
+.card .thumb.dec { align-items: center; } .card .thumb.dec img { max-width: 48px; max-height: 48px; }
