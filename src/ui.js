@@ -21,11 +21,12 @@ import { minimapOn, setMinimap } from './minimap.js';
 import { sigilCanvas } from './heraldry.js';
 import { temperWord } from './kingdoms.js';
 import { COLONY_LEVELS } from './colonies.js';
+import { DOCTRINES, SHIP } from './warfare.js';
 import { SPEED } from './sea.js';
 import { parseSeedWords, normalizeSeedWords } from './ocean.js';
 
-export const VERSION = '6.0';
-const NOTES_SEEN = '6.0'; // the what's-new notes below were last changed in 6.0
+export const VERSION = '7.0';
+const NOTES_SEEN = '7.0'; // the what's-new notes below were last changed in 7.0
 
 const $ = s => document.querySelector(s);
 const src = k => SHEETS[k] ? encodeURI(SHEETS[k].src) : '';
@@ -207,6 +208,12 @@ export class UI {
     if (!info.fresh && localStorage.getItem('tinyrealm.seen') !== NOTES_SEEN) {
       const div = document.createElement('div');
       div.innerHTML = `<p style="text-align:left;font-size:14px;line-height:1.4">
+        <b>7.0 Generals and Sea Battles</b><br>
+        Generals: open a veteran of level 6 or more in Army and appoint them with a doctrine: Vanguard, Bulwark, Marksman or Warden. Everyone who fights beside them gains from it.<br>
+        Generals rise from Captain to Commander to Marshal as they win battles, and their doctrine grows stronger.<br>
+        Kingdoms at war with you now send war fleets against your island and your colonies. You can watch them come.<br>
+        Tap an enemy fleet on the sea and Intercept it with your crew. Win the sea battle to sink it and take its gold, or meet it on the shore when it lands.<br>
+        Refit the ship at home from the Crew panel: cannons, sails and hull.<br><br>
         <b>6.0 Colonies and Trade Fleets</b><br>
         Settle wild land, or any lair or ruin you have cleared: sail there and tap Found a colony. Two pawns stay behind as settlers.<br>
         Colonies fill their stores every hour and grow from Outpost to Settlement to Town. A Town adds a trade boat.<br>
@@ -680,6 +687,9 @@ export class UI {
   }
   seaTap(wx, wy) {
     const Z = this.R.sea, is = Z.ocean.islandAt(wx, wy, 26);
+    // a war fleet under your finger comes first
+    const z = this.view.seaZoom ? this.view.seaZoom() : 1, near = (Z.W.fleets || []).filter(f => Z.fog.isRevealed(f.x, f.y)).map(f => [f, Math.hypot(f.x - wx, f.y - wy)]).sort((a, b) => a[1] - b[1])[0];
+    if (near && near[1] < Math.max(40, 30 / z)) { this.seaSel = { kind: 'efleet', id: 'efleet', f: near[0], x: near[0].x, y: near[0].y }; audio.play('click'); this.seaKey = null; this.renderSeaCard(); return; }
     // an island counts as seen when any part of it is out of the fog (that is when its label shows)
     const seen = i => i.kind === 'home' || [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => Z.fog.isRevealed(i.x + dx * i.r, i.y + dy * i.r));
     if (is && seen(is)) this.seaSel = is;
@@ -705,7 +715,23 @@ export class UI {
     let html = '';
     if (W.hold && Z.holdText()) html += `<div class="sea-status"><span>In the hold: <b>${esc(Z.holdText())}</b>. Unloaded at home.</span></div>`;
     if (sail) { const to = Z.ocean.islandById(sail.id); html += `<div class="sea-status"><span>Sailing to <b>${esc(to ? to.name : 'open sea')}</b>, ${time(Z.eta())}</span><button class="btn small red" data-sea="stop">Stop</button></div>`; }
-    if (is && is.kind === 'water') {
+    if (is && is.kind === 'efleet') {
+      const f = is.f, live = (W.fleets || []).includes(f);
+      if (!live) { this.seaSel = null; }
+      else {
+        const a = Z.ocean.islandById(f.from), to = Z.ocean.islandById(f.to), K = R.kingdoms, war = a && K.stance(a) === 'war';
+        const bound = f.to === 'home' ? 'your island' : to ? to.name : 'open sea';
+        const chasing = W.chase && W.chase.from === f.from && W.chase.to === f.to;
+        let acts = '';
+        if (!war) acts = `<p class="note">${a ? esc(a.kingdom.name) : 'They'} ${a && K.stance(a) === 'vassal' ? 'serve you' : 'are not at war with you'}. Declare war before you attack their ships.</p>`;
+        else if (!crew.length) acts = '<p class="note">No crew aboard. Sail home and choose a crew to fight at sea.</p>';
+        else if (chasing) acts = `<button class="btn red" data-sea="stop">Break off</button>`;
+        else acts = `<button class="btn red" data-sea="intercept">Intercept</button>`;
+        const odds = war && crew.length ? `<p class="muted">${R.war.oddsWord(f)}. Your strength ${R.war.crewPower()}, theirs ${Math.round(f.power || (a ? K.st(a).power * 0.5 : 50))}.</p>` : '';
+        if (!f.power && a) f.power = Math.round(K.st(a).power * 0.5);
+        html += `<div class="isle"><div class="isle-head"><div class="sig" data-sig></div><div class="grow"><h3>War fleet ${a ? this.stanceTag(a) : ''}</h3><p>${a ? esc(a.kingdom.name) : 'Unknown colours'}, bound for ${esc(bound)}</p>${odds}</div><button class="tiny-btn red" data-sea="close" aria-label="Close"><i class="ic ic-x"></i></button></div><div class="isle-acts">${acts}</div></div>`;
+      }
+    } else if (is && is.kind === 'water') {
       const d = Math.round(Math.hypot(is.x - W.fleet.x, is.y - W.fleet.y)), rg = Z.ocean.ringOf(is.x, is.y);
       html += `<div class="isle"><div class="isle-head"><div class="grow"><h3>${is.name}</h3><p>${esc(rg.name)}, danger ${rg.level}. Sail out to see what lies there.</p></div><button class="tiny-btn" data-sea="close" aria-label="Close"><i class="ic ic-x"></i></button></div>
         <div class="isle-acts">${sail ? '' : `<button class="btn" data-sea="goto">Sail here (${time(d / SPEED)})</button>`}</div></div>`;
@@ -743,7 +769,8 @@ export class UI {
     el.innerHTML = html; el.classList.remove('hidden');
     const sig = el.querySelector('[data-sig]');
     if (sig) {
-      if (is && is.kingdom) { const sc = sigilCanvas(is.kingdom.sigil, 44), cv = document.createElement('canvas'); cv.width = sc.width; cv.height = sc.height; cv.getContext('2d').drawImage(sc, 0, 0); sig.appendChild(cv); }
+      const sk = is && is.kind === 'efleet' ? (R.sea.ocean.islandById(is.f.from) || {}).kingdom : is && is.kingdom;
+      if (sk) { const sc = sigilCanvas(sk.sigil, 44), cv = document.createElement('canvas'); cv.width = sc.width; cv.height = sc.height; cv.getContext('2d').drawImage(sc, 0, 0); sig.appendChild(cv); }
       else sig.remove();
     }
   }
@@ -752,6 +779,7 @@ export class UI {
     if (a === 'close') { this.seaSel = null; }
     else if (a === 'go' && is) { Z.sail(is); if (!Z.crewRecs().length && is.kind !== 'home' && Z.atHome()) this.toast('Sailing without a crew: you can scout, but not land. Choose a crew at home first.'); }
     else if (a === 'goto' && is) Z.sailTo(is.x, is.y);
+    else if (a === 'intercept' && is && is.f) { Z.chase(is.f); this.toast('The fleet gives chase.'); }
     else if (a === 'stop') Z.stop();
     else if (a === 'fleet') this.view.seaFocus(Z.W.fleet.x, Z.W.fleet.y);
     else if (a === 'homeview') { this.closeSea(); return; }
@@ -777,6 +805,39 @@ export class UI {
       return;
     }
     this.seaKey = null; this.renderSeaCard();
+  }
+  generalHtml(rec) {
+    const Wf = this.R.war;
+    if (rec.type === 'king') return '';
+    let html = `<p class="section-title">Command</p>`;
+    if (rec.general) {
+      const D = DOCTRINES[rec.general], w = rec.command || 0, nxt = w < 5 ? 5 : w < 15 ? 15 : null;
+      html += `<div class="card light"><div class="grow"><h3>${esc(D.name)} ${esc(Wf.rankName(rec))}</h3><p>${esc(D.desc)} At this rank the effect is ${Math.round(Wf.power(rec) * 100)}%.</p><p class="muted">${w} victor${w === 1 ? 'y' : 'ies'}${nxt ? `, ${nxt - w} more to the next rank` : ', the highest rank'}.</p></div><button class="btn small red" data-act="gendis:${rec.id}">Relieve</button></div>`;
+      return html;
+    }
+    const why = Wf.canAppoint(rec);
+    if (why) return html + `<p style="text-align:center;font-size:13px">${esc(why)} A general lifts every soldier who fights beside them.</p>`;
+    html += `<p style="text-align:center;font-size:13px">Make ${esc(rec.name.split(' ')[0])} a general (${Wf.appointCost().gold} gold). Choose a doctrine:</p>`;
+    html += Object.entries(DOCTRINES).map(([k, D]) => `<div class="card light"><div class="grow"><h3>${D.name}</h3><p>${D.desc}</p></div><button class="btn small" data-act="genapp:${rec.id}:${k}">Appoint</button></div>`).join('');
+    return html;
+  }
+  shipHtml() {
+    const Wf = this.R.war, sh = Wf.ship(), home = this.R.sea.atHome();
+    let html = `<p class="section-title">The ship</p><p style="text-align:center;font-size:13px">Sea strength with this crew: <b>${Wf.crewPower() || 'no crew aboard'}</b>.${home ? '' : ' Refits are done at home.'}</p>`;
+    html += Object.entries(SHIP).map(([k, D]) => { const full = sh[k] >= D.max; return `<div class="card light"><div class="grow"><h3>${D.name} ${sh[k]}/${D.max}</h3><p>${D.desc}</p>${full ? '' : this.costHtml(Wf.shipCost(k))}</div>${full ? '' : `<button class="btn small" data-act="refit:${k}" ${home ? '' : 'disabled'}>Refit</button>`}</div>`; }).join('');
+    return html;
+  }
+  seaBattle(res, f) {
+    const R = this.R, Z = R.sea; this.boom = { x: (f.x + Z.W.fleet.x) / 2, y: (f.y + Z.W.fleet.y) / 2, t0: performance.now() };
+    R.sfx && R.sfx('hit');
+    setTimeout(() => {
+      const div = document.createElement('div');
+      const volleys = res.rounds.map(h => `<span class="volley ${h ? 'ok' : 'bad'}">${h ? 'Hit' : 'Hit taken'}</span>`).join('');
+      div.innerHTML = `<div class="volleys">${volleys}</div><p>${res.win ? `Your fleet sank the war fleet of ${esc(res.name)}. ${res.loot ? `You took ${res.loot} gold from the wreck` : 'Your gold stores are too full to take any from the wreck'}, and the crew gained experience.` : `The war fleet of ${esc(res.name)} drove you off. ${res.hurt.length ? esc(res.hurt.join(', ')) + (res.hurt.length > 1 ? ' were' : ' was') + ' wounded and sent home to mend.' : ''}`}</p>`;
+      this.choice(res.win ? 'Victory at sea' : 'Beaten at sea', div, [{ label: res.win ? 'Onward' : 'Withdraw' }]);
+      R.sfx && R.sfx(res.win ? 'victory' : 'defeat');
+      this.seaKey = null; this.renderSeaCard();
+    }, 1600);
   }
   colonyLine(id) {
     const Co = this.R.colonies, c = Co.C[id], r = Co.rate(id), st = Co.stores(id), gar = Co.garrison(id).length, Lv = COLONY_LEVELS[c.level];
@@ -850,7 +911,7 @@ export class UI {
     const R = this.R, S = R.state, Z = R.sea, cap = TIERS[S.tier].squad;
     if (!Z.atHome()) {
       const crew = Z.crewRecs();
-      return `<p class="section-title">The fleet is at sea</p><p style="text-align:center;font-size:13px">A crew can only be changed at home. Aboard now:</p>` + (crew.length ? crew.map(r => this.soldierCard(r)).join('') : '<p style="text-align:center">Nobody.</p>') + `<button class="btn wide" data-act="tosea">Back to the sea</button>`;
+      return `<p class="section-title">The fleet is at sea</p><p style="text-align:center;font-size:13px">A crew can only be changed at home. Aboard now:</p>` + (crew.length ? crew.map(r => this.soldierCard(r)).join('') : '<p style="text-align:center">Nobody.</p>') + `<button class="btn wide" data-act="tosea">Back to the sea</button>` + this.shipHtml();
     }
     const home = S.soldiers.filter(s => s.status === 'home' || Z.W.crew.includes(s.id));
     if (!this.crewInit) { this.squadPick = new Set(Z.W.crew); this.crewInit = true; }
@@ -865,7 +926,7 @@ export class UI {
     html += `<details class="pickone" ${!SQ.length || this.pickOpen ? 'open' : ''}><summary>${SQ.length ? 'Or pick soldiers one by one' : 'Pick your soldiers'} (${this.squadPick.size}/${cap})</summary>` + (home.length ? home.sort((a, b) => b.level - a.level).map(r => this.soldierCard(r, { pick: true })).join('') : '<p style="text-align:center">No soldiers at home.</p>') + '</details>';
     html += `<p class="section-title">Aboard: ${this.squadPick.size} of ${cap}</p><div class="sqfaces big">${[...this.squadPick].map(id => S.soldiers.find(s => s.id === id)).filter(Boolean).map(r => `<img src="${src(r.avatar)}" alt="" title="${esc(r.name)}">`).join('') || '<span class="muted">Nobody yet</span>'}</div>`;
     html += `<button class="btn wide" data-act="embark">${this.squadPick.size ? 'Embark and open the sea' : 'Sail with no crew'}</button>`;
-    return html;
+    return html + this.shipHtml();
   }
   // ------------------------------------------------------------ panels
   togglePanel(name, arg) { if (this.panel === name && !arg) this.closePanel(); else this.openPanel(name, arg); }
@@ -960,7 +1021,7 @@ export class UI {
     return `<div class="card ${opts.pick ? 'light' : ''}" ${opts.pick ? `data-act="pick:${rec.id}"` : ''}>
       ${opts.pick ? `<button class="check ${this.squadPick.has(rec.id) ? 'on' : ''}"></button>` : ''}
       <div class="thumb"><img src="${src(rec.avatar)}" class="av" alt=""></div>
-      <div class="grow"><h3>${rec.promoted || rec.founder || rec.hero ? `<span class="rank">${esc(rec.promoted || rec.hero ? (rec.title || 'Elite') : 'Founder')}</span> ` : ''}${esc(rec.name)}</h3><p>Level ${rec.level} ${U.name} - ${rec.kills} kills - ${status}</p>
+      <div class="grow"><h3>${rec.promoted || rec.founder || rec.hero ? `<span class="rank">${esc(rec.promoted || rec.hero ? (rec.title || 'Elite') : 'Founder')}</span> ` : ''}${rec.general ? `<span class="rank gen">${esc(DOCTRINES[rec.general].name)} ${esc(this.R.war.rankName(rec))}</span> ` : ''}${esc(rec.name)}</h3><p>Level ${rec.level} ${U.name} - ${rec.kills} kills - ${status}</p>
         <div>${rec.traits.map(t => `<span class="trait ${TRAITS[t].rare ? 'rare' : ''}" title="${TRAITS[t].desc}">${TRAITS[t].name}</span>`).join('')}</div>
         ${this.gearRow(rec)}
         <div class="hpbar"><i style="width:${hpPct}%"></i></div><div class="xpbar"><i style="width:${xpPct}%"></i></div></div>
@@ -1030,6 +1091,7 @@ export class UI {
     const cur = Gear.itemById(S, rec.gear && rec.gear[slot]);
     let html = this.soldierCard(rec, { noButtons: true });
     html += `<div class="row-btns"><button class="btn small" data-act="autoeq:${rec.id}">Equip best</button></div>`;
+    html += this.generalHtml(rec);
     if (!rec.promoted && rec.type !== 'king') {
       const paths = PROMOTIONS[rec.type] || [{ to: '', title: 'Elite', desc: `Becomes an Elite ${UNITS[rec.type].name}, keeping their look and ability.` }];
       html += `<p class="section-title">Promotion</p>`;
@@ -1513,6 +1575,9 @@ export class UI {
     if (k === 'embark') { R.sea.embark([...this.squadPick]); this.crewInit = false; this.squadPick.clear(); this.openSea(); return; }
     if (k === 'tosea') { this.openSea(); if (x) { const is = R.sea.ocean.islandById(a.slice(6)); if (is) { this.seaSel = is; this.view.seaFocus(is.x, is.y); this.seaKey = null; this.renderSeaCard(); } } return; }
     if (k === 'court') { this.openPanel('court', a.slice(6)); return; }
+    if (k === 'genapp') { const rec = R.state.soldiers.find(s => s.id === +x); if (rec) { const e = R.war.appoint(rec, y); if (e) this.toast(e, 'red'); else this.toast(`${rec.name} is now a general.`, 'gold'); } return this.refresh(); }
+    if (k === 'gendis') { const rec = R.state.soldiers.find(s => s.id === +x); if (rec) this.confirm('Relieve this general?', `${rec.name} goes back to the ranks. Their victories are remembered if they are appointed again.`, 'Relieve', () => { R.war.dismiss(rec); this.refresh(); }); return; }
+    if (k === 'refit') { const e = R.war.refit(x); if (e) this.toast(e, 'red'); else { this.toast('The shipwrights finish their work.', 'gold'); R.sfx && R.sfx('build'); } return this.refresh(); }
     if (k === 'colup') { const e = R.colonies.upgrade(a.slice(6)); if (e) this.toast(e, 'red'); else { this.toast('The colony grows.', 'gold'); R.sfx && R.sfx('build'); } return this.refresh(); }
     if (k === 'dip') {
       const id = a.slice(5 + x.length), is = R.sea.ocean.islandById(id); if (!is) return;

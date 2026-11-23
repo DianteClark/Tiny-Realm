@@ -65,21 +65,33 @@ export class Sea {
     this.R.sfx('sail');
   }
   sailTo(x, y) { this.W.dest = { x, y, id: null }; this.W.rested = null; this.R.sfx('sail'); }
-  stop() { this.W.dest = null; }
-  eta() { const d = this.W.dest, f = this.W.fleet; return d ? Math.hypot(d.x - f.x, d.y - f.y) / SPEED : 0; }
+  stop() { this.W.dest = null; this.W.chase = null; }
+  speed() { return SPEED * (this.R.war ? this.R.war.speedMul() : 1); }
+  eta() { const d = this.W.dest, f = this.W.fleet; return d ? Math.hypot(d.x - f.x, d.y - f.y) / this.speed() : 0; }
+  // give chase to an enemy fleet: steer for where it is now, and fight when alongside
+  chase(f) { this.W.chase = { from: f.from, to: f.to }; this.W.dest = { x: f.x, y: f.y, id: null }; this.W.rested = null; this.R.sfx('sail'); }
+  chased() { const c = this.W.chase; return c && (this.W.fleets || []).find(f => f.from === c.from && f.to === c.to); }
   update(dt) {
     if (!this.ocean) return;
     const W = this.W, f = W.fleet, d = W.dest;
     if (W.hold && this.atHome()) this.unloadHold();
+    if (W.chase) {
+      const t = this.chased();
+      if (!t) { W.chase = null; W.dest = null; if (this.R.ui) this.R.ui.toast('The enemy fleet is gone from the sea.'); }
+      else {
+        W.dest = { x: t.x, y: t.y, id: null };
+        if (Math.hypot(t.x - f.x, t.y - f.y) < 50) { W.dest = null; const res = this.R.war.engage(t); if (!res) W.chase = null; else if (this.R.ui) this.R.ui.seaBattle(res, t); return; }
+      }
+    }
     if (d) {
-      const dx = d.x - f.x, dy = d.y - f.y, L = Math.hypot(dx, dy), step = SPEED * dt;
+      const dx = d.x - f.x, dy = d.y - f.y, L = Math.hypot(dx, dy), step = this.speed() * dt;
       if (L <= step) {
         f.x = d.x; f.y = d.y; W.dest = null;
         const is = this.ocean.islandById(d.id);
         this.fog.reveal(f.x, f.y, SIGHT);
         if (is) { W.seen[is.id] = 1; if (is.kind === 'home' && W.crew.length) { this.disembark(); this.R.ui.toast('Home again. The crew comes ashore.', 'gold'); }
           if (is.kind === 'home') this.unloadHold(); this.R.ui.onFleetArrive && this.R.ui.onFleetArrive(is); }
-        else this.R.ui.toast('The fleet drops anchor in open water.');
+        else if (!W.chase) this.R.ui.toast('The fleet drops anchor in open water.');
         this.persist();
       } else { f.x += dx / L * step; f.y += dy / L * step; f.flip = dx < 0; }
       this.revealT -= dt; if (this.revealT <= 0) { this.revealT = 0.2; this.fog.reveal(f.x, f.y, SIGHT); }

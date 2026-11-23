@@ -21,6 +21,7 @@ import { Squads, districtAt, DISTRICTS } from './squads.js';
 import { Sea } from './sea.js';
 import { Kingdoms } from './kingdoms.js';
 import { Colonies } from './colonies.js';
+import { Warfare } from './warfare.js';
 import { seedFromWords, randomSeedWords } from './ocean.js';
 import { SHEETS } from './assets.js';
 import { audio } from './audio.js';
@@ -79,6 +80,7 @@ export class Realm {
     this.sea = new Sea(this);
     this.kingdoms = new Kingdoms(this);
     this.colonies = new Colonies(this);
+    this.war = new Warfare(this);
   }
 
   // ------------------------------------------------------------ persistence
@@ -1192,6 +1194,7 @@ export class Realm {
     this.sea.update(dt);
     this.kingdoms.update(dt);
     this.colonies.update(dt);
+    this.war.update(dt);
     this.envoyT = (this.envoyT ?? 240 + Math.random() * 240) - dt;
     if (this.envoyT <= 0) { this.envoyT = 360 + Math.random() * 360; if (!this.exp && !(this.raid && this.raid.active) && this.state.tier >= 2 && this.ui && this.ui.envoy) { const e = this.kingdoms.envoy(); if (e) this.ui.envoy(e); } }
     this.trade.visuals(Date.now());
@@ -1324,6 +1327,7 @@ export class Realm {
       this.log(`Repelled a ${R.region ? R.region.name : ''} raid. +${reward} gold.`);
       if (Math.random() < 0.15 + R.level * 0.005) this.dropGear(R.level, { from: 'a raider' });
       this.chal.note('raid', { downs: R.downs || 0 });
+      this.war.victory(this.home);
       if (R.region && R.region.kingdomIsle) this.kingdoms.onRaidBeaten(this.sea.ocean.islandById(R.region.kingdomIsle));
     }
     if (R.onEnd) R.onEnd(won);
@@ -1690,6 +1694,7 @@ export class Realm {
     const survivors = sc.units.filter(u => u.team === 0 && u.alive && u.rec);
     const summary = { result, name: sc.islandName, survivors: survivors.map(u => u.rec.name), fallen: [], loot: null, relic: null, gear: [] };
     if (result === 'won') {
+      this.war.victory(this.exp);
       const lv = sc.level, mult = sc.bounty ? 2 : 1;
       const loot = { gold: Math.round((50 + lv * 28 + sc.expLoot) * mult), wood: Math.round((30 + lv * 18) * mult), meat: Math.round((25 + lv * 14) * mult) };
       if (sc.info.boss && !sc.bounty) { loot.gold += 150 + lv * 20; }

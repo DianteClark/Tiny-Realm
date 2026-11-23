@@ -27,6 +27,12 @@ Import, and Wipe Realm to start over.
 
 ## How the game works
 
+**7.0, Generals and Sea Battles.**
+- **Generals:** appoint veterans (level 6 and up) as generals with a doctrine: Vanguard (+damage, +speed), Bulwark (+health, +armour), Marksman (+ranged damage) or Warden (mends soldiers nearby in battle). Their aura lifts everyone fighting beside them, and grows as they rise from Captain to Commander to Marshal with each victory. A realm keeps more generals as it grows.
+- **War fleets against you:** kingdoms at war send fleets you can see sailing at your island and your colonies. A fleet that reaches your island lands an invasion; one that reaches a colony raids it.
+- **Sea battles:** tap an enemy fleet and Intercept it with your crew. Five volleys decide it: win to sink the fleet and take gold, lose and some of the crew are sent home wounded.
+- **The ship:** refit cannons, sails and hull at home, from the Crew panel.
+
 **6.0, Colonies and Trade Fleets.**
 - **Colonies:** settle wild land, cleared lairs and picked-over ruins. Each colony costs two pawns, fills its stores every hour with what its land yields (richer farther out), and grows from Outpost to Settlement to Town.
 - **Getting the goods home:** send a trade boat on a colony route, or load the stores aboard your fleet and sail home. A Town's wharf adds a trade boat.

@@ -75,7 +75,7 @@ export class Kingdoms {
     }
     W.fleets = W.fleets || [];
     // ambition: warlike and greedy kingdoms go to war with weaker neighbours
-    if (W.fleets.length < 3 && Math.random() < secs / 3600) {
+    if (W.fleets.filter(f => !f.you).length < 3 && Math.random() < secs / 3600) {
       const atk = isl.filter(is => !this.st(is).owner && !this.houseKey(is) && ['warlike', 'greedy'].includes(is.kingdom.temper) && !this.W.conquered[is.id]);
       const a = atk[Math.floor(Math.random() * atk.length)];
       if (a) {
@@ -88,6 +88,12 @@ export class Kingdoms {
         }
       }
     }
+    // kingdoms at war with you near home send fleets against your island
+    if (live && this.R.state.tier >= 2 && Math.random() < secs / 3600) {
+      const foes = isl.filter(is => !this.houseKey(is) && !this.st(is).owner && this.stance(is) === 'war' && this.near(is) && Math.hypot(is.x, is.y) < 2200);
+      const a = foes[Math.floor(Math.random() * foes.length)];
+      if (a) this.launch(a, 'home', this.st(a).power * 0.5);
+    }
     // neglected vassals grow restless
     for (const id of Object.keys(W.conquered || {})) {
       const is = this.R.sea.ocean.islandById(id); if (!is) continue;
@@ -96,6 +102,17 @@ export class Kingdoms {
       if (k.loyalty < -20 && Math.random() < secs / 1800) this.rebel(is);
     }
   }
+  // a war fleet sets out against you: your island ('home') or one of your colonies
+  launch(a, to, power) {
+    const W = this.W; W.fleets = W.fleets || [];
+    if (W.fleets.some(f => f.you && (f.to === to || f.from === a.id)) || W.fleets.filter(f => f.you).length >= 2) return false;
+    const t = this.R.sea.ocean.islandById(to); if (!t) return false;
+    W.fleets.push({ from: a.id, to, you: true, x: a.x, y: a.y, power: Math.round(power) });
+    const where = to === 'home' ? 'your island' : t.name;
+    this.news(`A war fleet of ${a.kingdom.name} sails against ${where}.`);
+    if (this.R.ui) this.R.ui.banner('War fleet sighted', `${a.kingdom.name} sends a fleet against ${where}. Meet it at sea with your crew, or ${to === 'home' ? 'be ready on the shore' : 'trust the garrison'}.`, 'red');
+    return true;
+  }
   near(is) { return Math.hypot(is.x, is.y) < 2400 || this.R.sea.fog.isRevealed(is.x, is.y); }
   moveFleets(dt) {
     const W = this.W; if (!W.fleets || !W.fleets.length) return;
@@ -103,7 +120,15 @@ export class Kingdoms {
     for (const f of [...W.fleets]) {
       const a = Z.ocean.islandById(f.from), b = Z.ocean.islandById(f.to); if (!a || !b) { W.fleets.splice(W.fleets.indexOf(f), 1); continue; }
       const dx = b.x - f.x, dy = b.y - f.y, L = Math.hypot(dx, dy), step = 40 * dt;
-      if (L <= b.r + 20) { W.fleets.splice(W.fleets.indexOf(f), 1); if (!(W.conquered[b.id] && this.stance(a) !== 'war')) this.battle(a, b, true); continue; }
+      if (f.you && this.stance(a) !== 'war') { W.fleets.splice(W.fleets.indexOf(f), 1); continue; } // peace was made: they turn back
+      if (L <= b.r + 20) {
+        if (f.you) {
+          if (f.to === 'home') { if (this.R.war.landAtHome(f)) W.fleets.splice(W.fleets.indexOf(f), 1); }
+          else { W.fleets.splice(W.fleets.indexOf(f), 1); this.R.colonies.raid(f.to, a, f.power, true); }
+          continue;
+        }
+        W.fleets.splice(W.fleets.indexOf(f), 1); if (!(W.conquered[b.id] && this.stance(a) !== 'war')) this.battle(a, b, true); continue;
+      }
       f.x += dx / L * step; f.y += dy / L * step; f.flip = dx < 0;
     }
   }

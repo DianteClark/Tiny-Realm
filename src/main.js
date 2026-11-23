@@ -31,6 +31,7 @@ const view = {
   // the sea uses the same camera in world-map units; the island view is put aside and restored
   enterSea(f) { this.homeCam = { x: cam.x, y: cam.y, z: cam.z }; cam.z = this.seaZ || 0.55; this.centerOn(f.x, f.y); glide = null; },
   exitSea() { this.seaZ = cam.z; if (this.homeCam) { cam.x = this.homeCam.x; cam.y = this.homeCam.y; cam.z = this.homeCam.z; } glide = null; clampCam(); },
+  seaZoom() { return cam.z; },
   seaCenter() { return [cam.x + vw / cam.z / 2, cam.y + vh / cam.z / 2]; },
   seaFocus(x, y) { realm.cameraTarget = { x, y, t: 0.8 }; },
   centerOn(x, y) { cam.x = x - vw / cam.z / 2; cam.y = y - vh / cam.z / 2; clampCam(); },
@@ -247,7 +248,8 @@ function drawSea(t) {
   }
   if (Z.W.dest) marks.push({ x: Z.W.dest.x, y: Z.W.dest.y, kind: 'target' });
   for (const b of realm.trade.seaBoats()) if (Z.fog.isRevealed(b.x, b.y)) marks.push({ x: b.x, y: b.y, kind: 'fleet', flip: b.flip, relation: 'own' });
-  for (const fl of Z.W.fleets || []) { if (!Z.fog.isRevealed(fl.x, fl.y)) continue; const a = Z.ocean.islandById(fl.from); if (a) marks.push({ x: fl.x, y: fl.y, kind: 'fleet', flip: fl.flip, sigil: a.kingdom.sigil, relation: Z.relation(a) }); }
+  if (ui.boom) { const k = (performance.now() - ui.boom.t0) / 1000; if (k > 1.6) ui.boom = null; else for (let i = 0; i < 3; i++) marks.push({ x: ui.boom.x + Math.sin(i * 2.1) * 24, y: ui.boom.y + Math.cos(i * 1.7) * 14, kind: 'boom', k: Math.max(0, k - i * 0.25) }); }
+  for (const fl of Z.W.fleets || []) { if (!Z.fog.isRevealed(fl.x, fl.y)) continue; const a = Z.ocean.islandById(fl.from); if (a) marks.push({ x: fl.x, y: fl.y, kind: 'fleet', flip: fl.flip, sigil: a.kingdom.sigil, relation: Z.relation(a), sel: ui.seaSel && ui.seaSel.f === fl }); }
   seaRenderer.draw(ctx, { x: cam.x, y: cam.y, z: cam.z * dpr }, Z.fog, {
     t, dpr, marks, selectedId: ui.seaSel ? ui.seaSel.id : null, homeTier: realm.state.tier, padTop: 132, padBottom: ui.seaCardH ? ui.seaCardH() : 180,
     relations: kid => { const is = Z.ocean.islandById(String(kid).replace(/^k/, '')); return Z.relation(is); },

@@ -437,3 +437,8 @@ html.standalone #game { height: var(--app-h); }
 .rel.own { background: #4a90c0; }
 .colcard .cost { margin: 2px 0; }
 .colcard .btn.small { margin-top: 4px; }
+/* 7.0 generals and sea battles */
+.rank.gen { background: #7a4fb0; color: #fff; }
+.volleys { display: flex; gap: 6px; justify-content: center; margin: 4px 0 10px; flex-wrap: wrap; }
+.volley { font-size: 12px; padding: 2px 8px; border-radius: 4px; color: #fff; }
+.volley.ok { background: #4f8f3a; } .volley.bad { background: #c8372d; }

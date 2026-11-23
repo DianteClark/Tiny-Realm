@@ -108,7 +108,15 @@ export class Colonies {
       if (c.sackedUntil > Date.now() || Date.now() - c.founded < 2 * 3600000) continue; // a new colony has time to dig in
       const foes = K.islands().filter(k => K.stance(k) === 'war' && K.near(k) && Math.hypot(k.x - is.x, k.y - is.y) < 1400);
       if (!foes.length || Math.random() > secs / 16200 * Math.min(2, foes.length)) continue;
-      const f = foes[Math.floor(Math.random() * foes.length)], atk = K.st(f).power * 0.45, def = this.defence(id);
+      const f = foes[Math.floor(Math.random() * foes.length)];
+      if (live) { K.launch(f, id, K.st(f).power * 0.45); continue; } // a war fleet sets out; it can be met at sea
+      this.raid(id, f, K.st(f).power * 0.45, live);
+    }
+  }
+  // a war fleet reaches a colony
+  raid(id, f, atk, live) {
+    const K = this.R.kingdoms, c = this.C[id], is = this.R.sea.ocean.islandById(id); if (!c || !is) return;
+    { const def = this.defence(id);
       if (Math.random() < def / (def + atk)) {
         K.st(f).power = Math.max(K.st(f).power * 0.96, 20);
         for (const r of this.garrison(id)) this.xp(r, 15);
