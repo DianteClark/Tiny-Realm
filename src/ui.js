@@ -247,9 +247,9 @@ export class UI {
     if (R.pendingDaily) {
       const d = R.pendingDaily; R.pendingDaily = null;
       const div = document.createElement('div');
-      div.innerHTML = `<p>Day ${d.streak} in a row. Your people leave a gift at the ${R.seatName()} door.</p>
+      div.innerHTML = `<p>${d.streak > 1 ? `Day ${d.streak} in a row.` : 'A new day dawns.'} Your people leave a gift at the ${R.seatName()} door.</p>
         <div class="cost" style="justify-content:center;font-size:18px"><span><i class="ic ic-gold"></i>+${d.gift.gold}</span><span><i class="ic ic-wood"></i>+${d.gift.wood}</span><span><i class="ic ic-meat"></i>+${d.gift.meat}</span></div>
-        <p class="muted">Return tomorrow for a bigger gift. A new Bounty Isle awaits in Voyage.</p>`;
+        <p class="muted">Return tomorrow for a bigger gift.</p>`;
       this.choice('Daily tribute', div, [{ label: 'Thank you' }]);
     }
   }
@@ -930,7 +930,7 @@ export class UI {
       const unknown = Object.keys(RELICS).length - owned.length;
       return `<p class="section-title">${owned.length} of ${Object.keys(RELICS).length} relics</p>` + owned.map(k => `<div class="card"><i class="ic ic-shield"></i>
         <div class="grow"><h3>${RELICS[k].name}</h3><p>${RELICS[k].desc}</p></div></div>`).join('') +
-        (unknown ? `<div class="card light"><i class="ic ic-shield" style="filter:grayscale(1);opacity:.5"></i><div class="grow"><h3>${unknown} still unknown</h3><p>Won from bosses, great events, bounties, and stranger places.</p></div></div>` : '');
+        (unknown ? `<div class="card light"><i class="ic ic-shield" style="filter:grayscale(1);opacity:.5"></i><div class="grow"><h3>${unknown} still unknown</h3><p>Won from bosses, great events and stranger places.</p></div></div>` : '');
     }
     const list = [...S.soldiers].sort((a, b) => b.level - a.level || b.kills - a.kills);
     const pop = `<p class="section-title">${S.soldiers.length} soldier${S.soldiers.length === 1 ? '' : 's'} - room ${R.popUsed()}/${R.popCap()}</p>`;

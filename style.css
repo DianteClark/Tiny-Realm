@@ -401,3 +401,9 @@ body.exp #minimap { top: calc(var(--safe-top) + 116px); }
 /* Undo steps up above the selection bar, and toasts above both */
 #hud:has(#selbar:not(.hidden)) #undoBtn { bottom: calc(var(--safe-bot) + 156px); }
 #hud:has(#selbar:not(.hidden)):has(#undoBtn:not(.hidden)) #toasts { bottom: calc(var(--safe-bot) + 206px); }
+/* touch targets: every button at least 40px tall */
+.btn.small { min-height: 40px; }
+.tiny-btn { width: 40px; height: 40px; }
+.tiny-link { padding: 8px 6px; margin: -8px 0; }
+#hud:has(#abilitybar:not(.hidden)) #toasts { bottom: calc(var(--safe-bot) + 250px); }
+body.exp #hud:has(#abilitybar:not(.hidden)) #toasts { bottom: calc(var(--safe-bot) + 226px); }

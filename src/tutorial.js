@@ -49,7 +49,8 @@ export class Tutorial {
   update(dt) {
     const i = this.step;
     if (i < 0 || i >= STEPS.length) { if (i >= STEPS.length) this.finish(); else { this.box.classList.add('hidden'); this.hand.classList.add('hidden'); } return; }
-    if (this.R.exp) { this.box.classList.add('hidden'); this.hand.classList.add('hidden'); return; }
+    // nothing to point at while a voyage or a dialog has the screen
+    if (this.R.exp || !document.getElementById('modal').classList.contains('hidden')) { this.box.classList.add('hidden'); this.hand.classList.add('hidden'); return; }
     this.t += dt;
     const st = STEPS[i];
     if (st.done(this.R, this.U, this.t)) {
