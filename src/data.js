@@ -14,7 +14,7 @@ export const UNITS = {
   berserker: { name: 'Berserker', hp: 175, dmg: 28, range: 1.0, cd: 0.85, speed: 82, cost: { gold: 70, meat: 55 }, time: 40, from: 'barracks', tier: 3, pop: 1, anim: 'berserker', hit: 0.5, rage: true, desc: 'Hits harder the more wounded he is.', avatar: 'berserker' },
   horseman: { name: 'Horseman', hp: 250, dmg: 27, range: 1.2, cd: 1.1, speed: 118, cost: { gold: 110, meat: 70, wood: 30 }, time: 55, from: 'barracks', tier: 4, pop: 2, anim: 'horseman', hit: 0.5, charge: true, desc: 'Fast rider. First strike after a charge deals double damage.', avatar: 'horseman' },
   catapult: { name: 'Catapult', hp: 190, dmg: 55, range: 7, minRange: 1.5, cd: 4.2, speed: 44, cost: { gold: 120, wood: 140 }, time: 60, from: 'archery', tier: 4, pop: 2, anim: 'catapult', hit: 0.45, proj: 'stone', splash: 1.3, siege: true, desc: 'Hurls stones that crush groups and enemy camps.', avatar: 'catapult' },
-  king: { name: 'King', hp: 420, dmg: 34, range: 1.0, cd: 1.0, speed: 76, cost: { gold: 300, meat: 100 }, time: 30, from: 'castle', tier: 3, pop: 0, anim: 'king', hit: 0.5, unique: true, aura: 0.15, desc: 'Your sovereign. Allies near him deal 15% more damage. If struck down he is carried home wounded, never slain.', avatar: 'king' },
+  king: { name: 'King', hp: 420, dmg: 34, range: 1.0, cd: 1.0, speed: 76, cost: { gold: 300, meat: 100 }, time: 30, from: 'crown', tier: 5, pop: 0, anim: 'king', hit: 0.5, unique: true, aura: 0.15, desc: 'Your sovereign. Allies near him deal 15% more damage. If struck down he is carried home wounded, never slain.', avatar: 'king' },
 };
 export const SOLDIER_TYPES = Object.keys(UNITS).filter(k => k !== 'pawn');
 
@@ -68,13 +68,13 @@ export const BUILDINGS = {
 // ---------- kingdom tiers ----------
 export const TIERS = [
   null,
-  { name: 'Village', storage: 400, squad: 4, castleHp: 1500, limits: { house: 3, barracks: 1, archery: 1, tower: 1, monastery: 0, tavern: 1, market: 0, chapel: 0 } },
-  { name: 'Town', storage: 1200, squad: 6, castleHp: 2400, cost: { gold: 250, wood: 300, meat: 120 }, time: 180, limits: { house: 6, barracks: 1, archery: 1, tower: 2, monastery: 1, tavern: 1, market: 1, chapel: 1 } },
-  { name: 'Stronghold', storage: 3000, squad: 8, castleHp: 3600, cost: { gold: 800, wood: 900, meat: 400 }, time: 600, limits: { house: 9, barracks: 2, archery: 2, tower: 4, monastery: 1, tavern: 2, market: 1, chapel: 1 } },
-  { name: 'Fortress', storage: 7000, squad: 10, castleHp: 5200, cost: { gold: 2000, wood: 2200, meat: 1000 }, time: 1800, limits: { house: 12, barracks: 2, archery: 2, tower: 6, monastery: 2, tavern: 2, market: 2, chapel: 2 } },
-  { name: 'Citadel', storage: 16000, squad: 12, castleHp: 7500, cost: { gold: 5000, wood: 5000, meat: 2500 }, time: 3600, limits: { house: 16, barracks: 3, archery: 3, tower: 8, monastery: 2, tavern: 3, market: 2, chapel: 2 } },
+  { name: 'Hamlet', storage: 400, squad: 4, castleHp: 1500, limits: { house: 3, barracks: 1, archery: 1, tower: 1, monastery: 0, tavern: 1, market: 0, chapel: 0 } },
+  { name: 'Village', storage: 1200, squad: 6, castleHp: 2400, cost: { gold: 250, wood: 300, meat: 120 }, time: 180, limits: { house: 6, barracks: 1, archery: 1, tower: 2, monastery: 1, tavern: 1, market: 1, chapel: 1 } },
+  { name: 'Castle', storage: 3000, squad: 8, castleHp: 3600, cost: { gold: 800, wood: 900, meat: 400 }, time: 600, limits: { house: 9, barracks: 2, archery: 2, tower: 4, monastery: 1, tavern: 2, market: 1, chapel: 1 } },
+  { name: 'Stronghold', storage: 7000, squad: 10, castleHp: 5200, cost: { gold: 2000, wood: 2200, meat: 1000 }, time: 1800, limits: { house: 12, barracks: 2, archery: 2, tower: 6, monastery: 2, tavern: 2, market: 2, chapel: 2 } },
+  { name: 'Kingdom', storage: 16000, squad: 12, castleHp: 7500, cost: { gold: 5000, wood: 5000, meat: 2500 }, time: 3600, limits: { house: 16, barracks: 3, archery: 3, tower: 8, monastery: 2, tavern: 3, market: 2, chapel: 2 } },
 ];
-// Endless Renown ranks after Citadel
+// Endless Renown ranks after Kingdom
 export function renownCost(rank) {
   const f = Math.pow(1.35, rank);
   return { gold: Math.round(4000 * f), wood: Math.round(4000 * f), meat: Math.round(2000 * f) };
@@ -178,18 +178,18 @@ export const QUESTS = [
   { id: 'q6', text: 'Survive a raid', type: 'raidsSurvived', n: 1, reward: { gold: 80, wood: 80 } },
   { id: 'q7', text: 'Build an Archery Range and train 2 Archers', type: 'trained_archer', n: 2, reward: { wood: 100 } },
   { id: 'q8', text: 'Clear your first island', type: 'islandsCleared', n: 1, reward: { gold: 120, meat: 80 } },
-  { id: 'q9', text: 'Raise the castle to a Town', type: 'tier', n: 2, reward: { gold: 150, wood: 150, meat: 150 } },
+  { id: 'q9', text: 'Grow the hamlet into a Village', type: 'tier', n: 2, reward: { gold: 150, wood: 150, meat: 150 } },
   { id: 'q10', text: 'Build a Watchtower', type: 'built_tower', n: 1, reward: { gold: 100 } },
   { id: 'q11', text: 'Clear 3 islands', type: 'islandsCleared', n: 3, reward: { gold: 200, wood: 200 } },
   { id: 'q12', text: 'Build a Monastery', type: 'built_monastery', n: 1, reward: { meat: 200 } },
   { id: 'q13', text: 'Defeat the boss of island 5', type: 'islandsCleared', n: 5, reward: { gold: 400, meat: 200 } },
-  { id: 'q14', text: 'Raise the castle to a Stronghold', type: 'tier', n: 3, reward: { gold: 500, wood: 500, meat: 300 } },
+  { id: 'q14', text: 'Raise the Castle', type: 'tier', n: 3, reward: { gold: 500, wood: 500, meat: 300 } },
   { id: 'q15', text: 'Crown your King', type: 'trained_king', n: 1, reward: { gold: 300 } },
   { id: 'q16', text: 'Survive 10 raids', type: 'raidsSurvived', n: 10, reward: { gold: 600, wood: 600 } },
   { id: 'q17', text: 'Slay a Troll', type: 'trollsSlain', n: 1, reward: { gold: 800, meat: 400 } },
-  { id: 'q18', text: 'Raise the castle to a Fortress', type: 'tier', n: 4, reward: { gold: 1200, wood: 1200, meat: 600 } },
+  { id: 'q18', text: 'Fortify into a Stronghold', type: 'tier', n: 4, reward: { gold: 1200, wood: 1200, meat: 600 } },
   { id: 'q19', text: 'Clear 15 islands', type: 'islandsCleared', n: 15, reward: { gold: 1500, wood: 1500 } },
-  { id: 'q20', text: 'Raise the castle to a Citadel', type: 'tier', n: 5, reward: { gold: 3000, wood: 3000, meat: 1500 } },
+  { id: 'q20', text: 'Be crowned: become a Kingdom', type: 'tier', n: 5, reward: { gold: 3000, wood: 3000, meat: 1500 } },
 ];
 // After the list runs out, endless quests are generated
 export function endlessQuest(i) {
@@ -206,7 +206,7 @@ export function endlessQuest(i) {
 }
 
 export const STORY = {
-  intro: 'A small island, three loyal pawns, and a castle with more ambition than walls. The sea is full of monsters. Make this a realm worth defending.',
+  intro: 'An empty shore, a wooden hall, one house and three pawns. Two heroes who swore to build something here. The sea is full of monsters and other crowns. Grow this hamlet into a Kingdom.',
 };
 
 // ---------- building levels (2.0) ----------

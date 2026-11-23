@@ -6,15 +6,15 @@ const $ = s => document.querySelector(s);
 
 // Each step: text, where to point (a CSS selector, or a world object), and when it's done.
 const STEPS = [
-  { text: 'Welcome, ruler. Your pawns gather wood, gold and meat. Open Workers to see them.', el: () => '[data-panel="workers"]', done: (R, U) => U.panel === 'workers' },
-  { text: 'More hands means more of everything. Train a Pawn at the castle.', el: () => '[data-act$=":pawn"]', done: R => R.state.pawns > 3 || R.castle.queue.some(q => q.unit === 'pawn') },
+  { text: 'Welcome, ruler. Your two heroes guard the hamlet while your pawns gather wood, gold and meat. Open Workers to see them.', el: () => '[data-panel="workers"]', done: (R, U) => U.panel === 'workers' },
+  { text: 'More hands means more of everything. Train a Pawn at the hall.', el: () => '[data-act$=":pawn"]', done: R => R.state.pawns > 3 || R.castle.queue.some(q => q.unit === 'pawn') },
   { text: 'New pawns go to work on their own. Close this panel.', el: () => '#panelClose', done: (R, U) => !U.panel },
-  { text: 'Your castle only houses a few people. Open Build.', el: () => '[data-panel="build"]', done: (R, U) => U.panel === 'build' || R.countOf('house') > 0 },
-  { text: 'Build a House to make room for more people.', el: () => '[data-act="place:house"]', done: (R, U) => (U.place && U.place.type === 'house') || R.countOf('house') > 0 },
-  { text: 'Tap an open spot on the map. Green means you can build. Then press Build here.', el: () => '#btnPlaceOk', done: R => R.countOf('house') > 0 },
+  { text: 'One house will not hold a growing hamlet. Open Build.', el: () => '[data-panel="build"]', done: (R, U) => U.panel === 'build' || R.countOf('house') > 1 },
+  { text: 'Build a second House to make room for more people.', el: () => '[data-act="place:house"]', done: (R, U) => (U.place && U.place.type === 'house') || R.countOf('house') > 1 },
+  { text: 'Drag the house to a green spot, then press Build here.', el: () => '#btnPlaceOk', done: R => R.countOf('house') > 1 },
   { text: 'Raiders will come. Open Build again and place a Barracks.', el: (R, U) => U.panel === 'build' ? '[data-act="place:barracks"]' : U.place ? '#btnPlaceOk' : '[data-panel="build"]', done: R => R.countOf('barracks') > 0 },
-  { text: 'While it rises, tap the Barracks. When it is finished, train a Warrior there.', world: R => R.home.buildings.find(b => b.type === 'barracks'), el: (R, U) => U.panel === 'building' ? '[data-act$=":warrior"]' : null, done: R => R.state.soldiers.length > 0 },
-  { text: 'Every soldier has a name and traits, and death is permanent. Tap your Warrior to select them.', world: R => R.home.units.find(u => u.rec && u.alive), done: R => R.home.selected.size > 0 },
+  { text: 'While it rises, tap the Barracks. When it is finished, train a Warrior there.', world: R => R.home.buildings.find(b => b.type === 'barracks'), el: (R, U) => U.panel === 'building' ? '[data-act$=":warrior"]' : null, done: R => R.state.soldiers.some(s => !s.hero) },
+  { text: 'Every soldier has a name and traits, and death is permanent. Tap your new Warrior to select them.', world: R => R.home.units.find(u => u.rec && u.alive && !u.rec.hero) || R.home.units.find(u => u.rec && u.alive), done: R => R.home.selected.size > 0 },
   { text: 'Now tap the ground somewhere to move them. Soldiers guard the spot you choose.', done: R => [...R.home.selected].some(u => u.order || (u.home && Math.hypot(u.home.x - u.x, u.home.y - u.y) < 30 && u.movedOnce)) || R.home.units.some(u => u.rec && u.order) },
   { text: 'Each soldier type has a special ability. With them selected, try Shield Wall.', el: () => '.ab', done: R => R.home.units.some(u => u.buff && u.buff('shield')) || R.home.selected.size === 0 },
   { text: 'You are ready. The goal tracker at the top always shows what to do next. Long live the realm!', el: () => '[data-pill="quest"]', done: (R, U, t) => t > 7 },
@@ -36,7 +36,7 @@ export class Tutorial {
   get step() { return this.R.state.tutorial; }
   start() {
     const S = this.R.state;
-    if (S.tutorial === undefined) S.tutorial = (S.soldiers.length || S.questIdx > 3) ? -1 : 0;
+    if (S.tutorial === undefined) S.tutorial = (S.soldiers.some(s => !s.hero) || S.questIdx > 3) ? -1 : 0;
     this.show();
   }
   finish() { this.R.state.tutorial = -1; this.box.classList.add('hidden'); this.hand.classList.add('hidden'); this.R.save(); }
@@ -77,9 +77,9 @@ export const FEATS = [
   { id: 'firstblood', name: 'First Blood', desc: 'Slay your first monster.', test: S => S.stats.kills >= 1 },
   { id: 'hundred', name: 'Monster Bane', desc: 'Slay 100 foes.', test: S => S.stats.kills >= 100 },
   { id: 'thousand', name: 'Legend of the Isles', desc: 'Slay 1000 foes.', test: S => S.stats.kills >= 1000 },
-  { id: 'town', name: 'Township', desc: 'Grow into a Town.', test: S => S.tier >= 2 },
-  { id: 'stronghold', name: 'Stronghold', desc: 'Grow into a Stronghold.', test: S => S.tier >= 3 },
-  { id: 'citadel', name: 'Citadel', desc: 'Grow into a Citadel.', test: S => S.tier >= 5 },
+  { id: 'town', name: 'Village Green', desc: 'Grow the hamlet into a Village.', test: S => S.tier >= 2 },
+  { id: 'stronghold', name: 'Stone and Mortar', desc: 'Raise the Castle.', test: S => S.tier >= 3 },
+  { id: 'citadel', name: 'Long Live the King', desc: 'Be crowned: become a Kingdom.', test: S => S.tier >= 5 },
   { id: 'renown5', name: 'Renowned', desc: 'Reach Renown rank 5.', test: S => S.renown >= 5 },
   { id: 'isles5', name: 'Seafarer', desc: 'Clear 5 islands.', test: S => S.cleared >= 5 },
   { id: 'isles15', name: 'Admiral', desc: 'Clear 15 islands.', test: S => S.cleared >= 15 },

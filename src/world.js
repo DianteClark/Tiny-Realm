@@ -49,6 +49,7 @@ export class Unit {
         this.killHeal += t.killHeal || 0; this.xpMul += t.xp || 0;
       }
       if (this.rec.promoted) { hp *= 1.2; dmg *= 1.2; }
+      if (this.rec.hero && this.type !== 'king') { hp *= 1.3; dmg *= 1.2; } // founders and companions are a cut above
       const G = this.scene.game && this.scene.game.gearMods ? this.scene.game.gearMods(this.rec) : {};
       hp *= 1 + (G.hp || 0); dmg *= 1 + (G.dmg || 0); speed *= 1 + (G.speed || 0); cd *= 1 + (G.cd || 0);
       armor += G.armor || 0; dodge += G.dodge || 0; this.killHeal += G.killHeal || 0; this.xpMul += G.xp || 0;
@@ -1078,8 +1079,22 @@ export class Scene {
     ctx.globalAlpha = 1;
     if (this.game.env.night > 0.05 && b.done) drawSprite(ctx, 'fire1', b.cx * T + 32, b.cy * T + 26, this.time + b.id * 0.37, { alpha: this.game.env.night });
   }
+  // before the Castle is raised the seat of the realm is a hall built from the pack's houses
+  drawHall(ctx, b) {
+    const tier = this.game.state.tier, x = b.x, y = b.y + 8;
+    const put = (k, dx, dy, sc = 1) => { const s = SHEETS[k]; if (!s || !s.img) return; const w = s.img.width * sc, h = s.img.height * sc; ctx.drawImage(s.img, Math.round(x + dx - w / 2), Math.round(y + dy - h), Math.round(w), Math.round(h)); };
+    const f = SHEETS.fence; // a little palisade yard across the front
+    if (f && f.img) for (let i = -2; i <= 2; i++) if (i !== 0) ctx.drawImage(f.img, 1 * T, 0, T, T, Math.round(x + i * T - T / 2), Math.round(y - 30), T, T);
+    if (tier <= 1) { put('b_House3', 0, -18); put('b_House1', -100, -10, 0.75); }
+    else { put('b_House2', -96, -14, 0.9); put('b_House3', 0, -22, 1.1); put('b_House1', 98, -12, 0.9); }
+    // a pennant over the hall
+    ctx.fillStyle = '#3b2f2a'; ctx.fillRect(Math.round(x + 34), Math.round(y - 230), 3, 70);
+    const w = Math.sin(this.time * 3) * 2; ctx.fillStyle = '#4a90c0';
+    ctx.beginPath(); ctx.moveTo(x + 37, y - 228); ctx.lineTo(x + 62 + w, y - 222); ctx.lineTo(x + 37, y - 214); ctx.fill();
+  }
   drawBuilding(ctx, b) {
     if (b.def.lantern) return this.drawLantern(ctx, b);
+    if (b.type === 'castle' && this.game.state && this.game.state.tier < 3) { this.drawHall(ctx, b); return; }
     if (b.def.wall) return this.drawWall(ctx, b);
     const s = SHEETS[b.imgKey]; if (!s || !s.img) return;
     const constructing = !b.done;
@@ -1120,7 +1135,7 @@ export class Scene {
     else if (u.kind === 'pawn' && u.working) key = u.animKey('work');
     else key = u.animKey(u.moving ? 'run' : 'idle');
     if (u.def.scale) opts.scale = u.def.scale;
-    if (u.rec && u.rec.promoted) { // a gold ring underfoot marks promoted soldiers
+    if (u.rec && (u.rec.promoted || u.rec.hero)) { // a gold ring underfoot marks heroes and promoted soldiers
       ctx.save(); ctx.globalAlpha = 0.55 + Math.sin(this.time * 2 + u.id) * 0.15; ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.ellipse(u.x, u.y + 2, 24, 9, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
     }

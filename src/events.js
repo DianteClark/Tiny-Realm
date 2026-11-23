@@ -228,7 +228,7 @@ export class EventDirector {
       { id: 'timber', name: 'Smuggled Timber', desc: 'Wood of doubtful origin, cheap.', cost: { gold: 90 * T0 }, get: { wood: 260 * T0 } },
     ];
     this.market = { period: R.env.period, npc, offers, bought: {} };
-    if (S.tier >= 1) R.ui.toast('A hooded trader has set up a Night Market by the castle. Tap them to see their wares.');
+    if (S.tier >= 1) R.ui.toast(`A hooded trader has set up a Night Market by the ${S.tier < 3 ? 'hall' : 'castle'}. Tap them to see their wares.`);
   }
   closeMarket() { if (this.market) { this.R.home.npcs = []; this.market = null; } }
   buy(id) {

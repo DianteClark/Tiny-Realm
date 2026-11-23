@@ -24,7 +24,8 @@ import { Environment } from './env.js';
 import { Orders } from './orders.js';
 import { holidayFor, moonPhase } from './calendar.js';
 
-const SAVE_KEY = 'tinyrealm.save.v1';
+const SAVE_KEY = 'tinyrealm.save.v4'; // 4.0: a new age; older saves are not carried over
+const OLD_KEYS = ['tinyrealm.save.v1'];
 // The home map is a big sea; the starting island (BASE_W x BASE_H) sits in the middle at BASE_X,BASE_Y
 // and annexed land (src/annex.js) grows out from it.
 const HOME_W = 96, HOME_H = 72;
@@ -78,6 +79,9 @@ export class Realm {
     let s = null;
     try { s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); } catch (e) { s = null; }
     const fresh = !s;
+    let newAge = false;
+    if (fresh) for (const k of OLD_KEYS) if (localStorage.getItem(k)) { newAge = true; localStorage.removeItem(k); }
+    if (newAge) { const L = Legacy.loadLegacy(); L.points = 0; L.founder = null; Legacy.saveLegacy(L); } // the old age's history stays in the Hall of Realms
     this.state = Object.assign(freshState(), s || {});
     this.state.stats = Object.assign(freshState().stats, this.state.stats || {});
     this.state.timers = Object.assign(freshState().timers, this.state.timers || {});
@@ -90,11 +94,13 @@ export class Realm {
     for (const rec of this.state.soldiers) if (rec.status === 'away') { rec.status = 'home'; rec.post = null; }
     if (this.state.timers.raid < 60) this.state.timers.raid = 60;
     const inherit = fresh ? Legacy.applyToFresh(this.state) : null;
+    if (fresh) this.foundHamlet();
     this.buildHome();
+    if (fresh) this.hamletHouse();
     const away = fresh ? 0 : this.applyOffline();
     this.scene = this.home;
     this.checkDaily();
-    return { fresh, away, inherit };
+    return { fresh, away, inherit, newAge };
   }
   save() {
     if (!this.state) return;
@@ -760,6 +766,38 @@ export class Realm {
     this.save();
     return null;
   }
+  // ---- 4.0 the hamlet start: a founder hero and a companion, and one house beside the hall
+  foundHamlet() {
+    const S = this.state;
+    if (S.soldiers.some(s => s.hero)) return;
+    const f = this.newSoldier('warrior'), c = this.newSoldier('archer');
+    for (const [r, t] of [[f, 'Founder'], [c, 'Companion']]) { r.hero = true; r.title = t; r.level = 3; r.xp = XP_LEVELS[3]; }
+    f.traits = ['brave']; c.traits = ['keen'];
+    this.log(`${f.name} and ${c.name} raised a hall on an empty shore. The realm begins.`);
+  }
+  hamletHouse() {
+    if (this.home.buildings.some(b => b.type === 'house')) return;
+    const c = this.castle;
+    for (let r = 2; r < 10; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+      const x = c.cx + c.fw + dx, y = c.cy + dy;
+      if (this.canPlace('house', x, y)) { this.home.addBuilding('house', x, y, { variant: 0 }); this.reach = reachable(this.home.map, this.door[0], this.door[1]); return; }
+    }
+  }
+  // ---- 4.0 the coronation: the founder (or the best soldier) is crowned when the realm becomes a Kingdom
+  crown(quiet) {
+    const S = this.state; if (S.soldiers.some(s => s.type === 'king')) return;
+    let rec = S.soldiers.find(s => s.hero && s.title === 'Founder') || [...S.soldiers].sort((a, b) => b.level - a.level)[0];
+    const old = rec && this.home.units.find(u => u.rec === rec && u.alive);
+    if (!rec) rec = this.newSoldier('king');
+    rec.type = 'king'; rec.avatar = 'av_king1'; rec.title = 'King'; rec.hero = true;
+    if (!/^King /.test(rec.name)) rec.name = 'King ' + rec.name.split(' ')[0];
+    rec.hp = undefined;
+    let at = null; if (old) { at = { x: old.x, y: old.y }; old.dead = true; old.hp = 0; this.home.selected.delete(old); }
+    if (rec.status === 'home') { const u = this.spawnSoldier(rec, true, at || undefined); if (u) { this.home.fxAt('healFx', u.x, u.y, { scale: 2 }); this.home.floatText('Long live the King', u.x, u.y - 110, '#f2c14e', 18); } }
+    this.log(`${rec.name} was crowned. The realm is a Kingdom.`);
+    if (!quiet) { this.ui.banner('Long live the King', `${rec.name} is crowned in the great hall. Allies near the King fight harder, and the throne will pass to an heir one day.`, 'gold'); this.sfx('fanfare'); this.shake(5); }
+  }
   // ---- 3.6 decorations: they never block paths, so they live in their own list
   decorList() { const S = this.state; return S.decor || (S.decor = []); }
   decorAt(x, y) { return this.decorList().find(d => d.cx === x && d.cy === y); }
@@ -944,6 +982,10 @@ export class Realm {
     this.castle.hp = Math.max(this.castle.maxHp * f, this.castle.maxHp * 0.5);
     this.log(`The realm grew into a ${TIERS[S.tier].name}.`);
     this.castle.pop = 1;
+    if (S.tier === 3) { this.home.fxAt('explosion2', this.castle.x, this.castle.y - 40, { scale: 2.2 }); for (let i = 0; i < 6; i++) this.home.fxAt('dust2', this.castle.x + (i - 2.5) * 50, this.castle.y + 6, { scale: 1.4 }); this.shake(8); }
+    if (S.tier === 5) this.crown(quiet);
+    if (S.tier === 3 && !quiet) { this.ui.banner('The Castle is raised', 'Stone walls and towers rise where the hall stood. The realm is a Castle now: new buildings, soldiers and the deep waters await.', 'gold'); this.sfx('victory'); return; }
+    if (S.tier === 5) return;
     if (!quiet) { this.ui.banner(`Your realm is now a ${TIERS[S.tier].name}`, 'New buildings and soldiers are available. Buildings can now be upgraded further.', 'gold'); this.sfx('victory'); }
   }
 

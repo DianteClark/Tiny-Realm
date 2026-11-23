@@ -131,14 +131,17 @@ export class UI {
   confirm(title, text, ok, fn) { this.choice(title, text, [{ label: ok, cls: 'red', fn }, { label: 'Cancel' }]); }
   welcome(info) {
     const R = this.R, S = R.state;
+    if (info.newAge) this.choice('A new age', 'Tiny Realm 4.0 begins a new age. Every realm now starts as a hamlet with two heroes and grows into a Kingdom, and the old saves have been set aside. Your past realms are still remembered in the Hall of Realms.', [{ label: 'Begin anew' }]);
     if (info.fresh || !S.introSeen) {
       S.introSeen = true;
-      this.choice('Tiny Realm', STORY.intro + '\n', [{ label: 'Begin', fn: () => this.toast('Follow the Chronicle for your first goals.') }]);
+      const intro = document.createElement('div');
+      let legacyLine = '';
       if (info.inherit && (info.inherit.rank || info.inherit.founder)) {
-        const b = Legacy.rankBonus(info.inherit.rank), f = info.inherit.founder;
-        $('#modalBody').innerHTML += `<p style="font-size:14px"><b>Legacy rank ${info.inherit.rank}.</b> ${info.inherit.rank ? `Every realm you found starts with ${b.start} of each resource${b.pawns ? ` and ${b.pawns} extra pawn${b.pawns > 1 ? 's' : ''}` : ''}, and gathers and fights ${Math.round(b.gather * 100)}% better.` : ''}${f ? ` ${esc(f.name)} sailed with you as the realm's Founder${f.heirloom ? `, carrying ${esc(f.heirloom.name)}` : ''}.` : ''}</p>`;
+        const lb = Legacy.rankBonus(info.inherit.rank), f = info.inherit.founder;
+        legacyLine = `<p style="font-size:14px"><b>Legacy rank ${info.inherit.rank}.</b> ${info.inherit.rank ? `Every realm you found starts with ${lb.start} of each resource${lb.pawns ? ` and ${lb.pawns} extra pawn${lb.pawns > 1 ? 's' : ''}` : ''}, and gathers and fights ${Math.round(lb.gather * 100)}% better.` : ''}${f ? ` ${esc(f.name)} sailed with you as the realm's Founder${f.heirloom ? `, carrying ${esc(f.heirloom.name)}` : ''}.` : ''}</p>`;
       }
-      $('#modalBody').innerHTML += `<p class="muted" style="font-size:13px">Drag to look around, pinch or scroll to zoom. Tap a soldier then tap the ground to move them. Tap buildings to train and upgrade.</p>`;
+      intro.innerHTML = `<p>${esc(STORY.intro)}</p>${legacyLine}<p class="muted" style="font-size:13px">Drag to look around, pinch or scroll to zoom. Tap a soldier then tap the ground to move them. Tap buildings to train and upgrade.</p>`;
+      this.choice('Tiny Realm', intro, [{ label: 'Begin', fn: () => this.toast('Follow the Chronicle for your first goals.') }]);
     } else if (info.away && info.away.secs >= 30) {
       const a = info.away;
       const div = document.createElement('div');
@@ -163,7 +166,7 @@ export class UI {
         The Abyss: an endless descent in the top-left of the sea chart. Press on or come home after every floor.<br>
         Royal decrees: choose one law each week. Every law has a price.<br>
         Seasonal events: The Harvest Fair runs until December, then The Long Night. Tasks, a weekly boss and a season shop live in Chronicle, Season.<br>
-        New Game+: from Stronghold, found a new realm. Your Legacy grows, and one hero sails with you.<br>
+        New Game+: once the Castle is raised, found a new realm. Your Legacy grows, and one hero sails with you.<br>
         Fences can no longer trap your people.<br><br>
         <b>3.4</b><br>
         Hero gear: weapons, armour and trinkets drop from voyages and great events. Equip them from Army.<br>
@@ -611,7 +614,7 @@ export class UI {
     this.live = [];
     const p = this.panel;
     const titles = { hero: 'Hero', nightmarket: 'Night Market', build: 'Build', workers: 'Workers', army: 'Army', voyage: 'Voyage', chronicle: 'Chronicle', settings: 'Settings', merchant: 'Merchant', building: '' };
-    $('#panelTitle').textContent = p === 'building' ? (this.panelArg.def.name) : p === 'hero' ? this.panelArg.name : titles[p];
+    $('#panelTitle').textContent = p === 'building' ? (this.panelArg.type === 'castle' && this.R.state.tier < 3 ? TIERS[this.R.state.tier].name + ' Hall' : this.panelArg.def.name) : p === 'hero' ? this.panelArg.name : titles[p];
     this.setTabs(null);
     const fn = this['panel_' + p];
     this.body.innerHTML = fn ? fixText(fn.call(this)) : '';
@@ -668,7 +671,7 @@ export class UI {
     return `<div class="card ${opts.pick ? 'light' : ''}" ${opts.pick ? `data-act="pick:${rec.id}"` : ''}>
       ${opts.pick ? `<button class="check ${this.squadPick.has(rec.id) ? 'on' : ''}"></button>` : ''}
       <div class="thumb"><img src="${src(rec.avatar)}" class="av" alt=""></div>
-      <div class="grow"><h3>${rec.promoted || rec.founder ? `<span class="rank">${esc(rec.promoted ? (rec.title || 'Elite') : 'Founder')}</span> ` : ''}${esc(rec.name)}</h3><p>Level ${rec.level} ${U.name} - ${rec.kills} kills - ${status}</p>
+      <div class="grow"><h3>${rec.promoted || rec.founder || rec.hero ? `<span class="rank">${esc(rec.promoted || rec.hero ? (rec.title || 'Elite') : 'Founder')}</span> ` : ''}${esc(rec.name)}</h3><p>Level ${rec.level} ${U.name} - ${rec.kills} kills - ${status}</p>
         <div>${rec.traits.map(t => `<span class="trait ${TRAITS[t].rare ? 'rare' : ''}" title="${TRAITS[t].desc}">${TRAITS[t].name}</span>`).join('')}</div>
         ${this.gearRow(rec)}
         <div class="hpbar"><i style="width:${hpPct}%"></i></div><div class="xpbar"><i style="width:${xpPct}%"></i></div></div>
@@ -899,7 +902,7 @@ export class UI {
       if (st.subjugated) { c.fillStyle = '#4a90c0'; c.fillRect(x - 22, y + 20, 44, 10); c.fillStyle = '#fff'; c.font = '9px BoldPixels, monospace'; c.textAlign = 'center'; c.fillText('VASSAL', x, y + 28); }
       if (open && !st.subjugated) nodes.push({ k: 'rival:' + rv.key, x, y, r: 26 });
     });
-    // the Abyss: a dark isle in the top-left corner (Stronghold and up)
+    // the Abyss: a dark isle in the top-left corner (Castle and up)
     {
       const ax = 28, ay = 28, open = S.tier >= 3;
       isle(ax, ay, 34, SHEETS.tiles2.img, open ? 1 : 0.5);
@@ -969,7 +972,7 @@ export class UI {
         return `<p class="section-title">The Drowned Crown</p><div class="card light"><div class="grow"><h3>Chapter ${nx + 1}: ${esc(ch.name)}</h3><p>${chapterOpen(S, nx) ? 'Ready. Find it along the bottom of the sea chart in Voyage.' : `Clear ${ch.need} frontier islands to reach it (${S.cleared} so far).`}</p><div class="xpbar"><i style="width:${nx / CHAPTERS.length * 100}%"></i></div></div></div>`; })()}
       <p class="section-title">Goals that never end</p>
       <div class="card light"><div class="grow"><p>Push the frontier: island ${S.frontier} awaits. Every fifth island holds a boss and a relic.</p></div></div>
-      <div class="card light"><div class="grow"><p>Raise the castle: ${S.tier < 5 ? 'next is ' + TIERS[S.tier + 1].name : 'Citadel reached. Raise your Renown without limit.'}</p></div></div>
+      <div class="card light"><div class="grow"><p>Raise the castle: ${S.tier < 5 ? 'next is ' + TIERS[S.tier + 1].name : 'The Kingdom is crowned. Raise your Renown without limit.'}</p></div></div>
       <div class="card light"><div class="grow"><p>Relics found: ${relicsOwned} of ${Object.keys(RELICS).length}. Great events like the Troll Breakout hold the rarest.</p></div></div>`;
   }
 
@@ -977,7 +980,7 @@ export class UI {
     const R = this.R, S = R.state, Z = R.seasonal, ev = Z.ev, st = Z.st;
     const days = Math.max(1, Math.ceil(Z.endsIn() / 86400000));
     let html = `<div class="card season"><div class="grow"><h3>${ev.name}</h3><p>${esc(ev.blurb)}</p><p class="muted">${R.env.season.name} event, ${days} day${days === 1 ? '' : 's'} left. Tokens: <b>${st.tokens}</b></p></div></div>`;
-    html += `<p class="section-title">Weekly boss</p><div class="card light"><div class="grow"><h3>${ev.boss.title}</h3><p>${esc(ev.boss.text)} Beat it for 5 tokens and epic gear.</p>${Z.bossReady() ? (S.tier < 2 ? '<p class="muted">Reach Town to face it.</p>' : '') : '<p class="muted">Beaten or fled this week. It returns on Monday.</p>'}</div>
+    html += `<p class="section-title">Weekly boss</p><div class="card light"><div class="grow"><h3>${ev.boss.title}</h3><p>${esc(ev.boss.text)} Beat it for 5 tokens and epic gear.</p>${Z.bossReady() ? (S.tier < 2 ? '<p class="muted">Grow into a Village to face it.</p>' : '') : '<p class="muted">Beaten or fled this week. It returns on Monday.</p>'}</div>
       ${Z.bossReady() ? `<button class="btn small red" data-act="sboss" ${Z.summonBlock() ? 'disabled' : ''}>Summon</button>` : ''}</div>`;
     html += `<p class="section-title">Season tasks (4 tokens each)</p>` + st.tasks.map((t, i) => `<div class="card ${t.done ? '' : 'light'}"><i class="ic ${t.done ? 'ic-shield' : 'ic-sword'}"></i><div class="grow"><h3>${esc(ev.tasks[i].text(t.n))}</h3><p>${t.done ? 'Done.' : `${Math.floor(t.have || 0)} / ${t.n}`}</p>${t.done ? '' : `<div class="xpbar"><i style="width:${Math.min(100, (t.have || 0) / t.n * 100)}%"></i></div>`}</div></div>`).join('');
     const rel = RELICS[ev.relic];
@@ -995,7 +998,7 @@ export class UI {
     let html = `<div class="card light"><div class="grow"><h3>Legacy rank ${rank}</h3><p>${L.points} points${next ? `, ${next - L.points} to rank ${rank + 1}` : ', the highest rank'}.${rank ? ` Each new realm: +${Math.round(b.gather * 100)}% gathering, health and damage, +${Math.round(b.xp * 100)}% experience, ${b.start} of each resource${b.pawns ? `, ${b.pawns} extra pawns` : ''}.` : ''}</p>
       ${next ? `<div class="xpbar"><i style="width:${(L.points % 100)}%"></i></div>` : ''}<p class="muted">This realm is worth ${sc.total} points: ${sc.parts.map(p => `${p[0].toLowerCase()} ${p[1]}`).join(', ') || 'nothing yet'}.</p></div></div>`;
     html += Legacy.canFound(R) ? `<button class="btn wide" data-act="found">Found a new realm</button><p class="muted" style="text-align:center;font-size:12px">Bank this realm's points, choose a hero to sail with you, and begin again on a new island.</p>`
-      : `<p style="text-align:center;font-size:13px">Reach Stronghold to found a new realm and bank your Legacy.</p>`;
+      : `<p style="text-align:center;font-size:13px">Raise the Castle to found a new realm and bank your Legacy.</p>`;
     if (full && L.realms.length) html += '<p class="section-title">Hall of Realms</p>' + L.realms.map((r, i) => `<div class="card light"><div class="grow"><h3>Realm ${L.realms.length - i}</h3><p>${r.days} days, ${TIERS[r.tier].name}${r.renown ? ` renown ${r.renown}` : ''}, ${r.cleared} islands, Abyss floor ${r.abyss}, ${r.chapters} story chapters. Worth ${r.points} points. Ended ${ago(r.ended)}.</p></div></div>`).join('');
     return html;
   }
@@ -1248,7 +1251,7 @@ export class UI {
     }
     if (k === 'found') {
       const S = R.state, sc = Legacy.realmScore(R);
-      if (!Legacy.canFound(R)) return err('Reach Stronghold first.');
+      if (!Legacy.canFound(R)) return err('Raise the Castle first.');
       const heroes = [...S.soldiers].filter(s => s.type !== 'king').sort((a, b) => b.level - a.level || b.kills - a.kills).slice(0, 5);
       const go = id => this.confirm('Found a new realm?', `This realm ends and its ${sc.total} points join your Legacy.${id ? ` ${S.soldiers.find(s => s.id === id).name} sails with you, with their best piece of gear.` : ''} Everything else stays behind.`, 'Set sail', () => {
         Legacy.foundNewRealm(R, id); this.wiping = true; R.wipe(); location.reload();
