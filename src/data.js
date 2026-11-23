@@ -184,7 +184,7 @@ export const QUESTS = [
   { id: 'q12', text: 'Build a Monastery', type: 'built_monastery', n: 1, reward: { meat: 200 } },
   { id: 'q13', text: 'Defeat the boss of island 5', type: 'islandsCleared', n: 5, reward: { gold: 400, meat: 200 } },
   { id: 'q14', text: 'Raise the Castle', type: 'tier', n: 3, reward: { gold: 500, wood: 500, meat: 300 } },
-  { id: 'q15', text: 'Crown your King', type: 'trained_king', n: 1, reward: { gold: 300 } },
+  { id: 'q15', text: 'Train a Swordsman', type: 'trained_swordsman', n: 1, reward: { gold: 300 } },
   { id: 'q16', text: 'Survive 10 raids', type: 'raidsSurvived', n: 10, reward: { gold: 600, wood: 600 } },
   { id: 'q17', text: 'Slay a Troll', type: 'trollsSlain', n: 1, reward: { gold: 800, meat: 400 } },
   { id: 'q18', text: 'Fortify into a Stronghold', type: 'tier', n: 4, reward: { gold: 1200, wood: 1200, meat: 600 } },
@@ -262,22 +262,25 @@ export const RIVALS = [
   { key: 'black', color: 'Black', name: 'House Ashgrave', ruler: 'the Iron Widow', base: 11, unlock: { tier: 4 }, colors: [5, 2, 4], avatarRow: 21, motto: 'Ash to ash.' },
 ];
 const RIVAL_UNITS = { warrior: 1.4, archer: 1.3, lancer: 2, monk: 1.6, swordsman: 2.6, berserker: 2.6, horseman: 3.5, king: 14 };
-for (const r of RIVALS) {
+// 4.0: kingdoms in the world can wear any of the pack's five colours, blue included; a blue enemy uses the
+// pack's blue units and buildings and is told apart by its red allegiance ring and heraldry
+export const ENEMY_COLORS = ['red', 'yellow', 'purple', 'black', 'blue'];
+for (const r of [...RIVALS, { key: 'blue', name: 'House Azure' }]) {
   const house = r.name.split(' ')[1];
   for (const [u, cost] of Object.entries(RIVAL_UNITS)) {
     const d = UNITS[u];
     ENEMIES[`${r.key}_${u}`] = {
       name: `${house} ${d.name}`, hp: d.hp, dmg: d.dmg, heal: d.heal, range: d.range, cd: d.cd, speed: d.speed, hit: d.hit, proj: d.proj,
       armor: d.armor, cleave: d.cleave, rage: d.rage, charge: d.charge, big: u === 'horseman' || u === 'king', boss: u === 'king',
-      anim: `${r.key}_${u}`, rival: r.key, cost, xp: Math.round(cost * 8), gold: Math.round(cost * 6), minLevel: { swordsman: 5, berserker: 5, horseman: 7, monk: 3 }[u] || 0,
+      anim: r.key === 'blue' ? u : `${r.key}_${u}`, rival: r.key, cost, xp: Math.round(cost * 8), gold: Math.round(cost * 6), minLevel: { swordsman: 5, berserker: 5, horseman: 7, monk: 3 }[u] || 0,
     };
   }
-  CAMP_STRUCTS[`${r.key}Castle`] = { name: `${house} Castle`, sprite: `b${r.key}_Castle`, hp: 1600, fw: 5, fh: 2, rival: r.key };
-  CAMP_STRUCTS[`${r.key}Tower`] = { name: `${house} Tower`, sprite: `b${r.key}_Tower`, hp: 650, fw: 2, fh: 1, shoots: 'arrow', rival: r.key };
-  CAMP_STRUCTS[`${r.key}Barracks`] = { name: `${house} Barracks`, sprite: `b${r.key}_Barracks`, hp: 700, fw: 3, fh: 2, rival: r.key };
+  CAMP_STRUCTS[`${r.key}Castle`] = { name: `${house} Castle`, sprite: r.key === 'blue' ? 'b_Castle' : `b${r.key}_Castle`, hp: 1600, fw: 5, fh: 2, rival: r.key };
+  CAMP_STRUCTS[`${r.key}Tower`] = { name: `${house} Tower`, sprite: r.key === 'blue' ? 'b_Tower' : `b${r.key}_Tower`, hp: 650, fw: 2, fh: 1, shoots: 'arrow', rival: r.key };
+  CAMP_STRUCTS[`${r.key}Barracks`] = { name: `${house} Barracks`, sprite: r.key === 'blue' ? 'b_Barracks' : `b${r.key}_Barracks`, hp: 700, fw: 3, fh: 2, rival: r.key };
   CAMP_STRUCTS[`${r.key}Wall`] = { name: `${house} Palisade`, sprite: 'fence', hp: 420, fw: 1, fh: 1, rival: r.key, wall: true, palisade: true };
   CAMP_STRUCTS[`${r.key}Gate`] = { name: `${house} Gate`, sprite: 'fence', hp: 320, fw: 1, fh: 1, rival: r.key, wall: true, palisade: true, gate: true };
-  CAMP_STRUCTS[`${r.key}House`] = { name: `${house} House`, sprite: `b${r.key}_House1`, hp: 350, fw: 2, fh: 1, rival: r.key };
+  CAMP_STRUCTS[`${r.key}House`] = { name: `${house} House`, sprite: r.key === 'blue' ? 'b_House1' : `b${r.key}_House1`, hp: 350, fw: 2, fh: 1, rival: r.key };
 }
 export const rivalDef = k => RIVALS.find(r => r.key === k);
 // a raid party or garrison drawn from a rival's roster at a given level
