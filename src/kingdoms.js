@@ -83,7 +83,7 @@ export class Kingdoms {
         const targets = isl.filter(is => is !== a && Math.hypot(is.x - a.x, is.y - a.y) < 1500 && this.st(is).power < ka.power * 1.1 && this.st(is).owner !== a.id && !(this.W.conquered[is.id] && this.stance(a) !== 'war'));
         const b = targets.sort((p, q) => Math.hypot(p.x - a.x, p.y - a.y) - Math.hypot(q.x - a.x, q.y - a.y))[0];
         if (b) {
-          if (live) { W.fleets.push({ from: a.id, to: b.id, x: a.x, y: a.y, t: 0 }); if (this.near(b)) this.news(`A war fleet of ${a.kingdom.name} sails against ${b.name}.`); }
+          if (live) { W.fleets.push({ from: a.id, to: b.id, x: a.x, y: a.y, t: 0, power: Math.round(ka.power * 0.5) }); if (this.near(b)) this.news(`A war fleet of ${a.kingdom.name} sails against ${b.name}.`); }
           else this.battle(a, b, false);
         }
       }
@@ -120,7 +120,8 @@ export class Kingdoms {
     for (const f of [...W.fleets]) {
       const a = Z.ocean.islandById(f.from), b = Z.ocean.islandById(f.to); if (!a || !b) { W.fleets.splice(W.fleets.indexOf(f), 1); continue; }
       const dx = b.x - f.x, dy = b.y - f.y, L = Math.hypot(dx, dy), step = 40 * dt;
-      if (f.you && this.stance(a) !== 'war') { W.fleets.splice(W.fleets.indexOf(f), 1); continue; } // peace was made: they turn back
+      if (f.you && this.stance(a) !== 'war') { f.you = false; f.homeward = true; } // peace was made: they turn for home
+      if (f.homeward) { const hx = a.x - f.x, hy = a.y - f.y, HL = Math.hypot(hx, hy); if (HL <= a.r + 20) W.fleets.splice(W.fleets.indexOf(f), 1); else { f.x += hx / HL * 40 * dt; f.y += hy / HL * 40 * dt; f.flip = hx < 0; } continue; }
       if (L <= b.r + 20) {
         if (f.you) {
           if (f.to === 'home') { if (this.R.war.landAtHome(f)) W.fleets.splice(W.fleets.indexOf(f), 1); }

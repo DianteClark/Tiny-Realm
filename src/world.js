@@ -150,6 +150,7 @@ export class Unit {
   }
 
   takeDamage(amount, src) {
+    this.fought = true; if (src && src.rec) src.fought = true;
     if (!this.alive || this.hidden) return;
     if (this.dodge && Math.random() < this.dodge) { this.scene.floatText('Dodge', this.x, this.bodyY - 20, '#ffffff'); return; }
     let a = amount * (1 - this.armor);

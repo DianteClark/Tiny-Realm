@@ -714,9 +714,12 @@ export class UI {
     const is = this.seaSel, sail = W.dest, docked = Z.fleetIsland(), crew = Z.crewRecs();
     let html = '';
     if (W.hold && Z.holdText()) html += `<div class="sea-status"><span>In the hold: <b>${esc(Z.holdText())}</b>. Unloaded at home.</span></div>`;
-    if (sail) { const to = Z.ocean.islandById(sail.id); html += `<div class="sea-status"><span>Sailing to <b>${esc(to ? to.name : 'open sea')}</b>, ${time(Z.eta())}</span><button class="btn small red" data-sea="stop">Stop</button></div>`; }
+    const ch = W.chase && Z.chased();
+    if (ch) { const ca = Z.ocean.islandById(ch.from); html += `<div class="sea-status"><span>Chasing the war fleet of <b>${esc(ca ? ca.kingdom.name : 'the enemy')}</b></span><button class="btn small red" data-sea="stop">Break off</button></div>`; }
+    else if (sail) { const to = Z.ocean.islandById(sail.id); html += `<div class="sea-status"><span>Sailing to <b>${esc(to ? to.name : 'open sea')}</b>, ${time(Z.eta())}</span><button class="btn small red" data-sea="stop">Stop</button></div>`; }
     if (is && is.kind === 'efleet') {
-      const f = is.f, live = (W.fleets || []).includes(f);
+      const f = is.f, live = (W.fleets || []).includes(f) && Z.fog.isRevealed(f.x, f.y);
+      if (live && !f.power) { const fa = Z.ocean.islandById(f.from); f.power = Math.round(fa ? R.kingdoms.st(fa).power * 0.5 : 50); }
       if (!live) { this.seaSel = null; }
       else {
         const a = Z.ocean.islandById(f.from), to = Z.ocean.islandById(f.to), K = R.kingdoms, war = a && K.stance(a) === 'war';
@@ -725,19 +728,19 @@ export class UI {
         let acts = '';
         if (!war) acts = `<p class="note">${a ? esc(a.kingdom.name) : 'They'} ${a && K.stance(a) === 'vassal' ? 'serve you' : 'are not at war with you'}. Declare war before you attack their ships.</p>`;
         else if (!crew.length) acts = '<p class="note">No crew aboard. Sail home and choose a crew to fight at sea.</p>';
+        else if ((W.seaCooldown || 0) > Date.now()) acts = `<p class="note">The crew is still licking its wounds. They can fight again in ${time((W.seaCooldown - Date.now()) / 1000)}.</p>`;
         else if (chasing) acts = `<button class="btn red" data-sea="stop">Break off</button>`;
         else acts = `<button class="btn red" data-sea="intercept">Intercept</button>`;
         const odds = war && crew.length ? `<p class="muted">${R.war.oddsWord(f)}. Your strength ${R.war.crewPower()}, theirs ${Math.round(f.power || (a ? K.st(a).power * 0.5 : 50))}.</p>` : '';
-        if (!f.power && a) f.power = Math.round(K.st(a).power * 0.5);
         html += `<div class="isle"><div class="isle-head"><div class="sig" data-sig></div><div class="grow"><h3>War fleet ${a ? this.stanceTag(a) : ''}</h3><p>${a ? esc(a.kingdom.name) : 'Unknown colours'}, bound for ${esc(bound)}</p>${odds}</div><button class="tiny-btn red" data-sea="close" aria-label="Close"><i class="ic ic-x"></i></button></div><div class="isle-acts">${acts}</div></div>`;
       }
     } else if (is && is.kind === 'water') {
       const d = Math.round(Math.hypot(is.x - W.fleet.x, is.y - W.fleet.y)), rg = Z.ocean.ringOf(is.x, is.y);
       html += `<div class="isle"><div class="isle-head"><div class="grow"><h3>${is.name}</h3><p>${esc(rg.name)}, danger ${rg.level}. Sail out to see what lies there.</p></div><button class="tiny-btn" data-sea="close" aria-label="Close"><i class="ic ic-x"></i></button></div>
-        <div class="isle-acts">${sail ? '' : `<button class="btn" data-sea="goto">Sail here (${time(d / SPEED)})</button>`}</div></div>`;
+        <div class="isle-acts">${sail ? '' : `<button class="btn" data-sea="goto">Sail here (${time(d / Z.speed())})</button>`}</div></div>`;
     } else if (is) {
       const rel = is.kingdom ? Z.relation(is) : null, here = !sail && docked && docked.id === is.id;
-      const d = Math.round(Math.hypot(is.x - W.fleet.x, is.y - W.fleet.y)), eta = time(d / SPEED);
+      const d = Math.round(Math.hypot(is.x - W.fleet.x, is.y - W.fleet.y)), eta = time(d / Z.speed());
       const sub = R.colonies.C[is.id] ? `Your ${COLONY_LEVELS[R.colonies.C[is.id].level].name.toLowerCase()}, founded ${ago(R.colonies.C[is.id].founded)}` : is.kind === 'home' ? `The ${TIERS[S.tier].name.toLowerCase()} of your realm` : is.kind === 'kingdom' ? `${esc(is.kingdom.name)}, ${esc(is.kingdom.realm || '')}` : is.kind === 'lair' ? `${(REGION_NAMES[is.region] || 'Monsters')}${is.boss ? ', with a boss' : ''}` : is.kind === 'story' ? `The Drowned Crown, chapter ${is.chapter}` : { port: 'Trade routes, and rest for the crew', ruins: 'Old stones that may still hold treasure', abyss: 'Monsters from every shore, floor after floor', wild: 'Unclaimed land with good soil' }[is.kind] || this.kindLabel(is);
       const L = Z.landing(is);
       let acts = '';
@@ -779,7 +782,7 @@ export class UI {
     if (a === 'close') { this.seaSel = null; }
     else if (a === 'go' && is) { Z.sail(is); if (!Z.crewRecs().length && is.kind !== 'home' && Z.atHome()) this.toast('Sailing without a crew: you can scout, but not land. Choose a crew at home first.'); }
     else if (a === 'goto' && is) Z.sailTo(is.x, is.y);
-    else if (a === 'intercept' && is && is.f) { Z.chase(is.f); this.toast('The fleet gives chase.'); }
+    else if (a === 'intercept' && is && is.f) { if ((Z.W.seaCooldown || 0) > Date.now()) return this.toast('The crew needs time before another fight.', 'red'); Z.chase(is.f); this.toast('The fleet gives chase.'); }
     else if (a === 'stop') Z.stop();
     else if (a === 'fleet') this.view.seaFocus(Z.W.fleet.x, Z.W.fleet.y);
     else if (a === 'homeview') { this.closeSea(); return; }

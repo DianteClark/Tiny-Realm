@@ -61,10 +61,10 @@ export class Sea {
   // set sail toward an island: stop just off its shore on the side we approach from
   sail(is) {
     const f = this.W.fleet, a = Math.atan2(f.y - is.y, f.x - is.x), d = is.r + 34;
-    this.W.dest = { x: is.x + Math.cos(a) * d, y: is.y + Math.sin(a) * d, id: is.id }; this.W.rested = null;
+    this.W.dest = { x: is.x + Math.cos(a) * d, y: is.y + Math.sin(a) * d, id: is.id }; this.W.rested = null; this.W.chase = null;
     this.R.sfx('sail');
   }
-  sailTo(x, y) { this.W.dest = { x, y, id: null }; this.W.rested = null; this.R.sfx('sail'); }
+  sailTo(x, y) { this.W.dest = { x, y, id: null }; this.W.rested = null; this.W.chase = null; this.R.sfx('sail'); }
   stop() { this.W.dest = null; this.W.chase = null; }
   speed() { return SPEED * (this.R.war ? this.R.war.speedMul() : 1); }
   eta() { const d = this.W.dest, f = this.W.fleet; return d ? Math.hypot(d.x - f.x, d.y - f.y) / this.speed() : 0; }

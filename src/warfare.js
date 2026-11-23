@@ -52,7 +52,8 @@ export class Warfare {
     const gens = new Set();
     for (const u of scene.units || []) if (u.rec && u.rec.general && !u.dead && u.team === 0) gens.add(u.rec);
     if (rec.general && (scene.units || []).some(u => u.rec === rec)) gens.add(rec);
-    for (const g of gens) {
+    const best = {}; for (const g of gens) if (!best[g.general] || this.power(g) > this.power(best[g.general])) best[g.general] = g; // doctrines do not stack: the strongest of each counts
+    for (const g of Object.values(best)) {
       const D = DOCTRINES[g.general]; if (!D) continue; const p = this.power(g);
       out.hp += (D.hp || 0) * p; out.dmg += ((D.dmg || 0) + (ranged ? D.rangedDmg || 0 : 0)) * p; out.speed += (D.speed || 0) * p; out.armor += (D.armor || 0) * p;
     }
@@ -70,19 +71,23 @@ export class Warfare {
     for (const sc of [this.R.home, this.R.exp]) {
       if (!sc) continue;
       const fight = sc === this.R.exp || (this.R.raid && this.R.raid.active); if (!fight) continue;
-      for (const g of sc.units) {
-        if (!g.rec || g.dead || g.rec.general !== 'warden') continue;
+      const wardens = sc.units.filter(g => g.rec && !g.dead && g.rec.general === 'warden').sort((a, b) => this.power(b.rec) - this.power(a.rec)).slice(0, 1);
+      for (const g of wardens) {
         const m = DOCTRINES.warden.mend * this.power(g.rec);
         for (const u of sc.units) if (u.team === 0 && u.rec && !u.dead && u.hp < u.maxHp && Math.hypot(u.x - g.x, u.y - g.y) < 260) u.hp = Math.min(u.maxHp, u.hp + u.maxHp * m);
       }
     }
   }
   // a battle won: every general who fought gains command
-  victory(scene) {
-    for (const u of (scene && scene.units) || []) if (u.rec && u.rec.general && !u.dead) {
-      const before = this.rank(u.rec); u.rec.command = (u.rec.command || 0) + 1;
-      if (this.rank(u.rec) > before) this.R.ui.toast(`${u.rec.name} is now a ${this.rankName(u.rec)}. Their doctrine grows stronger.`, 'gold');
-    }
+  victory(scene, small) {
+    if (small) return;
+    // only generals who saw the fight: in the field on a voyage, or who struck or were struck at home
+    for (const u of (scene && scene.units) || []) if (u.rec && u.rec.general && !u.dead && (scene !== this.R.home || u.fought)) this.addCommand(u.rec);
+    for (const u of (scene && scene.units) || []) u.fought = false;
+  }
+  addCommand(rec) {
+    const before = this.rank(rec); rec.command = (rec.command || 0) + 1;
+    if (this.rank(rec) > before && this.R.ui) this.R.ui.toast(`${rec.name} is now a ${this.rankName(rec)}. Their doctrine grows stronger.`, 'gold');
   }
   // ---- the ship
   ship() { const W = this.S.world; return W.ship || (W.ship = { guns: 0, sails: 0, hull: 0 }); }
@@ -110,24 +115,28 @@ export class Warfare {
     const R = this.R, Z = R.sea, W = Z.W, K = R.kingdoms, crew = Z.crewRecs();
     if (!crew.length) return null;
     const a = Z.ocean.islandById(f.from), name = a ? a.kingdom.name : 'the enemy';
+    if (a && K.stance(a) !== 'war') return null;
+    if ((W.seaCooldown || 0) > Date.now()) return null;
     const odds = this.odds(f), win = Math.random() < odds;
     // five volleys, told in order; the winner lands most of them
-    let rounds; do { rounds = Array.from({ length: 5 }, () => Math.random() < odds); } while (rounds.filter(Boolean).length >= 3 !== win);
+    const hits = win ? 3 + (Math.random() < odds ? 1 : 0) + (Math.random() < odds * odds ? 1 : 0) : 2 - (Math.random() > odds ? 1 : 0) - (Math.random() > odds + 0.3 ? 1 : 0);
+    const rounds = Array.from({ length: 5 }, (_, i) => i < Math.max(0, hits)).sort(() => Math.random() - 0.5);
     const res = { win, name, rounds, hurt: [], loot: 0 };
     if (win) {
       W.fleets.splice(W.fleets.indexOf(f), 1);
       if (a) { const k = K.st(a); k.power = Math.max(20, k.power - f.power * 0.5); }
       res.loot = R.addRes('gold', Math.round(40 + f.power * 1.5));
       for (const r of crew) this.recXp(r, 30);
-      for (const r of crew) if (r.general) r.command = (r.command || 0) + 1;
+      for (const r of crew) if (r.general) this.addCommand(r);
       this.S.stats.seaWins = (this.S.stats.seaWins || 0) + 1;
       K.news(`Your fleet sank a war fleet of ${name} at sea.`);
     } else {
-      const n = Math.max(1, Math.min(crew.length - 1, Math.round(crew.length * (0.4 - this.ship().hull * 0.06))));
-      const pool = crew.filter(r => r.type !== 'king').sort(() => Math.random() - 0.5).slice(0, n);
-      for (const r of pool) { r.status = 'wounded'; r.woundedUntil = Date.now() + 15 * 60000; r.hp = undefined; W.crew = W.crew.filter(id => id !== r.id); res.hurt.push(r.name); }
-      f.power *= 0.8;
-      const fx = W.fleet; W.dest = null; fx.x -= (f.x - fx.x) * 0.5; fx.y -= (f.y - fx.y) * 0.5; // driven off
+      const n = Math.max(1, Math.round(crew.length * (0.4 - this.ship().hull * 0.06)));
+      const pool = crew.sort(() => Math.random() - 0.5).slice(0, n); // the King is carried off wounded like anyone else
+      for (const r of pool) { r.status = 'wounded'; r.woundedUntil = Date.now() + (r.type === 'king' ? 30 : 15) * 60000; r.hp = undefined; W.crew = W.crew.filter(id => id !== r.id); res.hurt.push(r.name); }
+      if (res.rounds.filter(Boolean).length >= 2) f.power *= 0.9; // a hard fight leaves its mark on them too
+      const fx = W.fleet, dx = fx.x - f.x, dy = fx.y - f.y, L = Math.hypot(dx, dy) || 1; W.dest = null; fx.x += dx / L * 200; fx.y += dy / L * 200; // driven off
+      W.seaCooldown = Date.now() + 5 * 60000;
       K.news(`A war fleet of ${name} beat your fleet at sea.`);
     }
     W.chase = null; R.save();
@@ -137,9 +146,10 @@ export class Warfare {
   // an enemy fleet reaches your island: they come ashore
   landAtHome(f) {
     const R = this.R, a = R.sea.ocean.islandById(f.from); if (!a) return true;
-    if (R.exp || (R.raid && R.raid.active) || R.pendingRaid || R.events.blocking) return false; // they wait offshore
+    const hol = R.holiday && R.holiday();
+    if (R.exp || (R.raid && R.raid.active) || R.pendingRaid || R.events.blocking || R.slam || (hol && hol.peace)) return false; // they wait offshore
     const region = { key: 'rival', name: a.kingdom.name, kingdomIsle: a.id, enemies: rivalRoster(a.kingdom.color, Math.max(1, Math.round(a.level * 0.8))) };
-    const plan = R.planRaid('raid', { region, budget: 3 + f.power / 12 });
+    const plan = R.planRaid('raid', { region }); plan.invasion = true; // a full raid's strength
     const keep = R.state.timers.raid;
     R.startRaid(plan, { title: 'Invasion', text: `The war fleet of ${a.kingdom.name} has reached your shore. Their soldiers land now.` });
     R.state.timers.raid = keep;
