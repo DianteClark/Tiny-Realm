@@ -865,13 +865,19 @@ export class Scene {
     for (const u of this.selected) if (u.alive) drawSprite(ctx, 'cursorRing', u.x, u.bodyY + 16, 0, { scale: (u.big ? 0.85 : 0.6) * (1 + Math.sin(this.time * 6) * 0.06) });
     for (const u of this.units) {
       if (!u.alive || u.hidden || u.kind === 'pawn') continue;
-      if (u.hp < u.maxHp || this.selected.has(u)) this.bar(ctx, u.x, u.y - (u.big ? 110 : 72), u.big ? 56 : 40, u.hp / u.maxHp, u.team === 0 ? '#6dbb5b' : '#d9534f');
+      if (u.hp < u.maxHp || this.selected.has(u)) this.bar(ctx, u.x, u.y - (u.big ? 110 : 72) * (u.def.scale || 1), u.big ? 56 : 40, u.hp / u.maxHp, u.team === 0 ? '#6dbb5b' : '#d9534f', u);
       if (u.cursed > 0) this.bar(ctx, u.x, u.y - 78, 40, u.cursed / 45, '#a874c9');
     }
     for (const b of [...this.buildings, ...this.structs]) {
-      if (b.hp < b.maxHp && b.hp > 0) this.bar(ctx, b.x, b.y - (SHEETS[b.imgKey || b.def.sprite]?.fh || 160) + 30, 70, b.hp / b.maxHp, b.team === 0 ? '#6dbb5b' : '#d9534f');
-      if (b.buildEnd && !b.done) this.bar(ctx, b.x, b.y - 40, 70, 1 - (b.buildEnd - Date.now()) / (b.buildTotal * 1000), '#e8c35a');
-      if (b.upEnd) this.bar(ctx, b.x, b.y - 40, 70, 1 - (b.upEnd - Date.now()) / (b.upTotal * 1000), '#a874c9');
+      if (b.hp < b.maxHp && b.hp > 0 && !b.def.palisade) this.bar(ctx, b.x, b.y - (SHEETS[b.imgKey || b.def.sprite]?.fh || 160) + 30, 70, b.hp / b.maxHp, b.team === 0 ? '#6dbb5b' : '#d9534f', b);
+      if (b.def.palisade && b.hp < b.maxHp && b.hp > 0) this.bar(ctx, b.x, b.y - 58, 40, b.hp / b.maxHp, '#d9534f', b);
+      if (b.buildEnd && !b.done) this.progress(ctx, b.x, b.y - 44, 74, 1 - (b.buildEnd - Date.now()) / (b.buildTotal * 1000), '#e8c35a', 'icon_hammer', (b.buildEnd - Date.now()) / 1000);
+      else if (b.upEnd) this.progress(ctx, b.x, b.y - 44, 74, 1 - (b.upEnd - Date.now()) / (b.upTotal * 1000), '#a874c9', 'icon_hammer', (b.upEnd - Date.now()) / 1000);
+      else if (b.queue && b.queue.length && b.done && this.kind === 'home') { // training: the unit's portrait and a bar
+        const q = b.queue[0], tot = (q.total || 20) * 1000, U = q.unit;
+        const av = UNITS[U] ? (/^h\d+$/.test(UNITS[U].avatar) ? 'av_' + UNITS[U].avatar : `av_${UNITS[U].avatar}1`) : null;
+        this.progress(ctx, b.x, b.y - 44, 74, 1 - (q.end - Date.now()) / tot, '#6fb7d6', av, (q.end - Date.now()) / 1000, b.queue.length > 1 ? b.queue.length : 0);
+      }
       if (b.level > 1 && b.done) for (let i = 0; i < b.level - 1; i++) {
         const px = Math.round(b.x - (b.level - 2) * 7 + i * 14), py = Math.round(b.y - 20);
         ctx.fillStyle = '#2b2b3a'; ctx.fillRect(px - 5, py - 5, 10, 10);
@@ -881,11 +887,14 @@ export class Scene {
     // floating text
     ctx.textAlign = 'center';
     for (const tx of this.texts) {
-      const a = 1 - tx.t / 1.4;
-      ctx.font = `${tx.size || 18}px BoldPixels, monospace`;
+      const a = tx.t < 1 ? 1 : 1 - (tx.t - 1) / 0.4; // hold, then fade
+      const pop = tx.t < 0.12 ? 0.6 + (tx.t / 0.12) * 0.55 : tx.t < 0.25 ? 1.15 - (tx.t - 0.12) / 0.13 * 0.15 : 1; // spring in
+      const rise = 28 * (1 - Math.pow(1 - Math.min(1, tx.t / 1.4), 2)) * 1.4;
+      const sz = Math.round((tx.size || 18) * pop);
+      ctx.font = `${sz}px BoldPixels, monospace`;
       ctx.globalAlpha = Math.max(0, a);
-      ctx.fillStyle = '#2b2b3a'; ctx.fillText(tx.text, tx.x + 1, tx.y - tx.t * 28 + 1);
-      ctx.fillStyle = tx.color; ctx.fillText(tx.text, tx.x, tx.y - tx.t * 28);
+      ctx.fillStyle = '#2b2b3a'; ctx.fillText(tx.text, tx.x + 1, tx.y - rise + 2);
+      ctx.fillStyle = tx.color; ctx.fillText(tx.text, tx.x, tx.y - rise);
     }
     ctx.globalAlpha = 1;
     this.game.env.drawWorld(ctx, this);
@@ -898,11 +907,34 @@ export class Scene {
     this.game.env.drawScreen(ctx, vw, vh, this, cam);
     if (this.tint > 0) { ctx.fillStyle = `rgba(70,10,40,${0.32 * this.tint})`; ctx.fillRect(0, 0, vw, vh); }
   }
-  bar(ctx, x, y, w, frac, color) {
+  // health bar: dark frame, a pale trail that drains after a hit, then the colour with a highlight
+  bar(ctx, x, y, w, frac, color, owner) {
     frac = Math.max(0, Math.min(1, frac));
-    ctx.fillStyle = '#2b2b3a'; ctx.fillRect(Math.round(x - w / 2) - 2, Math.round(y) - 2, w + 4, 9);
-    ctx.fillStyle = '#5a4636'; ctx.fillRect(Math.round(x - w / 2), Math.round(y), w, 5);
-    ctx.fillStyle = color; ctx.fillRect(Math.round(x - w / 2), Math.round(y), Math.round(w * frac), 5);
+    let trail = frac;
+    if (owner) { owner._trail = owner._trail == null || owner._trail < frac ? frac : Math.max(frac, owner._trail - 0.012); trail = owner._trail; }
+    const x0 = Math.round(x - w / 2), y0 = Math.round(y);
+    ctx.fillStyle = '#2b2b3a'; ctx.fillRect(x0 - 2, y0 - 2, w + 4, 10);
+    ctx.fillStyle = '#4a3a2e'; ctx.fillRect(x0, y0, w, 6);
+    if (trail > frac) { ctx.fillStyle = '#f3e6c4'; ctx.fillRect(x0 + Math.round(w * frac), y0, Math.round(w * (trail - frac)), 6); }
+    ctx.fillStyle = color; ctx.fillRect(x0, y0, Math.round(w * frac), 6);
+    ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.fillRect(x0, y0, Math.round(w * frac), 2);
+  }
+  // progress bar with an icon on the left and the time left on the right
+  progress(ctx, x, y, w, frac, color, icon, secs, count) {
+    frac = Math.max(0, Math.min(1, frac));
+    const x0 = Math.round(x - w / 2), y0 = Math.round(y);
+    ctx.fillStyle = 'rgba(43,43,58,0.85)'; ctx.fillRect(x0 - 16, y0 - 7, w + 20, 20);
+    ctx.fillStyle = '#4a3a2e'; ctx.fillRect(x0 + 2, y0 - 1, w - 4, 8);
+    ctx.fillStyle = color; ctx.fillRect(x0 + 2, y0 - 1, Math.round((w - 4) * frac), 8);
+    ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.fillRect(x0 + 2, y0 - 1, Math.round((w - 4) * frac), 2);
+    const s = icon && SHEETS[icon];
+    if (s && s.img) { ctx.drawImage(s.img, 0, 0, s.fw || s.img.width, s.fh || s.img.height, x0 - 22, y0 - 13, 30, 30); }
+    if (secs != null && secs > 0) {
+      ctx.font = '11px BoldPixels, monospace'; ctx.textAlign = 'center';
+      const t = secs >= 60 ? `${Math.floor(secs / 60)}:${String(Math.floor(secs % 60)).padStart(2, '0')}` : `${Math.ceil(secs)}s`;
+      ctx.fillStyle = '#2b2b3a'; ctx.fillText(t, x + 1, y0 + 22); ctx.fillStyle = '#fff6d8'; ctx.fillText(t, x, y0 + 21);
+    }
+    if (count) { ctx.fillStyle = '#e8b93a'; ctx.fillRect(x0 + w - 2, y0 - 9, 16, 14); ctx.fillStyle = '#2b2b3a'; ctx.font = '11px BoldPixels, monospace'; ctx.textAlign = 'center'; ctx.fillText(count, x0 + w + 6, y0 + 2); }
   }
   walls() { if (!this.wallMap) this.refreshWalls(); return this.wallMap; }
   wallAt(x, y) { return this.walls().get(x + ',' + y) || null; }

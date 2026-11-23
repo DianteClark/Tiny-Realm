@@ -65,12 +65,32 @@ canvas.addEventListener('pointerdown', e => {
   canvas.setPointerCapture(e.pointerId);
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (ptrs.size === 1) drag = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y, moved: false, t: performance.now() };
+  // placing: press on the ghost to carry it, or press anywhere to drag out a wall line
+  const pl = ui.place;
+  if (ptrs.size === 1 && pl) {
+    const wx = cam.x + e.clientX / cam.z, wy = cam.y + e.clientY / cam.z, cx = cellOf(wx), cy = cellOf(wy), d = BUILDINGS[pl.type];
+    if (pl.line) { const single = pl.a && pl.done && pl.a[0] === pl.b[0] && pl.a[1] === pl.b[1]; if (!single) pl.a = [cx, cy]; pl.b = [cx, cy]; pl.done = false; drag.place = 'line'; drag.second = single; }
+    else if (d.wall || d.lantern) { pl.cx = cx; pl.cy = cy; drag.place = 'cell'; }
+    else if (pl.cx != null && cx >= pl.cx - 1 && cx <= pl.cx + d.fw && cy >= pl.cy - 2 && cy <= pl.cy + d.fh) { drag.place = 'carry'; drag.off = [cx - pl.cx, cy - pl.cy]; }
+  }
   if (ptrs.size === 2) {
     const [a, b] = [...ptrs.values()];
     pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), z: cam.z, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
     if (drag) drag.moved = true;
   }
 });
+// desktop: the pack's cursors, with a pointing hand over anything you can tap in the world
+let hoverT = 0;
+canvas.addEventListener('pointermove', e => {
+  if (e.pointerType !== 'mouse' || ptrs.size || !realm.scene) return;
+  const now = performance.now(); if (now - hoverT < 60) return; hoverT = now;
+  const wx = cam.x + e.clientX / cam.z, wy = cam.y + e.clientY / cam.z;
+  const o = ui.place ? null : realm.scene.pick(wx, wy);
+  const foe = o && o.team === 1;
+  canvas.dataset.hover = ui.place ? 'place' : o ? (foe && realm.scene.selected.size ? 'attack' : 'tap') : '';
+  realm.scene.hoverObj = o && (o.team === 1 || o.team === 0) ? o : null;
+});
+canvas.addEventListener('pointerleave', () => { canvas.dataset.hover = ''; if (realm.scene) realm.scene.hoverObj = null; });
 canvas.addEventListener('pointermove', e => {
   if (!ptrs.has(e.pointerId)) return;
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -79,6 +99,14 @@ canvas.addEventListener('pointermove', e => {
     const d = Math.hypot(a.x - b.x, a.y - b.y);
     const target = pinch.z * d / pinch.d;
     zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, target / cam.z);
+    return;
+  }
+  if (drag && drag.place && ui.place) {
+    const pl = ui.place, wx = cam.x + e.clientX / cam.z, wy = cam.y + e.clientY / cam.z, cx = cellOf(wx), cy = cellOf(wy);
+    drag.moved = true; drag.edge = { x: e.clientX, y: e.clientY };
+    if (drag.place === 'line') pl.b = [cx, cy];
+    else if (drag.place === 'cell') { pl.cx = cx; pl.cy = cy; }
+    else { const nx = cx - drag.off[0], ny = cy - drag.off[1]; if (nx !== pl.cx || ny !== pl.cy) { pl.cx = nx; pl.cy = ny; pl.moved = true; audio.play('tick'); } }
     return;
   }
   if (drag) {
@@ -96,6 +124,11 @@ const endPtr = e => {
   if (!ptrs.has(e.pointerId)) return;
   ptrs.delete(e.pointerId);
   if (ptrs.size < 2) pinch = null;
+  if (ptrs.size === 0 && drag && drag.place) {
+    if (drag.place === 'line' && ui.place) { ui.place.done = true; if (!drag.moved && !drag.second) ui.place.b = ui.place.a; }
+    if (drag.place === 'carry' && !drag.moved) ui.onTap(cam.x + e.clientX / cam.z, cam.y + e.clientY / cam.z);
+    drag = null; return;
+  }
   if (ptrs.size === 0 && drag) {
     if (!drag.moved && e.type === 'pointerup') ui.onTap(cam.x + e.clientX / cam.z, cam.y + e.clientY / cam.z);
     else if (drag.moved && drag.vx !== undefined && performance.now() - drag.lt < 80) glide = { vx: drag.vx, vy: drag.vy };
@@ -187,6 +220,11 @@ function drawGhost() {
 let last = performance.now(), tutorial = null, featT = 3;
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (drag && drag.place && drag.edge && ui.place) { // carry the camera along when dragging near the screen edge
+    const m = 46, ex = drag.edge.x, ey = drag.edge.y, sp = 520 * dt / cam.z;
+    const vx = ex < m ? -sp : ex > vw - m ? sp : 0, vy = ey < m + 60 ? -sp : ey > vh - m - 90 ? sp : 0;
+    if (vx || vy) { cam.x += vx; cam.y += vy; clampCam(); }
+  }
   if (!realm.state) return; // wiped, reload pending
   realm.update(dt);
   ui.frame(dt);
@@ -212,9 +250,13 @@ function frame(now) {
 }
 
 async function boot() {
-  const fill = document.getElementById('loadFill');
+  const fill = document.getElementById('loadFill'), pawn = document.getElementById('loadPawn'), pct = document.getElementById('loadPct'), tipEl = document.getElementById('loadText');
+  const TIPS = ['Tip: tap a soldier, then tap a foe to attack it.', 'Tip: houses make room for more people.', 'Tip: watchtowers on high ground shoot farther.', 'Tip: every 5th island has a boss and a relic.', 'Tip: fences with a gate keep raiders out and your people in.', 'Tip: the realm keeps working while you are away.', 'Tip: a happy realm gathers faster and grows on its own.', 'Tip: promote a level 10 soldier for a new look and more power.'];
+  let tipI = Math.floor(Math.random() * TIPS.length); tipEl.textContent = TIPS[tipI];
+  const tipT = setInterval(() => { tipEl.style.opacity = 0; setTimeout(() => { tipI = (tipI + 1) % TIPS.length; tipEl.textContent = TIPS[tipI]; tipEl.style.opacity = 0.9; }, 300); }, 2600);
   const fontP = document.fonts ? document.fonts.load('16px BoldPixels').catch(() => { }) : Promise.resolve();
-  await Promise.all([loadAll(p => { fill.style.width = `calc(${Math.round(p * 100)}% + 20px)`; }), fontP]);
+  await Promise.all([loadAll(p => { fill.style.width = `calc(${Math.round(p * 100)}% + 20px)`; pawn.style.left = Math.round(p * 100) + '%'; pct.textContent = Math.round(p * 100) + '%'; }), fontP]);
+  clearInterval(tipT);
   resize();
   window.addEventListener('resize', resize);
   window.addEventListener('orientationchange', () => setTimeout(resize, 250));
@@ -224,7 +266,7 @@ async function boot() {
   ui.bind(realm, view);
   cam.z = Math.max(0.6, Math.min(1, vw / (64 * 15)));
   view.focusScene();
-  document.getElementById('loading').classList.add('hidden');
+  const ld = document.getElementById('loading'); ld.classList.add('hidden'); setTimeout(() => ld.classList.add('gone'), 500);
   ui.welcome(info);
   tutorial = new Tutorial(realm, ui, view); tutorial.start();
   realm.save();

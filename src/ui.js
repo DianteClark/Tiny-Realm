@@ -20,6 +20,10 @@ export const VERSION = '3.5';
 
 const $ = s => document.querySelector(s);
 const src = k => SHEETS[k] ? encodeURI(SHEETS[k].src) : '';
+// "1 kills" -> "1 kill": one pass over any text the UI shows
+const SING = { kills: 'kill', foes: 'foe', pawns: 'pawn', soldiers: 'soldier', raids: 'raid', days: 'day', islands: 'island', points: 'point', voyages: 'voyage', tokens: 'token', pieces: 'piece', floors: 'floor', people: 'person', hours: 'hour', minutes: 'minute', boats: 'boat', camps: 'camp', relics: 'relic', feats: 'feat', newcomers: 'newcomer', fragments: 'fragment', lambs: 'lamb', creatures: 'creature', orders: 'order', trips: 'trip', gold_: 'gold' };
+const RX = new RegExp('(^|[^\\d.,])1 (' + Object.keys(SING).join('|') + ')\\b', 'g');
+export const fixText = s => typeof s === 'string' ? s.replace(RX, (m, a, w) => a + '1 ' + SING[w]) : s;
 const fmt = n => n >= 10000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1) + 'k' : String(Math.floor(n));
 const time = s => { s = Math.max(0, Math.ceil(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return h ? `${h}h ${m}m` : `${m}:${String(x).padStart(2, '0')}`; };
 const ago = t => { const s = (Date.now() - t) / 1000; return s < 60 ? 'just now' : s < 3600 ? Math.floor(s / 60) + 'm ago' : s < 86400 ? Math.floor(s / 3600) + 'h ago' : Math.floor(s / 86400) + 'd ago'; };
@@ -63,23 +67,36 @@ export class UI {
     this.tabs.addEventListener('click', e => { const el = e.target.closest('[data-tab]'); if (el) { this.tab = el.dataset.tab; this.renderPanel(); } });
     $('#subbar').addEventListener('click', e => { const el = e.target.closest('[data-pill]'); if (el) this.pillAction(el.dataset.pill); });
     $('#hud').classList.remove('hidden');
-    document.addEventListener('click', e => { const b = e.target.closest('button'); if (b && !b.disabled && !b.classList.contains('navbtn')) audio.play('click'); }, true);
+    document.addEventListener('click', e => { const b = e.target.closest('button, .chip, summary'); if (b && !b.disabled && !b.classList.contains('navbtn')) audio.play('click'); }, true);
   }
 
   // ------------------------------------------------------------ messages
   toast(text, kind = '') {
+    if (kind === 'red') audio.play('error');
+    // the same message again just bumps a counter and restarts its timer
+    const same = [...this.toastsEl.children].find(t => t.dataset.text === text && !t.classList.contains('out'));
+    if (same) {
+      const n = (+same.dataset.n || 1) + 1; same.dataset.n = n;
+      same.querySelector('.tn').textContent = 'x' + n;
+      same.classList.remove('bump'); void same.offsetWidth; same.classList.add('bump');
+      clearTimeout(same._t); same._t = setTimeout(() => this.dropToast(same), 3600);
+      return;
+    }
     const el = document.createElement('div');
     el.className = 'toast paper-dark' + (kind ? ' ' + kind : '');
-    if (kind === 'red') audio.play('error');
-    el.textContent = text;
+    el.dataset.text = text;
+    el.innerHTML = `<span class="tt"></span><b class="tn"></b>`;
+    el.firstChild.textContent = fixText(text);
+    el.onclick = () => this.dropToast(el);
     this.toastsEl.appendChild(el);
     while (this.toastsEl.children.length > 3) this.toastsEl.firstChild.remove();
-    setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 450); }, 3600);
+    el._t = setTimeout(() => this.dropToast(el), 3600 + Math.min(2400, text.length * 25));
   }
+  dropToast(el) { if (el.classList.contains('out')) return; el.classList.add('out'); setTimeout(() => el.remove(), 450); }
   banner(title, text, color = 'blue') {
     const b = this.bannerEl;
     b.querySelector('.banner-ribbon').innerHTML = `<div class="ribbon ${color === 'gold' ? 'yellow' : color}"><span>${esc(title)}</span></div>`;
-    const p = b.querySelector('p'); p.textContent = text; p.className = 'paper';
+    const p = b.querySelector('p'); p.textContent = fixText(text); p.className = 'paper';
     b.classList.remove('hidden');
     b.style.animation = 'none'; void b.offsetWidth; b.style.animation = '';
     clearTimeout(this.bannerT);
@@ -89,7 +106,8 @@ export class UI {
   choice(title, text, options) {
     if (!this.modalEl.classList.contains('hidden')) { this.modalQueue.push([title, text, options]); return; }
     $('#modalTitle').textContent = title;
-    $('#modalBody').innerHTML = typeof text === 'string' ? `<p>${esc(text)}</p>` : '';
+    $('#modalBody').innerHTML = typeof text === 'string' ? `<p>${esc(fixText(text))}</p>` : '';
+    if (typeof text !== 'string' && text.innerHTML) text.innerHTML = fixText(text.innerHTML);
     if (typeof text !== 'string') $('#modalBody').appendChild(text);
     const btns = $('#modalBtns'); btns.innerHTML = '';
     for (const o of options) {
@@ -237,7 +255,7 @@ export class UI {
     if (sKey !== this.stKey) {
       this.stKey = sKey;
       $('#stEnv').textContent = env;
-      const r = $('#stRaid'); r.textContent = raidText; r.classList.toggle('hot', raidHot); r.dataset.pill = raidKey;
+      const r = $('#stRaid'); r.textContent = fixText(raidText); r.classList.toggle('hot', raidHot); r.dataset.pill = raidKey;
       document.getElementById('statusbar').classList.toggle('night', R.env.isNight);
     }
     // notices: only what needs attention, newest-relevant first
@@ -266,7 +284,7 @@ export class UI {
       if (!el) { el = document.createElement('div'); el.dataset.pill = k; el.innerHTML = (ic ? `<i class="ic ${ic}"></i>` : '') + '<span></span>'; }
       have.delete(k);
       const cls = 'chip ' + c; if (el.className !== cls) el.className = cls;
-      const sp = el.lastChild; if (sp.textContent !== t) sp.textContent = t;
+      const tt = fixText(t), sp = el.lastChild; if (sp.textContent !== tt) sp.textContent = tt;
       const want = prev ? prev.nextSibling : box.firstChild;
       if (want !== el) box.insertBefore(el, want);
       prev = el;
@@ -442,7 +460,7 @@ export class UI {
       $('#placebar').classList.remove('hidden'); $('#placeText').textContent = BUILDINGS[type].name;
       $('#bottombar').classList.add('hidden');
       this.R.scene.selected.clear(); this.refreshSel();
-      this.toast(type === 'wall' ? 'Tap where the wall starts, then tap where it ends.' : type === 'lantern' ? 'Tap a spot near your woodcutters and miners.' : 'Tap a spot, or an existing wall to turn it into a gate.');
+      this.toast(type === 'wall' ? 'Drag along the ground to lay a wall, or tap its two ends.' : type === 'lantern' ? 'Tap a spot near your woodcutters and miners.' : 'Tap a spot, or an existing wall to turn it into a gate.');
       return;
     }
     const c = this.view.centerCell();
@@ -451,7 +469,7 @@ export class UI {
     $('#placeText').textContent = BUILDINGS[type].name;
     $('#bottombar').classList.add('hidden');
     this.R.scene.selected.clear(); this.refreshSel();
-    this.toast('Tap the map to choose a spot.');
+    this.toast('Drag the building where you want it, or tap a spot. Green tiles are free.');
   }
   movePlace(wx, wy) {
     const d = BUILDINGS[this.place.type];
@@ -488,6 +506,7 @@ export class UI {
   // ------------------------------------------------------------ panels
   togglePanel(name, arg) { if (this.panel === name && !arg) this.closePanel(); else this.openPanel(name, arg); }
   openPanel(name, arg) {
+    clearTimeout(this.closeT); this.panelEl.classList.remove('closing');
     if (this.R.exp && !['settings', 'army', 'chronicle', 'hero'].includes(name)) return;
     if (name === 'nightmarket' && !this.R.events.market) return this.toast('The Night Market only opens after dark.');
     if (this.panel !== name) audio.play('open');
@@ -498,7 +517,7 @@ export class UI {
     this.body.scrollTop = 0;
   }
   closePanel() {
-    if (this.panel) audio.play('close');
+    if (this.panel) { audio.play('close'); const el = this.panelEl; el.classList.add('closing'); clearTimeout(this.closeT); this.closeT = setTimeout(() => el.classList.remove('closing'), 190); }
     this.panel = null; this.live = [];
     this.panelEl.classList.add('hidden');
     document.querySelectorAll('.navbtn').forEach(b => b.classList.remove('on'));
@@ -520,7 +539,7 @@ export class UI {
     $('#panelTitle').textContent = p === 'building' ? (this.panelArg.def.name) : p === 'hero' ? this.panelArg.name : titles[p];
     this.setTabs(null);
     const fn = this['panel_' + p];
-    this.body.innerHTML = fn ? fn.call(this) : '';
+    this.body.innerHTML = fn ? fixText(fn.call(this)) : '';
     if (this.afterRender) { this.afterRender(); this.afterRender = null; }
   }
 

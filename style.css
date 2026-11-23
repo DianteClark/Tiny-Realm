@@ -189,7 +189,15 @@ textarea { width: 100%; height: 90px; font-family: monospace; font-size: 11px; b
 .load-box h1 { font-weight: normal; font-size: 46px; margin: 0 0 16px; text-shadow: 0 4px 0 rgba(0,0,0,.25); }
 .bar-big { width: 240px; height: 30px; margin: 0 auto; border: 0 solid transparent; border-width: 0 24px; border-image: url('assets/ui/bar_big.png') 0 64 fill / 0 24px stretch; position: relative; }
 #loadFill { position: absolute; left: -10px; top: 9px; height: 12px; width: 0; background: url('assets/free/UI Elements/UI Elements/Bars/BigBar_Fill.png') center / 100% 300%; }
-#loadText { font-size: 14px; }
+#loadText { font-size: 13px; max-width: 300px; margin: 6px auto 0; min-height: 34px; opacity: .9; transition: opacity .3s; }
+#loadPct { margin: 10px 0 0; font-size: 15px; }
+#loading { transition: opacity .45s ease-out; background: radial-gradient(ellipse at 50% 40%, #5cc3c0 0%, #47aba9 55%, #3a8f8d 100%); }
+#loading.hidden { display: flex !important; opacity: 0; pointer-events: none; }
+#loading.gone { display: none !important; }
+.load-castle { width: 220px; image-rendering: pixelated; animation: castleBob 3s ease-in-out infinite; filter: drop-shadow(0 6px 0 rgba(0,0,0,.18)); }
+@keyframes castleBob { 50% { transform: translateY(-4px); } }
+#loadPawn { position: absolute; top: -40px; left: 0; width: 64px; height: 64px; margin-left: -32px; background: url('assets/free/Units/Blue Units/Pawn/Pawn_Run.png') 0 0 / 384px 64px; image-rendering: pixelated; animation: pawnRun .6s steps(6) infinite; transition: left .25s linear; }
+@keyframes pawnRun { to { background-position: -384px 0; } }
 
 @media (min-width: 700px) {
   .res { font-size: 17px; }
@@ -290,3 +298,24 @@ body.exp #abilitybar { bottom: calc(var(--safe-bot) + 124px); }
 .decree .bad { color: #b3362f; } .card:not(.light).decree .bad { color: #ff9d93; }
 .other-laws { margin: 0 0 6px; font-size: 13px; } .other-laws summary { cursor: pointer; text-align: center; opacity: .8; margin-bottom: 6px; }
 .card.season { background: linear-gradient(135deg, #5a4a6e, #3f4a5c); border-color: #2e2840; }
+
+/* the pack's cursors (desktop) */
+html, body, #game { cursor: url('assets/free/UI Elements/UI Elements/Cursors/Cursor_01.png') 23 18, auto; }
+button, .btn, .navbtn, .chip, .sq, .ab, summary, [data-act], [data-pill], [data-tab], .chart, #game[data-hover="tap"] { cursor: url('assets/free/UI Elements/UI Elements/Cursors/Cursor_02.png') 24 17, pointer; }
+#game[data-hover="attack"] { cursor: url('assets/free/UI Elements/UI Elements/Cursors/Cursor_02.png') 24 17, crosshair; }
+button:disabled, .btn:disabled { cursor: url('assets/free/UI Elements/UI Elements/Cursors/Cursor_03.png') 32 31, not-allowed; }
+/* toasts: tap to dismiss, a counter for repeats, coloured edge by kind */
+.toast { pointer-events: none; display: flex; align-items: center; gap: 6px; }
+.toast .tn { font-weight: normal; font-size: 12px; color: #ffe9a8; }
+.toast .tn:empty { display: none; }
+.toast.bump { animation: toastBump .25s ease-out; }
+@keyframes toastBump { 40% { transform: scale(1.06); } }
+.toast.gold { box-shadow: inset 4px 0 0 #e8b93a; }
+.toast.red { box-shadow: inset 4px 0 0 #d9534f; }
+/* panels slide away instead of vanishing */
+#panel.closing { display: flex !important; animation: panelFade .18s ease-in forwards; }
+#panel.closing > * { animation: sheetDown .18s ease-in forwards; }
+@keyframes panelFade { to { background: rgba(30,40,50,0); } }
+@keyframes sheetDown { to { transform: translateY(40px); opacity: 0; } }
+/* keep toasts clear of the placement and selection bars */
+#hud:has(#placebar:not(.hidden)) #toasts, #hud:has(#selbar:not(.hidden)) #toasts { bottom: calc(var(--safe-bot) + 160px); }
