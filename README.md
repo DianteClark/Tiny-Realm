@@ -27,6 +27,14 @@ Import, and Wipe Realm to start over.
 
 ## How the game works
 
+**4.0, A World of Your Own.**
+- **From hamlet to Kingdom:** every realm starts as a hamlet (a hall, one house, three pawns and two heroes) and grows into a Village, a Castle, a Stronghold and finally a Kingdom, where the Founder is crowned.
+- **An endless sea:** Voyage opens a world grown from your realm's seed, with fog of war and rings of danger that get harder the farther you sail.
+  - Kingdoms of every colour wear their own heraldry, with red, yellow or green rings for enemy, neutral or vassal.
+  - There are also lairs, ruins, free ports, wild land, the story isles and the Abyss.
+- **Crews:** choose a crew at home, sail in real time, land, siege, rest and trade, and bring the survivors home.
+- **Seeds:** every world comes from a readable seed (like SALT-RAVEN-4821), kept in the Hall of Realms, that you can paste to sail the same world again.
+
 - **Workers**: pawns cut wood, mine gold, herd sheep for meat, and build or
   repair. While you're away they keep working at half pace until storage is
   full, so come back and spend.
