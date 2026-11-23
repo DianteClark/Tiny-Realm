@@ -50,7 +50,8 @@ export class Trade {
   stop(i) { const s = this.st.slots[i]; if (s) { s.stopAfter = true; if (!s.back) s.port = null; } }
   depart(slot, at = Date.now()) {
     const p = this.port(slot.port); if (!p || slot.stopAfter) { slot.port = null; slot.back = 0; slot.stopAfter = false; return; }
-    slot.leave = at; slot.back = at + p.mins * 60000; slot.cargo = { ...p.cargo };
+    const fast = this.R.home.buildings.some(b => b.type === 'market' && b.done && this.R.hasBonus(b, 'Harbour market'));
+    slot.leave = at; slot.back = at + p.mins * 60000 * (fast ? 0.8 : 1); slot.cargo = { ...p.cargo };
   }
   deliver(slot, mult = 1, quiet) {
     const R = this.R, got = {};

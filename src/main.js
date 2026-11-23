@@ -6,6 +6,7 @@ import { BUILDINGS } from './data.js';
 import { cellOf } from './world.js';
 import { audio } from './audio.js';
 import { Tutorial, checkFeats } from './tutorial.js';
+import { Minimap } from './minimap.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -70,7 +71,7 @@ canvas.addEventListener('pointerdown', e => {
   if (ptrs.size === 1 && pl) {
     const wx = cam.x + e.clientX / cam.z, wy = cam.y + e.clientY / cam.z, cx = cellOf(wx), cy = cellOf(wy), d = BUILDINGS[pl.type];
     if (pl.line) { const single = pl.a && pl.done && pl.a[0] === pl.b[0] && pl.a[1] === pl.b[1]; if (!single) pl.a = [cx, cy]; pl.b = [cx, cy]; pl.done = false; drag.place = 'line'; drag.second = single; }
-    else if (d.wall || d.lantern) { pl.cx = cx; pl.cy = cy; drag.place = 'cell'; }
+    else if (d.wall || d.lantern || d.decor) { pl.cx = cx; pl.cy = cy; drag.place = 'cell'; }
     else if (pl.cx != null && cx >= pl.cx - 1 && cx <= pl.cx + d.fw && cy >= pl.cy - 2 && cy <= pl.cy + d.fh) { drag.place = 'carry'; drag.off = [cx - pl.cx, cy - pl.cy]; }
   }
   if (ptrs.size === 2) {
@@ -156,7 +157,7 @@ const grid = { key: '', res: new Map() };
 function drawGrid(p, d) {
   const key = p.type + '|' + realm.home.buildings.length + '|' + realm.home.structs.length + '|' + (realm.state.annexed || []).length;
   if (grid.key !== key) { grid.key = key; grid.res = new Map(); }
-  const single = d.wall || d.lantern;
+  const single = d.wall || d.lantern || d.decor;
   const x0 = Math.floor(cam.x / T) - d.fw, y0 = Math.floor(cam.y / T) - d.fh;
   const x1 = Math.ceil((cam.x + vw / cam.z) / T), y1 = Math.ceil((cam.y + vh / cam.z) / T);
   let budget = 60;
@@ -193,7 +194,7 @@ function drawGhost() {
     drawGrid(p, d);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
-  if (d.wall || d.lantern) {
+  if (d.wall || d.lantern || d.decor) {
     const z = cam.z * dpr;
     ctx.setTransform(z, 0, 0, z, Math.round(-cam.x * z), Math.round(-cam.y * z));
     const cells = p.line ? (p.a ? realm.wallLine(p.a, p.b) : []) : (p.cx != null ? [[p.cx, p.cy]] : []);
@@ -206,6 +207,15 @@ function drawGhost() {
   ctx.setTransform(z, 0, 0, z, Math.round(-cam.x * z), Math.round(-cam.y * z));
   ctx.fillStyle = ok ? 'rgba(109,187,91,0.45)' : 'rgba(217,83,79,0.5)';
   for (let y = p.cy; y < p.cy + d.fh; y++) for (let x = p.cx; x < p.cx + d.fw; x++) ctx.fillRect(x * T + 2, y * T + 2, T - 4, T - 4);
+  { // what this spot would give
+    const fake = { type: p.type, cx: p.cx, cy: p.cy, fw: d.fw, fh: d.fh, done: true };
+    const nb = p.cx != null && ok ? realm.neighbourBonus(fake) : [];
+    if (nb.length) {
+      const lx = (p.cx + d.fw / 2) * T, ly = (p.cy + d.fh) * T + 24;
+      ctx.font = '14px BoldPixels, monospace'; ctx.textAlign = 'center';
+      for (let i = 0; i < nb.length; i++) { const t = nb[i][0]; ctx.fillStyle = '#2b2b3a'; ctx.fillText(t, lx + 1, ly + 1 + i * 16); ctx.fillStyle = '#9be37b'; ctx.fillText(t, lx, ly + i * 16); }
+    }
+  }
   const s = SHEETS[p.move ? p.move.imgKey : (d.img || d.imgs[0])];
   if (s && s.img) {
     ctx.globalAlpha = 0.6;
@@ -217,9 +227,10 @@ function drawGhost() {
 }
 
 // ---------------- loop
-let last = performance.now(), tutorial = null, featT = 3;
+let last = performance.now(), tutorial = null, featT = 3, minimap = null;
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (minimap) minimap.update(dt);
   if (drag && drag.place && drag.edge && ui.place) { // carry the camera along when dragging near the screen edge
     const m = 46, ex = drag.edge.x, ey = drag.edge.y, sp = 520 * dt / cam.z;
     const vx = ex < m ? -sp : ex > vw - m ? sp : 0, vy = ey < m + 60 ? -sp : ey > vh - m - 90 ? sp : 0;
@@ -269,6 +280,7 @@ async function boot() {
   const ld = document.getElementById('loading'); ld.classList.add('hidden'); setTimeout(() => ld.classList.add('gone'), 500);
   ui.welcome(info);
   tutorial = new Tutorial(realm, ui, view); tutorial.start();
+  minimap = new Minimap(realm, view, cam);
   realm.save();
   window.realm = realm; window.cam = cam; window.view = view; window.audio = audio; // handy for debugging from the console
   requestAnimationFrame(t => { last = t; frame(t); });

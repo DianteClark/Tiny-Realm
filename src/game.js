@@ -588,14 +588,16 @@ export class Realm {
 
   // ------------------------------------------------------------ building, training, upgrades
   limitFor(type) {
+    if (BUILDINGS[type] && BUILDINGS[type].decor) return 8 + this.state.tier * 8;
     if (type === 'lantern') return 4 + this.state.tier * 4;
     if (type === 'wall') return 30 + this.state.tier * 30;
     if (type === 'gate') return 1 + this.state.tier;
     return this.tierDef.limits[type] ?? 99;
   }
   // ---- walls and gates (3.0)
-  canPlaceWall(x, y, type = 'wall') { // also used for lantern posts
+  canPlaceWall(x, y, type = 'wall') { // also used for lantern posts and decorations
     const m = this.home.map, h = this.home;
+    if (BUILDINGS[type] && BUILDINGS[type].decor) return this.canPlaceDecor(x, y);
     if (type === 'gate') { const w = h.wallAt(x, y); if (w && w.type === 'wall') return true; }
     if (type === 'lantern' && h.buildings.some(b => b.def.lantern && Math.abs(b.cx - x) + Math.abs(b.cy - y) < 3)) return false;
     if (!m.ground(x, y) || m.stairAt(x, y) || m.block[m.i(x, y)]) return false;
@@ -758,6 +760,40 @@ export class Realm {
     this.save();
     return null;
   }
+  // ---- 3.6 decorations: they never block paths, so they live in their own list
+  decorList() { const S = this.state; return S.decor || (S.decor = []); }
+  decorAt(x, y) { return this.decorList().find(d => d.cx === x && d.cy === y); }
+  canPlaceDecor(x, y) {
+    const m = this.home.map;
+    if (!m.ground(x, y) || m.stairAt(x, y) || m.block[m.i(x, y)] || this.decorAt(x, y)) return false;
+    for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) if (!m.isLand(x + ox, y + oy)) return false;
+    if (m.isCliff(x, y + 1)) return false;
+    return true;
+  }
+  placeDecor(type, x, y) {
+    const d = BUILDINGS[type];
+    if (this.decorList().filter(o => o.type === type).length >= this.limitFor(type)) return 'Your castle must grow before you can place more.';
+    if (!this.canPlaceDecor(x, y)) return 'That spot is taken.';
+    if (!this.pay(d.cost)) return 'Not enough to pay.';
+    const k = d.decor[Math.floor(Math.random() * d.decor.length)];
+    this.decorList().push({ type, k, cx: x, cy: y });
+    this.home.fxAt('dust1', x * T + 32, y * T + 44); this.sfx('place');
+    this.state.stats.decor = (this.state.stats.decor || 0) + 1;
+    this.save(); return null;
+  }
+  clearDecor(o) { const S = this.state; S.decor = this.decorList().filter(d => d !== o); this.addAll(BUILDINGS[o.type].cost, 0.5); this.home.fxAt('dust1', o.cx * T + 32, o.cy * T + 44); this.sfx('close'); this.save(); }
+  // ---- 3.6 neighbourhood bonuses: what's near what
+  near(b, type, r) { return this.home.buildings.some(o => o !== b && o.type === type && o.done && !o.ruined && Math.hypot(o.cx + o.fw / 2 - (b.cx + b.fw / 2), o.cy + o.fh / 2 - (b.cy + b.fh / 2)) <= r); }
+  nearWall(b) { const h = this.home; for (let y = b.cy - 2; y <= b.cy + b.fh + 1; y++) for (let x = b.cx - 2; x <= b.cx + b.fw + 1; x++) { const w = h.wallAt(x, y); if (w && w.done) return true; } return false; }
+  neighbourBonus(b) { // [label, text] pairs for a building where it stands
+    const out = [];
+    if (b.type === 'house' && (this.near(b, 'chapel', 6) || this.near(b, 'tavern', 6))) out.push(['Cosy street', '+2 happiness for a house near a Chapel or Tavern']);
+    if (b.type === 'tower' && this.nearWall(b)) out.push(['Wall tower', '+20% damage for a tower beside a wall']);
+    if (b.type === 'market' && this.trade.dock() && Math.hypot(this.trade.dock().lx - (b.cx + 1), this.trade.dock().ly - b.cy) <= 7) out.push(['Harbour market', 'trade boats sail 20% faster']);
+    if ((b.type === 'barracks' || b.type === 'archery') && this.castle && Math.hypot(this.castle.cx + 2.5 - (b.cx + b.fw / 2), this.castle.cy + 1 - (b.cy + b.fh / 2)) <= 9) out.push(['Near the castle', 'training 10% faster']);
+    return out;
+  }
+  hasBonus(b, label) { return this.neighbourBonus(b).some(x => x[0] === label); }
   // ---- 3.6 moving buildings: lift one off the map, then drop it somewhere else
   liftBuilding(b) {
     const h = this.home; if (!h.buildings.includes(b)) return;
@@ -793,7 +829,7 @@ export class Realm {
     return Object.entries(UNITS).filter(([k, u]) => u.from === b.type).map(([k, u]) => ({ key: k, def: u, locked: u.tier > this.state.tier, block: this.trainBlock(b, k) }));
   }
   queueCap(b) { return b.type === 'castle' ? 5 : levelEffects(b.type, b.level).queue || 5; }
-  trainTime(b, unit) { const e = levelEffects(b.type, b.level); return Math.round(UNITS[unit].time * (e.speed || 1) * (this.needs && this.home ? this.needs.trainMult() : 1) * (1 + this.decrees.fx('train'))); }
+  trainTime(b, unit) { const e = levelEffects(b.type, b.level); return Math.round(UNITS[unit].time * (e.speed || 1) * (this.needs && this.home ? this.needs.trainMult() : 1) * (1 + this.decrees.fx('train')) * (this.home && this.hasBonus(b, 'Near the castle') ? 0.9 : 1)); }
   // Why can't this unit be trained right now? null if it can.
   trainBlock(b, unit) {
     const d = UNITS[unit];

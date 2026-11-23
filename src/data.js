@@ -59,6 +59,9 @@ export const BUILDINGS = {
   tavern: { name: 'Tavern', img: 'b_Tavern', fw: 2, fh: 1, hp: 380, cost: { wood: 110, gold: 50 }, time: 45, need: true, desc: 'Drink and company for 15 people. Once a day a wandering hero stops by, ready to be hired.' },
   market: { name: 'Market', img: 'b_Market', fw: 2, fh: 1, hp: 380, cost: { wood: 140, gold: 70 }, time: 55, need: true, desc: 'Goods for 15 people, a fixed-price exchange, and trade boats to your vassals and provinces.' },
   chapel: { name: 'Chapel', img: 'b_Chapel', fw: 3, fh: 2, hp: 650, cost: { wood: 160, gold: 120 }, time: 70, need: true, desc: 'Faith and rest for 20 people. Soldiers at home heal twice as fast, and holy days give twice the gifts.' },
+  bush: { name: 'Bush', img: 'bush1', fw: 1, fh: 1, hp: 50, cost: { wood: 8 }, time: 1, decor: ['bush1', 'bush2', 'bush3', 'bush4'], desc: 'A bit of green. Every decoration makes your people a little happier.' },
+  rock: { name: 'Rock', img: 'rock1', fw: 1, fh: 1, hp: 50, cost: { wood: 5, gold: 5 }, time: 1, decor: ['rock1', 'rock2', 'rock3', 'rock4'], desc: 'A handsome stone. Every decoration makes your people a little happier.' },
+  stump: { name: 'Stump', img: 'stump1', fw: 1, fh: 1, hp: 50, cost: { wood: 6 }, time: 1, decor: ['stump1', 'stump2', 'stump3', 'stump4'], desc: 'A tree stump to sit on. Every decoration makes your people a little happier.' },
   tower: { name: 'Watchtower', img: 'b_Tower', fw: 2, fh: 1, hp: 700, cost: { wood: 100, gold: 40 }, time: 60, defense: { dmg: 12, range: 5.5, cd: 1.4 }, desc: 'A posted archer shoots raiders. Higher ground gives longer range.' },
 };
 

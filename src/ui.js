@@ -17,6 +17,7 @@ import { DECREES } from './decrees.js';
 import { SHOP, SEASON_EVENTS } from './seasonal.js';
 import * as Legacy from './legacy.js';
 import { COLORS, STANCES, DISTRICTS, districtAt } from './squads.js';
+import { minimapOn, setMinimap } from './minimap.js';
 
 export const VERSION = '3.5';
 
@@ -30,7 +31,7 @@ const fmt = n => n >= 10000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1) + 'k' : St
 const time = s => { s = Math.max(0, Math.ceil(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return h ? `${h}h ${m}m` : `${m}:${String(x).padStart(2, '0')}`; };
 const ago = t => { const s = (Date.now() - t) / 1000; return s < 60 ? 'just now' : s < 3600 ? Math.floor(s / 60) + 'm ago' : s < 86400 ? Math.floor(s / 3600) + 'h ago' : Math.floor(s / 86400) + 'd ago'; };
 const UNIT_AV = { pawn: 'av_h5', warrior: 'av_h1', archer: 'av_h3', lancer: 'av_h2', monk: 'av_h4', swordsman: 'av_swordsman1', berserker: 'av_berserker1', horseman: 'av_horseman1', catapult: 'av_catapult1', king: 'av_king1' };
-const BLD_IMG = { lantern: 'fire1', wall: 'fence', gate: 'fence', castle: 'b_Castle', house: 'b_House1', barracks: 'b_Barracks', archery: 'b_Archery', monastery: 'b_Monastery', tower: 'b_Tower', tavern: 'b_Tavern', market: 'b_Market', chapel: 'b_Chapel' };
+const BLD_IMG = { lantern: 'fire1', wall: 'fence', gate: 'fence', castle: 'b_Castle', house: 'b_House1', barracks: 'b_Barracks', archery: 'b_Archery', monastery: 'b_Monastery', tower: 'b_Tower', tavern: 'b_Tavern', market: 'b_Market', chapel: 'b_Chapel', bush: 'bush1', rock: 'rock1', stump: 'stump1' };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 export class UI {
@@ -391,6 +392,10 @@ export class UI {
     }
     const o = sc.pick(wx, wy);
     if (o && o.tap) { o.tap(); return; }
+    if (!o && sc === R.home && !sc.selected.size) {
+      const dd = R.decorAt(cellOf(wx), cellOf(wy));
+      if (dd) return this.confirm('Clear this?', `Remove the ${BUILDINGS[dd.type].name.toLowerCase()}? Half its cost comes back.`, 'Clear', () => R.clearDecor(dd));
+    }
     if (o instanceof Unit) {
       if (o.team === 0 && o.kind === 'soldier') {
         if (o.cursed > 0) { this.toast(`${o.rec.name} has been turned into a sheep. Defeat the Hex Shaman or wait it out.`); return; }
@@ -468,12 +473,12 @@ export class UI {
   // ------------------------------------------------------------ placement
   startPlace(type) {
     this.closePanel();
-    if (BUILDINGS[type].wall || BUILDINGS[type].lantern) {
+    if (BUILDINGS[type].wall || BUILDINGS[type].lantern || BUILDINGS[type].decor) {
       this.place = { type, line: type === 'wall', a: null, b: null, cx: null, cy: null };
       $('#placebar').classList.remove('hidden'); $('#placeText').textContent = BUILDINGS[type].name;
       $('#bottombar').classList.add('hidden');
       this.R.scene.selected.clear(); this.refreshSel();
-      this.toast(type === 'wall' ? 'Drag along the ground to lay a wall, or tap its two ends.' : type === 'lantern' ? 'Tap a spot near your woodcutters and miners.' : 'Tap a spot, or an existing wall to turn it into a gate.');
+      this.toast(BUILDINGS[type].decor ? 'Tap or drag to a spot, then Build here. You can place several.' : type === 'wall' ? 'Drag along the ground to lay a wall, or tap its two ends.' : type === 'lantern' ? 'Tap a spot near your woodcutters and miners.' : 'Tap a spot, or an existing wall to turn it into a gate.');
       return;
     }
     const c = this.view.centerCell();
@@ -517,7 +522,7 @@ export class UI {
   }
   movePlace(wx, wy) {
     const d = BUILDINGS[this.place.type];
-    if (d.wall || d.lantern) {
+    if (d.wall || d.lantern || d.decor) {
       const c = [cellOf(wx), cellOf(wy)], p = this.place;
       if (p.line) { if (!p.a || p.b && p.done) { p.a = c; p.b = c; p.done = false; } else { p.b = c; p.done = true; } }
       else { p.cx = c[0]; p.cy = c[1]; }
@@ -529,6 +534,12 @@ export class UI {
   }
   confirmPlace() {
     const p = this.place; if (!p) return;
+    if (BUILDINGS[p.type].decor) {
+      if (p.cx == null) { this.toast('Tap the map first.'); return; }
+      const err = this.R.placeDecor(p.type, p.cx, p.cy);
+      if (err) this.toast(err, 'red');
+      return; // stay in placing mode for the next one
+    }
     if (BUILDINGS[p.type].wall || BUILDINGS[p.type].lantern) {
       const cells = p.line ? (p.a ? this.R.wallLine(p.a, p.b) : []) : (p.cx != null ? [[p.cx, p.cy]] : []);
       if (!cells.length) { this.toast('Tap the map first.'); return; }
@@ -603,7 +614,14 @@ export class UI {
 
   panel_build() {
     const R = this.R;
-    return Object.entries(BUILDINGS).filter(([k]) => k !== 'castle').map(([k, d]) => {
+    let decoHead = false;
+    return Object.entries(BUILDINGS).filter(([k]) => k !== 'castle').sort((a, b) => !!a[1].decor - !!b[1].decor).map(([k, d]) => {
+      if (d.decor) {
+        const head = decoHead ? '' : (decoHead = true, `<p class="section-title">Decorations</p><p style="text-align:center;font-size:13px">They never block anyone's path. Every two make your people a little happier. Tap one later to clear it.</p>`);
+        const n = R.decorList().filter(o => o.type === k).length, lim = R.limitFor(k), ok = n < lim && R.canAfford(d.cost);
+        return head + `<div class="card light"><div class="thumb"><div class="dthumb" style="background-image:url('${src(d.decor[0])}')"></div></div><div class="grow"><h3>${d.name}</h3>${this.costHtml(d.cost)}<p class="muted">${n} / ${lim} placed</p></div>
+          <button class="btn small" data-act="place:${k}" ${ok ? '' : 'disabled'}>Place</button></div>`;
+      }
       const lim = R.limitFor(k), n = R.countOf(k);
       const locked = lim === 0;
       const full = n >= lim;
@@ -1024,6 +1042,12 @@ export class UI {
       html += `<div class="card"><div class="grow"><h3>${b.hold ? 'Held shut' : 'Automatic'}</h3><p>${b.hold ? 'The gate stays closed until you open it.' : 'Opens for your people, slams shut when foes come within 4 tiles.'}</p></div>
         <button class="btn small" data-act="gate:${b.id}">${b.hold ? 'Automatic' : 'Hold shut'}</button></div>`;
     }
+    // neighbourhood (3.6)
+    if (b.done && !b.def.wall && b.type !== 'castle') {
+      const nb = R.neighbourBonus(b);
+      const hint = { house: 'Build near a Chapel or Tavern for a cosy street (+2 happiness).', tower: 'Stand it beside a wall for +20% damage.', market: 'Close to the shore where boats dock, trade boats sail 20% faster.', barracks: 'Within 9 tiles of the castle, training is 10% faster.', archery: 'Within 9 tiles of the castle, training is 10% faster.' }[b.type];
+      if (nb.length || hint) html += `<p class="section-title">Neighbourhood</p><div class="card light"><div class="grow">${nb.map(([l, t]) => `<p><b class="good">${l}</b>: ${t}.</p>`).join('')}${!nb.length && hint ? `<p class="muted">${hint} Use Move to relocate it.</p>` : ''}</div></div>`;
+    }
     // village services (3.4)
     if (b.done && !b.ruined && b.type === 'tavern') {
       const t = R.tavernHero(), U = UNITS[t.type];
@@ -1102,6 +1126,7 @@ export class UI {
   panel_settings() {
     const lvl = (key, v) => `<div class="row" style="justify-content:center;gap:4px">${[['Off', 0], ['Low', 0.3], ['Mid', 0.6], ['High', 1]].map(([l, x]) => `<button class="btn small ${Math.abs(audio.settings[key] - x) < 0.05 ? 'on' : ''}" data-act="vol:${key}:${x}">${l}</button>`).join('')}</div>`;
     return `<p class="section-title">Music</p>${lvl('music')}<p class="section-title">Sound effects</p>${lvl('sfx')}
+      <p class="section-title">Minimap</p><div class="row" style="justify-content:center;gap:4px"><button class="btn small ${minimapOn() ? 'on' : ''}" data-act="mm:1">Show</button><button class="btn small ${minimapOn() ? '' : 'on'}" data-act="mm:0">Hide</button></div>
       <p class="section-title">Your realm is saved in this browser automatically.</p>
       <button class="btn wide" data-act="export">Export save</button><p></p>
       <textarea id="saveText" placeholder="Paste a save here to import"></textarea><p></p>
@@ -1199,6 +1224,7 @@ export class UI {
       this.banner(R.exp.islandName, `${R.exp.region.name}, level ${R.exp.level}. Destroy every camp. Tap a soldier or All, then tap the ground or a foe.`, 'blue');
       return;
     }
+    if (k === 'mm') { setMinimap(x === '1'); return this.refresh(); }
     if (k === 'vol') { audio.unlock(); audio.settings[x] = +y; audio.saveSettings(); if (x === 'sfx') audio.play('coin'); return this.refresh(); }
     if (k === 'buy') { err(R.events.buy(x)); return this.refresh(); }
     if (k === 'trade') { err(R.events.trade(+x)); return this.refresh(); }

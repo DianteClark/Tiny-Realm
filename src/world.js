@@ -661,6 +661,7 @@ export class Scene {
     b.fireT += dt;
     if (!b.done || b.ruined) return;
     const def = b.def.defense;
+    if ((b.wallT = (b.wallT || 0) - dt) <= 0) { b.wallT = 3; b.wallBonus = this.game.nearWall ? this.game.nearWall(b) : false; }
     if (def) {
       b.atkT -= dt;
       if (b.atkT <= 0) {
@@ -673,7 +674,7 @@ export class Scene {
         if (foes.length) {
           b.atkT = def.cd * L.cd;
           const B = this.bonus();
-          const dmg = def.dmg * (1 + (this.game.state.tier - 1) * 0.25) * L.dmg * (1 + (B.towerDmg || 0));
+          const dmg = def.dmg * (1 + (this.game.state.tier - 1) * 0.25) * L.dmg * (1 + (B.towerDmg || 0)) * (b.wallBonus ? 1.2 : 1);
           for (const [d, foe] of foes.slice(0, L.shots)) {
             const sx = b.x, sy = b.y - 150;
             this.projectiles.push({ key: 'arrow', x: sx, y: sy, sx, sy, tx: foe.x, ty: foe.bodyY, target: foe, t: 0, dur: Math.max(0.2, d / 480), arc: 12, dmg, src: { team: 0, def: { proj: 'arrow' }, alive: true, tower: true }, splash: 0, team: 0 });
@@ -845,6 +846,10 @@ export class Scene {
       if (s.caught || !vis(s.x, s.y)) continue;
       const k = s.grazing > 0 ? 'sheepGrass' : s.moving ? 'sheepMove' : 'sheepIdle';
       list.push({ y: s.y, d: () => drawSprite(ctx, k, s.x, s.y, s.t, { flip: s.flip }) });
+    }
+    if (this.kind === 'home' && this.game.state) for (const o of this.game.state.decor || []) {
+      const x = o.cx * T + 32, y = o.cy * T + 48;
+      if (vis(x, y)) list.push({ y: y - 4, d: () => drawSprite(ctx, o.k, x, y, this.time + o.cx * 0.37, { scale: o.type === 'stump' ? 0.6 : 1 }) });
     }
     if (this.kind === 'home' && this.game.squads) for (const q of this.game.squads.list) {
       if (!q.banner) continue; const x = q.banner.cx * T + 32, y = q.banner.cy * T + 44;

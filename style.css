@@ -345,3 +345,7 @@ button:disabled, .btn:disabled { cursor: url('assets/free/UI Elements/UI Element
 .sqpick:disabled { opacity: .5; }
 details.pickone > summary { text-align: center; margin: 6px 0; font-size: 13px; opacity: .85; }
 .card.squad .row-btns { flex-wrap: wrap; } .card.squad .row-btns .btn { flex: 1 1 40%; min-width: 0; }
+.dthumb { width: 56px; height: 56px; background-size: auto 100%; background-position: left center; background-repeat: no-repeat; image-rendering: pixelated; }
+.good { color: #4f8f3a; font-weight: normal; } .card:not(.light) .good { color: #9be37b; }
+#minimap { position: absolute; right: 8px; top: calc(var(--safe-top) + 104px); width: 112px; height: 84px; border: 3px solid #2b2b3a; border-radius: 6px; box-shadow: 0 2px 0 rgba(0,0,0,.25), inset 0 0 0 1px rgba(255,255,255,.2); image-rendering: pixelated; cursor: pointer; }
+#hud:has(#minimap:not(.hidden)) #squadBtns { top: calc(var(--safe-top) + 198px); }

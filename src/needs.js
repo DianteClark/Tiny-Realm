@@ -34,6 +34,10 @@ export function happiness(R) {
   if (R.env.weather === 'storm') { parts.push(['Storm', -5]); h -= 5; }
   if (R.events.market) { parts.push(['Night Market', 3]); h += 3; }
   if (S.relics.springbloom) { parts.push(['Spring Bloom', 10]); h += 10; }
+  const deco = Math.min(10, Math.floor((S.decor || []).length / 2));
+  if (deco) { parts.push(['Pleasant grounds', deco]); h += deco; }
+  const cosy = Math.min(10, R.home.buildings.filter(b => b.type === 'house' && b.done && R.hasBonus && R.hasBonus(b, 'Cosy street')).length * 2);
+  if (cosy) { parts.push(['Cosy streets', cosy]); h += cosy; }
   const dec = R.decrees && R.decrees.active();
   if (dec && dec.fx.mood) { parts.push([dec.name, dec.fx.mood]); h += dec.fx.mood; }
   h = Math.max(0, Math.min(100, h));
