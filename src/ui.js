@@ -978,7 +978,7 @@ export class UI {
     if (s === 'vassal') html += `<p style="text-align:center;font-size:13px">They pay you tribute every hour. Keep your army strong, or pay their lords when they grumble, and they stay loyal.</p>`;
     else {
       html += `<p class="section-title">Diplomacy</p><div class="court-acts">
-        ${B('gift', `Send a gift (${gift} gold)`, R.state.res.gold >= gift)}
+        ${B('gift', `Gift (${gift} gold)`, R.state.res.gold >= gift)}
         ${B('truce', 'Offer a truce', s === 'war')}
         ${house ? '' : B('peace', 'Make peace', s === 'war' || s === 'truce')}
         ${house ? '' : B('alliance', 'Propose an alliance', s === 'peace')}
@@ -1023,12 +1023,13 @@ export class UI {
     }).join('') + `</div>`;
     html += `<details class="pickone" ${!SQ.length || this.pickOpen ? 'open' : ''}><summary>${SQ.length ? 'Or pick soldiers one by one' : 'Pick your soldiers'} (${this.squadPick.size}/${cap})</summary>` + (home.length ? home.sort((a, b) => b.level - a.level).map(r => this.soldierCard(r, { pick: true })).join('') : '<p style="text-align:center">No soldiers at home.</p>') + '</details>';
     html += `<p class="section-title">Aboard: ${this.squadPick.size} of ${cap}</p><div class="sqfaces big">${[...this.squadPick].map(id => S.soldiers.find(s => s.id === id)).filter(Boolean).map(r => `<img src="${src(r.avatar)}" alt="" title="${esc(r.name)}">`).join('') || '<span class="muted">Nobody yet</span>'}</div>`;
-    html += `<button class="btn wide" data-act="embark">${this.squadPick.size ? 'Embark and open the sea' : 'Sail with no crew'}</button>`;
+    html += this.squadPick.size ? `<button class="btn wide" data-act="embark">Embark and open the sea</button>` : `<p class="muted" style="text-align:center;font-size:13px">Pick soldiers above, or sail out alone to scout.</p><button class="btn wide off" data-act="embark">Sail with no crew</button>`;
     return html + this.shipHtml();
   }
   // ------------------------------------------------------------ panels
   togglePanel(name, arg) { if (this.panel === name && !arg) this.closePanel(); else this.openPanel(name, arg); }
   openPanel(name, arg) {
+    if ((name === 'throne' || name === 'codex') && this.panel && this.panel !== name) { this.backTo = this.panel; this.backArg = this.panelArg; } else if (name !== this.panel) this.backTo = null;
     clearTimeout(this.closeT); this.panelEl.classList.remove('closing');
     if (this.R.exp && !['settings', 'army', 'chronicle', 'hero', 'codex'].includes(name)) return;
     if (name === 'nightmarket' && !this.R.events.market) return this.toast('The Night Market only opens after dark.');
@@ -1064,7 +1065,8 @@ export class UI {
     $('#panelTitle').textContent = p === 'building' ? (this.panelArg.type === 'castle' && this.R.state.tier < 3 ? TIERS[this.R.state.tier].name + ' Hall' : this.panelArg.def.name) : p === 'hero' ? this.panelArg.name : titles[p];
     this.setTabs(null);
     const fn = this['panel_' + p];
-    this.body.innerHTML = fn ? fixText(fn.call(this)) : '';
+    this.panelEl.dataset.p = p;
+    this.body.innerHTML = (fn ? fixText(fn.call(this)) : '') + (this.backTo && (p === 'throne' || p === 'codex') ? `<button class="btn wide" data-act="goback">Back to ${this.backTo === 'chronicle' ? 'the Chronicle' : this.backTo === 'building' ? 'the castle' : 'the previous page'}</button>` : '');
     for (const el of this.body.querySelectorAll('[data-sigil]')) { const is = this.R.sea.ocean.islandById(el.dataset.sigil); if (!is || !is.kingdom) continue; const sc = sigilCanvas(is.kingdom.sigil, 40), cv = document.createElement('canvas'); cv.width = sc.width; cv.height = sc.height; cv.getContext('2d').drawImage(sc, 0, 0); el.appendChild(cv); }
     if (this.afterRender) { this.afterRender(); this.afterRender = null; }
   }
@@ -1188,7 +1190,7 @@ export class UI {
     this.setTabs(Gear.SLOTS.map(([k, n]) => [k, n]));
     const cur = Gear.itemById(S, rec.gear && rec.gear[slot]);
     let html = this.soldierCard(rec, { noButtons: true });
-    html += `<div class="row-btns"><button class="btn small" data-act="autoeq:${rec.id}">Equip best</button></div>`;
+    if ((S.gear || []).length) html += `<div class="row-btns"><button class="btn small" data-act="autoeq:${rec.id}">Equip best</button></div>`;
     html += this.generalHtml(rec);
     if (!rec.promoted && rec.type !== 'king') {
       const paths = PROMOTIONS[rec.type] || [{ to: '', title: 'Elite', desc: `Becomes an Elite ${UNITS[rec.type].name}, keeping their look and ability.` }];
@@ -1390,8 +1392,7 @@ export class UI {
 
   panel_chronicle() {
     const R = this.R, S = R.state;
-    this.setTabs([['quest', 'Goals'], ['season', 'Season'], ['realm', 'Realm'], ['courts', 'Courts'], ['feats', 'Feats'], ['log', 'Saga'], ['codex', 'Codex']]);
-    if (this.tab === 'codex') { setTimeout(() => { this.openPanel('codex', 'bestiary'); }); return ''; }
+    this.setTabs([['quest', 'Goals'], ['season', 'Season'], ['realm', 'Realm'], ['courts', 'Courts'], ['feats', 'Feats'], ['log', 'Saga']]);
     if (this.tab === 'season') return this.seasonHtml();
     if (this.tab === 'courts') return this.coursHtml();
     if (this.tab === 'feats') {
@@ -1648,7 +1649,7 @@ export class UI {
       <p class="section-title">Motion</p><div class="row" style="justify-content:center;gap:4px"><button class="btn small ${this.prefs().calm ? '' : 'on'}" data-act="pref:calm:">Full</button><button class="btn small ${this.prefs().calm ? 'on' : ''}" data-act="pref:calm:1">Reduced</button></div>
       <p class="section-title">Title screen</p><div class="row" style="justify-content:center;gap:4px"><button class="btn small ${this.prefs().title !== false ? 'on' : ''}" data-act="pref:title:1">Show</button><button class="btn small ${this.prefs().title === false ? 'on' : ''}" data-act="pref:title:0">Skip</button></div>
       <p class="section-title">Minimap</p><div class="row" style="justify-content:center;gap:4px"><button class="btn small ${minimapOn() ? 'on' : ''}" data-act="mm:1">Show</button><button class="btn small ${minimapOn() ? '' : 'on'}" data-act="mm:0">Hide</button></div>
-      <p class="section-title">Your realm is saved in this browser automatically.</p>
+      <p class="section-title">Save</p><p style="text-align:center;font-size:13px">Your realm is saved in this browser automatically.</p>
       <button class="btn wide" data-act="export">Export save</button><p></p>
       <textarea id="saveText" placeholder="Paste a save here to import"></textarea><p></p>
       <button class="btn wide" data-act="import">Import save</button>
@@ -1721,6 +1722,7 @@ export class UI {
     if (k === 'tosea') { this.openSea(); if (x) { const is = R.sea.ocean.islandById(a.slice(6)); if (is) { this.seaSel = is; this.view.seaFocus(is.x, is.y); this.seaKey = null; this.renderSeaCard(); } } return; }
     if (k === 'court') { this.courtFrom = this.panel === 'chronicle' ? 'courts' : null; this.openPanel('court', a.slice(6)); return; }
     if (k === 'courtsback') { this.openPanel('chronicle'); this.tab = 'courts'; this.renderPanel(); return; }
+    if (k === 'goback') { const b = this.backTo, arg = this.backArg; this.backTo = null; this.openPanel(b, arg); return; }
     if (k === 'throne') { R.state.stats.throneVisits = (R.state.stats.throneVisits || 0) + 1; this.openPanel('throne'); return; }
     if (k === 'codex') { this.openPanel('codex', x); this.tab = x; this.renderPanel(); return; }
     if (k === 'marry') { const e = R.court.marry(a.slice(6)); if (e) this.toast(e, 'red'); else { this.toast('The wedding is held with great feasting.', 'gold'); R.sfx && R.sfx('victory'); } return this.refresh(); }

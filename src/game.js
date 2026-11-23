@@ -1568,7 +1568,7 @@ export class Realm {
     }
     const map = generateIsland({ w: 40, h: 30, seed, plateaus: 5, highs: 2, colors: region.colors, landFrac: 0.55 });
     const sc = new Scene(this, 'expedition', map, seed);
-    sc.islandName = bounty ? 'the Bounty Isle' : info.name; sc.info = info; sc.region = region; sc.level = level; sc.bounty = !!bounty; sc.n = n; sc.rival = rivalKey;
+    sc.islandName = bounty ? 'The Bounty Isle' : info.name; sc.info = info; sc.region = region; sc.level = level; sc.bounty = !!bounty; sc.n = n; sc.rival = rivalKey;
     sc.expLoot = 0; sc.story = storyIdx; sc.abyss = abyss; sc.isle = isle; sc.fromSea = true;
     const r = rng(seed + 5);
     // landing on the west shore, boat floating clear of the coast

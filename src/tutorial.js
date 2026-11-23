@@ -65,6 +65,8 @@ export class Tutorial {
     // a panel the step is not about has the screen: step aside until it closes
     const pan = document.getElementById('panel');
     if (this.U.panel && pan && !(el && (pan.contains(el) || el.id === 'panelClose'))) { this.box.classList.add('hidden'); this.hand.classList.add('hidden'); return; }
+    if (el && pan && pan.contains(el) && el !== this._scrolled) { this._scrolled = el; el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+    this.box.classList.toggle('strip', !!this.U.panel && window.innerWidth < 1000);
     this.box.classList.remove('hidden');
     if (el && el.offsetParent !== null) { const r = el.getBoundingClientRect(); x = r.left + r.width / 2; y = r.top + r.height / 2; }
     else if (st.world) { const o = st.world(this.R); if (o) { const p = this.view.toScreen(o.x, (o.bodyY ?? o.y) - 10); x = p.x; y = p.y; } }
@@ -76,7 +78,7 @@ export class Tutorial {
     if (x === null) { this.hand.classList.add('hidden'); return; }
     this.hand.classList.remove('hidden');
     const bob = Math.sin(performance.now() / 180) * 6;
-    this.hand.style.transform = `translate(${Math.round(x - 6)}px, ${Math.round(y + 4 + bob)}px)`;
+    this.hand.style.transform = `translate(${Math.round(x + 6)}px, ${Math.round(y + 4 + bob)}px)`;
   }
 }
 
@@ -155,7 +157,7 @@ export function checkFeats(R) {
       S.feats[f.id] = Date.now();
       const g = 50 + Object.keys(S.feats).length * 25;
       R.addRes('gold', g);
-      R.ui.banner('Feat unlocked: ' + f.name, `${f.desc} (+${g} gold)`, 'gold');
+      R.ui.toast(`Feat unlocked: ${f.name}. +${g} gold.`, 'gold');
       audio.play('levelup');
       R.log(`Feat unlocked: ${f.name}.`);
     }

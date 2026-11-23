@@ -494,3 +494,19 @@ details.older summary { cursor: pointer; padding: 6px 0; font-size: 14px; }
 }
 @media (min-width: 1500px) and (min-height: 950px) { #hud { zoom: 1.2; } }
 .unknowns { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 8px 0 4px; } .unknowns .qm { width: 30px; height: 30px; font-size: 16px; }
+/* 10.0 phone polish */
+#loading { z-index: 60; }
+#panelTabs:has(.btn:nth-child(6)) { flex-wrap: wrap; }
+#panelTabs:has(.btn:nth-child(6)) .btn { flex: 1 1 30%; font-size: 12px; }
+html.text-l #banner, html.text-l #toasts, html.text-s #banner, html.text-s #toasts { zoom: 1; }
+#panel:not([data-p="building"]):not([data-p="court"]) .sheet { height: calc(100% - var(--safe-top) - 108px); }
+#hud:has(~ #modal:not(.hidden)) #pills, #hud:has(~ #modal:not(.hidden)) #minimap, #hud:has(#tut:not(.hidden)) #pills { visibility: hidden; }
+body:has(#modal:not(.hidden)) #pills, body:has(#modal:not(.hidden)) #minimap { visibility: hidden; }
+#tut.strip { top: auto; bottom: calc(var(--safe-bot) + 84px); padding: 2px 6px; }
+#tut.strip p { font-size: 12px; }
+.row .tiny-btn, .tiny-btn { font-size: 18px; color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.35); }
+#saveText { font-family: inherit; }
+#squadbar { justify-content: center; }
+#seaCard .isle { min-height: 150px; }
+.title-castle { width: auto; height: min(150px, 20vh); }
+@media (max-height: 700px) { .title-box h1 { font-size: 40px; margin: 0 0 6px; } .title-sub { margin-bottom: 10px; } .title-btns { gap: 6px; } }
