@@ -2,6 +2,7 @@
 import { SHEETS, drawSprite, animDuration } from './assets.js';
 import { T, findPath, TerrainChunks, foamCells, rng, K_WATER } from './terrain.js';
 import { UNITS, ENEMIES, BUILDINGS, CAMP_STRUCTS, TRAITS, levelEffects, ABILITIES } from './data.js';
+import { COLORS } from './squads.js';
 
 const WATER = '#47aba9';
 let NEXT_ID = 1;
@@ -509,18 +510,31 @@ export class Scene {
     if (u.cursed > 0) { u.stop(); return; }
     // auto targeting
     if (u.target && (!u.target.alive || u.target.hidden || u.distTo(u.target) > 9 * T)) u.target = null;
+    const stance = this.kind === 'home' && u.rec && this.game.squads ? this.game.squads.stanceOf(u.rec) : null;
     if (!u.target && (u.giveUp || 0) <= 0) {
       const raiding = this.kind === 'home' && this.game.raid && this.game.raid.active;
-      const aggro = (this.kind === 'home' ? (raiding ? 15 : 8) * T : 5.5 * T) * this.game.env.aggroMul();
+      let aggro = (this.kind === 'home' ? (raiding ? 15 : 8) * T : 5.5 * T) * this.game.env.aggroMul();
+      if (stance) aggro = Math.max(stance.aggro * T, u.def.proj ? u.range : 0) * this.game.env.aggroMul();
+      if (u.alerted) aggro = Math.max(aggro, 7 * T);
       let best = this.nearestFoe(u, aggro);
       if (!best && u.def.siege) best = this.nearestStruct(u, u.range + T);
       if (best) u.target = best;
     }
     if (u.target) {
-      // leash on home island: don't chase forever
-      const leash = this.game.raid && this.game.raid.active ? 20 : 12;
-      if (this.kind === 'home' && dist(u.x, u.y, u.home.x, u.home.y) > leash * T && !u.target.big) { u.target = null; }
+      // leash on home island: don't chase forever (a squad's stance sets how far)
+      const leash = stance ? stance.leash : this.game.raid && this.game.raid.active ? 20 : 12;
+      if (this.kind === 'home' && !u.alerted && dist(u.x, u.y, u.home.x, u.home.y) > leash * T && !u.target.big) { u.target = null; }
       else return this.engage(u, u.target, dt);
+    }
+    // a squad called to a landing marches there first
+    if (u.alerted && this.kind === 'home') {
+      u.alerted.t -= dt;
+      if (u.alerted.t <= 0 || dist(u.x, u.y, u.alerted.x, u.alerted.y) < 2.5 * T) { u.alerted = null; u.path = null; }
+      else {
+        u.pathT -= dt;
+        if (!u.path || !u.path.length || u.pathT <= 0) { u.pathT = 1.2; if (!u.setPath(u.alerted.x, u.alerted.y)) { u.alerted = null; return; } }
+        u.stepPath(dt); return;
+      }
     }
     // on a mission, troops hold the ground they took instead of walking back to the boat
     if (this.kind !== 'home') { if (u.atkAnim < 0) { u.home = { x: u.x, y: u.y }; u.stop(); u.charged = true; } return; }
@@ -832,6 +846,10 @@ export class Scene {
       const k = s.grazing > 0 ? 'sheepGrass' : s.moving ? 'sheepMove' : 'sheepIdle';
       list.push({ y: s.y, d: () => drawSprite(ctx, k, s.x, s.y, s.t, { flip: s.flip }) });
     }
+    if (this.kind === 'home' && this.game.squads) for (const q of this.game.squads.list) {
+      if (!q.banner) continue; const x = q.banner.cx * T + 32, y = q.banner.cy * T + 44;
+      if (vis(x, y)) list.push({ y, d: () => this.drawBanner(ctx, x, y, q) });
+    }
     for (const b of this.buildings) {
       if (!vis(b.x, b.y)) continue;
       list.push({ y: b.y, d: () => this.drawBuilding(ctx, b) });
@@ -863,6 +881,14 @@ export class Scene {
     }
     // overlays: orders (lines, flags, target brackets), selection, hp bars
     this.drawOrders(ctx);
+    if (this.raidMark) { // where the raiders will land
+      const m = this.raidMark, k = (this.time * 1.5) % 1;
+      ctx.save(); ctx.strokeStyle = `rgba(255,90,78,${1 - k})`; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.ellipse(m.x, m.y, 30 + k * 50, (30 + k * 50) * 0.45, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = '#ff5a4e'; ctx.font = '28px BoldPixels, monospace'; ctx.textAlign = 'center';
+      ctx.fillStyle = '#2b2b3a'; ctx.fillText('!', m.x + 2, m.y - 30 + Math.sin(this.time * 6) * 4 + 2); ctx.fillStyle = '#ff5a4e'; ctx.fillText('!', m.x, m.y - 30 + Math.sin(this.time * 6) * 4);
+      ctx.restore();
+    }
     for (const u of this.selected) if (u.alive) drawSprite(ctx, 'cursorRing', u.x, u.bodyY + 16, 0, { scale: (u.big ? 0.85 : 0.6) * (1 + Math.sin(this.time * 6) * 0.06) });
     for (const u of this.units) {
       if (!u.alive || u.hidden || u.kind === 'pawn') continue;
@@ -906,6 +932,23 @@ export class Scene {
     for (const c of this.clouds) if (vis(c.x, c.y)) drawSprite(ctx, c.k, c.x, c.y, 0, { alpha: 0.9 });
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.game.env.drawScreen(ctx, vw, vh, this, cam);
+    if (this.raidMark) { // off-screen: an arrow on the edge pointing at the landing
+      const k = ctx.canvas.width / (ctx.canvas.clientWidth || ctx.canvas.width); // device pixels per CSS pixel
+      const sx = (this.raidMark.x - cam.x) * cam.z / k, sy = (this.raidMark.y - cam.y) * cam.z / k; // CSS pixels
+      const W = vw / k, H = vh / k, pad = 34;
+      if (sx < 0 || sy < 90 || sx > W || sy > H - 100) {
+        const a = Math.atan2(sy - H / 2, sx - W / 2);
+        const ex = Math.max(pad, Math.min(W - pad, sx)), ey = Math.max(130, Math.min(H - 150, sy));
+        ctx.save(); ctx.setTransform(k, 0, 0, k, 0, 0);
+        ctx.translate(ex, ey); const p = 1 + Math.sin(this.time * 6) * 0.08; ctx.scale(p, p);
+        ctx.fillStyle = 'rgba(43,43,58,0.85)'; ctx.beginPath(); ctx.arc(0, 0, 21, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#ff5a4e'; ctx.lineWidth = 2; ctx.stroke();
+        ctx.rotate(a);
+        ctx.fillStyle = '#2b2b3a'; ctx.beginPath(); ctx.moveTo(18, 0); ctx.lineTo(-12, -14); ctx.lineTo(-6, 0); ctx.lineTo(-12, 14); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#ff5a4e'; ctx.beginPath(); ctx.moveTo(14, 0); ctx.lineTo(-9, -10); ctx.lineTo(-4, 0); ctx.lineTo(-9, 10); ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
+    }
     if (this.tint > 0) { ctx.fillStyle = `rgba(70,10,40,${0.32 * this.tint})`; ctx.fillRect(0, 0, vw, vh); }
   }
   // what the selected troops are doing: dashed lines to targets, red brackets on what they attack,
@@ -937,6 +980,19 @@ export class Scene {
       ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillRect(x + 2, y - 33, 12, 2);
     }
     ctx.restore();
+  }
+  drawBanner(ctx, x, y, q) {
+    const col = (COLORS.find(c => c.key === q.color) || COLORS[0]).hex, w = Math.sin(this.time * 3 + q.id) * 2.5;
+    const sel = [...this.selected].some(u => u.rec && q.members.includes(u.rec.id));
+    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(x, y, 12, 5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#3b2f2a'; ctx.fillRect(x - 2, y - 62, 4, 62); ctx.fillStyle = '#e8b93a'; ctx.fillRect(x - 3, y - 65, 6, 5);
+    ctx.fillStyle = '#2b2b3a'; ctx.beginPath(); ctx.moveTo(x + 2, y - 59); ctx.lineTo(x + 30 + w, y - 57); ctx.lineTo(x + 24 + w, y - 46); ctx.lineTo(x + 30 + w, y - 35); ctx.lineTo(x + 2, y - 33); ctx.fill();
+    ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(x + 2, y - 57); ctx.lineTo(x + 27 + w, y - 56); ctx.lineTo(x + 21 + w, y - 46); ctx.lineTo(x + 27 + w, y - 36); ctx.lineTo(x + 2, y - 35); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.fillRect(x + 2, y - 57, 18, 3);
+    if (sel || this.game.ui.bannerFor === q) {
+      ctx.font = '12px BoldPixels, monospace'; ctx.textAlign = 'center';
+      ctx.fillStyle = '#2b2b3a'; ctx.fillText(q.name, x + 1, y + 17); ctx.fillStyle = '#fff6d8'; ctx.fillText(q.name, x, y + 16);
+    }
   }
   brackets(ctx, t, color, pulse) {
     const big = t.big || t instanceof Struct || t instanceof Building;

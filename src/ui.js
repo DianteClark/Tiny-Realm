@@ -16,6 +16,7 @@ import { ports } from './trade.js';
 import { DECREES } from './decrees.js';
 import { SHOP, SEASON_EVENTS } from './seasonal.js';
 import * as Legacy from './legacy.js';
+import { COLORS, STANCES, DISTRICTS, districtAt } from './squads.js';
 
 export const VERSION = '3.5';
 
@@ -67,6 +68,8 @@ export class UI {
     this.body.addEventListener('click', e => { const el = e.target.closest('[data-act]'); if (el && !el.disabled) this.act(el.dataset.act, el); });
     this.tabs.addEventListener('click', e => { const el = e.target.closest('[data-tab]'); if (el) { this.tab = el.dataset.tab; this.renderPanel(); } });
     $('#undoBtn').onclick = () => this.doUndo();
+    $('#squadBtns').onclick = e => { const b = e.target.closest('[data-sq]'); if (b) { audio.play('click'); this.selectSquad(+b.dataset.sq); } };
+    this.body.addEventListener('toggle', e => { if (e.target.classList && e.target.classList.contains('pickone')) this.pickOpen = e.target.open; }, true);
     $('#subbar').addEventListener('click', e => { const el = e.target.closest('[data-pill]'); if (el) this.pillAction(el.dataset.pill); });
     $('#hud').classList.remove('hidden');
     document.addEventListener('click', e => { const b = e.target.closest('button, .chip, summary'); if (b && !b.disabled && !b.classList.contains('navbtn')) audio.play('click'); }, true);
@@ -239,6 +242,7 @@ export class UI {
     if (idle > 0) { if (!badge) document.querySelector('[data-panel="workers"]').insertAdjacentHTML('beforeend', `<b class="badge">${idle}</b>`); else badge.textContent = idle; }
     else if (badge) badge.remove();
     this.renderPills();
+    this.renderSquadBtns();
     for (const f of this.live) f();
     if (R.exp) this.renderExpHud();
     if (R.exp) R.checkExpedition();
@@ -378,6 +382,13 @@ export class UI {
   onTap(wx, wy) {
     const R = this.R, sc = R.scene;
     if (this.place) { this.movePlace(wx, wy); return; }
+    if (this.bannerFor) {
+      const e = R.squads.setBanner(this.bannerFor, cellOf(wx), cellOf(wy));
+      if (e) return this.toast(e, 'red');
+      const q = this.bannerFor; this.endBanner();
+      this.toast(`${q.name} will guard ${DISTRICTS[districtAt(R, q.banner.cx, q.banner.cy)]}.`, 'gold');
+      return;
+    }
     const o = sc.pick(wx, wy);
     if (o && o.tap) { o.tap(); return; }
     if (o instanceof Unit) {
@@ -539,7 +550,9 @@ export class UI {
     this.cancelPlace();
     if (nb && nb.type === p.type) this.offerUndo({ kind: 'place', b: nb });
   }
+  endBanner() { this.bannerFor = null; $('#placebar').classList.add('hidden'); $('#btnPlaceOk').classList.remove('hidden'); if (!this.R.exp) $('#bottombar').classList.remove('hidden'); }
   cancelPlace() {
+    if (this.bannerFor) return this.endBanner();
     const p = this.place;
     $('#btnPlaceOk').textContent = 'Build here';
     if (p && p.move && !this.R.home.buildings.includes(p.move)) this.R.dropBuilding(p.move, p.from[0], p.from[1], true); // put it back
@@ -647,6 +660,51 @@ export class UI {
       <div class="grow"><h3 style="color:${Gear.RARITY[it.rarity].color}">${esc(it.name)}</h3><p>${Gear.RARITY[it.rarity].name} ${it.slot === 'armor' ? 'armour' : it.slot}, level ${it.level}. ${Gear.describe(it)}.</p>
       ${o ? `<p class="muted">Worn by ${esc(o.name)}</p>` : it.found ? `<p class="muted">From ${esc(it.found)}</p>` : ''}</div>${btns}</div>`;
   }
+  squadsHtml() {
+    const R = this.R, S = R.state, Q = R.squads, L = Q.list;
+    if (this.editSquad && !L.includes(this.editSquad)) this.editSquad = null;
+    if (this.editSquad) { // choose members
+      const q = this.editSquad, col = COLORS.find(c => c.key === q.color).hex;
+      return `<p class="section-title"><span class="swatch" style="background:${col}"></span>${esc(q.name)}: tap soldiers to add or remove</p><button class="btn wide" data-act="sqdone">Done</button><p></p>` +
+        [...S.soldiers].sort((a, b) => (q.members.includes(b.id) - q.members.includes(a.id)) || b.level - a.level).map(r => {
+          const o = Q.of(r);
+          return `<div class="card ${q.members.includes(r.id) ? '' : 'light'}" data-act="sqtog:${q.id}:${r.id}"><button class="check ${q.members.includes(r.id) ? 'on' : ''}"></button><div class="thumb"><img src="${src(r.avatar)}" class="av" alt=""></div>
+          <div class="grow"><h3>${esc(r.name)}</h3><p>Level ${r.level} ${UNITS[r.type].name}${o && o !== q ? ` - in ${esc(o.name)}` : ''}</p></div></div>`; }).join('');
+    }
+    let html = `<p class="section-title">${L.length} of ${Q.max()} squads</p><p style="text-align:center;font-size:13px">Group soldiers into squads. Each squad guards the district around its banner, and can be sent on a voyage in one tap.</p>`;
+    html += L.map(q => {
+      const col = COLORS.find(c => c.key === q.color).hex, mem = q.members.map(id => S.soldiers.find(s => s.id === id)).filter(Boolean);
+      const dist = q.banner ? DISTRICTS[districtAt(R, q.banner.cx, q.banner.cy)] : 'no banner';
+      return `<div class="card squad" style="border-left: 6px solid ${col}"><div class="grow">
+        <h3>${esc(q.name)} <button class="tiny-link" data-act="sqname:${q.id}">rename</button></h3>
+        <p>${mem.length} soldier${mem.length === 1 ? '' : 's'}, guarding ${dist}.</p>
+        <div class="sqfaces">${mem.slice(0, 10).map(r => `<img src="${src(r.avatar)}" alt="" title="${esc(r.name)}">`).join('') || '<span class="muted">Empty</span>'}</div>
+        <div class="stances">${Object.entries(STANCES).map(([k, s]) => `<button class="btn small ${q.stance === k ? 'on' : ''}" data-act="sqst:${q.id}:${k}" title="${s.desc}">${s.name}</button>`).join('')}</div>
+        <p class="muted" style="font-size:12px">${STANCES[q.stance].desc}</p>
+        <div class="row-btns"><button class="btn small" data-act="sqedit:${q.id}">Members</button><button class="btn small" data-act="sqbanner:${q.id}">Move banner</button><button class="btn small" data-act="sqsel:${q.id}">Select</button><button class="btn small red" data-act="sqdel:${q.id}">Disband</button></div>
+      </div></div>`;
+    }).join('');
+    html += `<button class="btn wide" data-act="sqnew" ${L.length >= Q.max() ? 'disabled' : ''}>Raise a new squad</button>`;
+    if (L.length >= Q.max()) html += `<p class="muted" style="text-align:center;font-size:12px">A bigger castle can field more squads.</p>`;
+    return html;
+  }
+  renderSquadBtns() { // quick-select buttons down the right edge
+    const R = this.R, el = $('#squadBtns'); if (!el) return;
+    const L = R.squads.list.filter(q => q.members.length), sc = R.scene;
+    const key = L.map(q => q.id + q.color + q.members.length).join(',') + (R.exp ? 'x' : 'h') + (this.place ? 'p' : '');
+    if (key === this.sqBtnKey) return; this.sqBtnKey = key;
+    el.classList.toggle('hidden', !L.length || !!this.place);
+    el.innerHTML = L.map(q => `<button class="sqbtn" data-sq="${q.id}" style="--c:${COLORS.find(c => c.key === q.color).hex}" title="${esc(q.name)}"><span>${q.members.length}</span></button>`).join('');
+  }
+  selectSquad(id, center) {
+    const R = this.R, q = R.squads.byId(id); if (!q) return;
+    const sc = R.scene, us = sc.units.filter(u => u.rec && u.alive && !u.hidden && q.members.includes(u.rec.id));
+    if (!us.length) return this.toast(`${q.name} has no one here.`);
+    const same = us.every(u => sc.selected.has(u)) && sc.selected.size === us.length;
+    sc.selected.clear(); for (const u of us) sc.selected.add(u); this.refreshSel();
+    if (same || center) { const x = us.reduce((a, u) => a + u.x, 0) / us.length, y = us.reduce((a, u) => a + u.y, 0) / us.length; this.view.centerOn(x, y); }
+    this.toast(`${q.name} selected.`);
+  }
   panel_hero() {
     const R = this.R, S = R.state, rec = this.panelArg;
     if (!S.soldiers.includes(rec)) { setTimeout(() => this.closePanel()); return ''; }
@@ -672,7 +730,8 @@ export class UI {
   }
   panel_army() {
     const R = this.R, S = R.state;
-    this.setTabs([['roster', 'Roster'], ['armory', 'Armoury'], ['fallen', 'Fallen'], ['relics', 'Relics']]);
+    this.setTabs([['roster', 'Roster'], ['squads', 'Squads'], ['armory', 'Armoury'], ['fallen', 'Fallen'], ['relics', 'Relics']]);
+    if (this.tab === 'squads') return this.squadsHtml();
     if (this.tab === 'armory') {
       const G = [...(S.gear || [])].sort((a, b) => b.rarity - a.rarity || Gear.score(b) - Gear.score(a));
       if (!G.length) return '<p class="section-title">The armoury is empty.</p><p style="text-align:center;font-size:13px">Every voyage won brings back a piece of gear. Bosses, rival capitals, great events and the Moonlit Hunt bring better pieces. Raiders sometimes drop something too.</p>';
@@ -736,9 +795,18 @@ export class UI {
       desc = info.boss ? `The boss guards a relic: ${RELICS[info.region.bossRelic].name}.` : 'Clear every camp to push the frontier onward.'; av = 'av_' + info.region.boss;
     }
     html += `<div class="card"><div class="thumb"><img src="${src(av)}" class="av" alt=""></div><div class="grow"><h3>${esc(title)}</h3><p>${esc(sub)}</p><p class="muted">${esc(desc)}</p></div></div>`;
-    html += `<p class="section-title">Pick your squad (${this.squadPick.size}/${cap})</p>`;
+    const SQ = R.squads.list.filter(q => q.members.length);
+    if (SQ.length) {
+      html += `<p class="section-title">Send a squad</p><div class="sqpicks">` + SQ.map(q => {
+        const col = COLORS.find(c => c.key === q.color).hex, at = q.members.filter(id => home.some(h => h.id === id)).length;
+        const on = q.members.length && q.members.every(id => !home.some(h => h.id === id) || this.squadPick.has(id)) && q.members.some(id => this.squadPick.has(id));
+        return `<button class="sqpick ${on ? 'on' : ''}" data-act="sqpick:${q.id}" style="--c:${col}" ${at ? '' : 'disabled'}><b>${esc(q.name)}</b><span>${at} of ${q.members.length} at home</span></button>`;
+      }).join('') + `</div>`;
+    }
+    html += `<details class="pickone" ${!SQ.length || this.pickOpen ? 'open' : ''}><summary>${SQ.length ? 'Or pick soldiers one by one' : 'Pick your soldiers'} (${this.squadPick.size}/${cap})</summary>`;
     if (!home.length) html += '<p style="text-align:center">No soldiers at home.</p>';
-    html += home.sort((a, b) => b.level - a.level).map(r => this.soldierCard(r, { pick: true })).join('');
+    html += home.sort((a, b) => b.level - a.level).map(r => this.soldierCard(r, { pick: true })).join('') + '</details>';
+    html += `<p class="section-title">Sailing: ${this.squadPick.size} of ${cap}</p><div class="sqfaces big">${[...this.squadPick].map(id => S.soldiers.find(s => s.id === id)).filter(Boolean).map(r => `<img src="${src(r.avatar)}" alt="" title="${esc(r.name)}">`).join('') || '<span class="muted">Nobody yet</span>'}</div>`;
     html += `<p class="muted" style="text-align:center;font-size:13px">Soldiers who fall on an island are gone forever. Survivors return with experience and loot.</p>`;
     html += `<button class="btn wide" data-act="launch" ${this.squadPick.size && !blocked ? '' : 'disabled'}>Set sail</button>`;
     this.afterRender = () => this.drawChart(target);
@@ -1077,6 +1145,27 @@ export class UI {
     if (k === 'sboss') { err(R.seasonal.summon()); this.closePanel(); return; }
     if (k === 'sbuy') { err(R.seasonal.buy(x)); return this.refresh(); }
     if (k === 'decree') { const D = R.decrees.D; if (D.pick && D.pick !== x) return this.confirm('Change the law?', `Replace ${DECREES[D.pick].name} with ${DECREES[x].name} for ${R.decrees.changeCost().gold} gold? You can only change it once this week.`, 'Change', () => { err(R.decrees.choose(x)); this.refresh(); }); err(R.decrees.choose(x)); return this.refresh(); }
+    if (k === 'sqnew') { const q = R.squads.create(); if (typeof q === 'string') err(q); else { this.editSquad = q; R.sfx('ready'); } return this.refresh(); }
+    if (k === 'sqedit') { this.editSquad = R.squads.byId(+x); return this.refresh(); }
+    if (k === 'sqdone') { this.editSquad = null; return this.refresh(); }
+    if (k === 'sqtog') { const q = R.squads.byId(+x); if (q) R.squads.toggle(q, +y); return this.refresh(); }
+    if (k === 'sqst') { const q = R.squads.byId(+x); if (q) { q.stance = y; for (const id of q.members) R.squads.repost(id); } return this.refresh(); }
+    if (k === 'sqname') { const q = R.squads.byId(+x); if (q) R.squads.rename(q); return this.refresh(); }
+    if (k === 'sqsel') { this.closePanel(); this.selectSquad(+x, true); return; }
+    if (k === 'sqdel') { const q = R.squads.byId(+x); return this.confirm('Disband this squad?', `${q.name} goes back to the general guard. The soldiers stay.`, 'Disband', () => { R.squads.disband(q); this.refresh(); }); }
+    if (k === 'sqbanner') {
+      const q = R.squads.byId(+x); if (!q) return;
+      this.closePanel(); this.bannerFor = q;
+      $('#placebar').classList.remove('hidden'); $('#placeText').textContent = q.name + ' banner'; $('#btnPlaceOk').classList.add('hidden'); $('#bottombar').classList.add('hidden');
+      if (q.banner) this.view.centerOn(q.banner.cx * T + 32, q.banner.cy * T);
+      this.toast('Tap where the banner should stand. The squad will guard that district.');
+      return;
+    }
+    if (k === 'sqpick') {
+      const q = R.squads.byId(+x), cap = TIERS[R.state.tier].squad; this.squadPick.clear();
+      for (const id of q.members) { const r = R.state.soldiers.find(s => s.id === id); if (r && r.status === 'home' && this.squadPick.size < cap) this.squadPick.add(id); }
+      this.pickedSquad = q.id; return this.refresh();
+    }
     if (k === 'tsend') { err(R.trade.send(a.slice(6))); return this.refresh(); }
     if (k === 'tstop') { R.trade.stop(+x); return this.refresh(); }
     if (k === 'hire') { err(R.hireHero()); return this.refresh(); }

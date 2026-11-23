@@ -17,6 +17,7 @@ import { Trade } from './trade.js';
 import { Decrees, DECREES } from './decrees.js';
 import { Seasonal } from './seasonal.js';
 import * as Legacy from './legacy.js';
+import { Squads, districtAt, DISTRICTS } from './squads.js';
 import { SHEETS } from './assets.js';
 import { audio } from './audio.js';
 import { Environment } from './env.js';
@@ -69,6 +70,7 @@ export class Realm {
     this.trade = new Trade(this);
     this.decrees = new Decrees(this);
     this.seasonal = new Seasonal(this);
+    this.squads = new Squads(this);
   }
 
   // ------------------------------------------------------------ persistence
@@ -361,6 +363,8 @@ export class Realm {
     return u;
   }
   postFor(rec) {
+    const sq = this.squads && this.home && this.squads.of(rec) ? this.squads.postFor(rec) : null;
+    if (sq) return sq;
     if (rec.post) return rec.post;
     const idx = this.state.soldiers.indexOf(rec);
     const row = Math.floor(idx / 6), col = idx % 6;
@@ -1046,7 +1050,7 @@ export class Realm {
     this.env.update(dt);
     this.updateAnnex(dt); // annexed land slam (src/annex.js)
     this.tickTimersT = (this.tickTimersT || 0) - dt;
-    if (this.tickTimersT <= 0) { this.tickTimersT = 0.5; this.tickTimers(false); this.checkDaily(); this.tickTribute(); this.orders.update(); this.chal.update(); this.trade.update(); this.seasonal.update(); this.holidayTick(); this.rescueT = (this.rescueT || 0) - 0.5; if (this.rescueT <= 0 && !this.exp) { this.rescueT = 4; this.rescueTrapped(); } }
+    if (this.tickTimersT <= 0) { this.tickTimersT = 0.5; this.tickTimers(false); this.checkDaily(); this.tickTribute(); this.orders.update(); this.chal.update(); this.trade.update(); this.seasonal.update(); this.squads.clean(); this.holidayTick(); this.rescueT = (this.rescueT || 0) - 0.5; if (this.rescueT <= 0 && !this.exp) { this.rescueT = 4; this.rescueTrapped(); } }
     // sheep breed
     this.sheepT = (this.sheepT || 0) + dt;
     if (this.env.breed() > 0 && this.sheepT > 35 / this.env.breed()) { this.sheepT = 0; if (this.home.sheep.length < this.maxSheep()) this.spawnSheep(); }
@@ -1083,7 +1087,9 @@ export class Realm {
       if (S.timers.raid <= 45 && !this.raidWarned) {
         this.raidWarned = true;
         this.pendingRaid = this.planRaid();
-        this.ui.banner(this.pendingRaid.night ? 'Raiders in the dark' : 'Raiders sighted', `${this.pendingRaid.region.name} raiders approach from the ${this.pendingRaid.dir}${this.pendingRaid.night ? ' under cover of darkness, with night creatures among them' : ''}. They land in 45 seconds.`, 'red');
+        const sp0 = this.pendingRaid.spawns[0], dname = sp0 ? DISTRICTS[districtAt(this, sp0.lx, sp0.ly)] : null;
+        if (sp0) this.home.raidMark = { x: sp0.lx * T + 32, y: sp0.ly * T + 40, t: 0 };
+        this.ui.banner(this.pendingRaid.night ? 'Raiders in the dark' : 'Raiders sighted', `${this.pendingRaid.region.name} raiders approach from the ${this.pendingRaid.dir}${dname ? `, making for ${dname}` : ''}${this.pendingRaid.night ? ' under cover of darkness, with night creatures among them' : ''}. They land in 45 seconds.`, 'red');
         this.sfx('horn');
         this.showBoat(this.pendingRaid);
       }
@@ -1161,6 +1167,12 @@ export class Realm {
     this.pendingRaid = null; this.raidWarned = false;
     this.state.timers.raid = 480 + Math.random() * 360;
     if (!this.home.boats.length && plan.spawns[0] && !plan.spawns[0].ground) this.showBoat(plan);
+    const sp0 = plan.spawns[0];
+    if (sp0 && !sp0.ground) {
+      this.home.raidMark = { x: sp0.lx * T + 32, y: sp0.ly * T + 40, t: 0 };
+      const went = this.squads.respond(sp0.lx, sp0.ly);
+      if (went.length) setTimeout(() => this.ui.toast(`${went.map(q => q.name).join(' and ')} ${went.length > 1 ? 'march' : 'marches'} to meet them.`, 'gold'), 1200);
+    }
     this.raid = { id: Math.random(), active: true, t: 0, spawnT: 0, queue: plan.queue.slice(), units: [], spawns: plan.spawns, level: plan.level, kind: plan.kind, gap: plan.gap, onEnd: opts.onEnd, title: opts.title || 'Raid', loot: 0, region: plan.region };
     if (!opts.silent) this.sfx('horn');
     if (!opts.silent) this.ui.banner(opts.title || 'To arms!', opts.text || 'Raiders are landing. Pawns are taking shelter in the castle.', 'red');
@@ -1183,6 +1195,8 @@ export class Realm {
       this.chal.note('raid', { downs: R.downs || 0 });
     }
     if (R.onEnd) R.onEnd(won);
+    this.home.raidMark = null;
+    for (const u of this.home.units) if (u.alerted) u.alerted = null;
     this.raid = null;
     this.home.boats = [];
     this.state.timers.raid = 480 + Math.random() * 360;
@@ -1201,6 +1215,7 @@ export class Realm {
     this.log(`The castle fell to raiders. Lost a quarter of stores.`);
     R.active = false;
     if (R.onEnd) R.onEnd(false);
+    this.home.raidMark = null; for (const u of this.home.units) u.alerted = null;
     this.raid = null; this.home.boats = [];
     this.state.timers.raid = 540 + Math.random() * 300;
     this.castle.hp = Math.round(this.castle.maxHp * 0.3);

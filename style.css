@@ -322,3 +322,26 @@ button:disabled, .btn:disabled { cursor: url('assets/free/UI Elements/UI Element
 #undoBtn { position: absolute; right: 10px; bottom: calc(var(--safe-bot) + 92px); min-width: 74px; z-index: 3; overflow: hidden; }
 #undoBtn.run::after { content: ''; position: absolute; left: -10px; right: -10px; bottom: -10px; height: 3px; background: #ffe9a8; transform-origin: left; animation: undoT var(--t, 8s) linear forwards; }
 @keyframes undoT { to { transform: scaleX(0); } }
+
+/* squads (3.6) */
+.swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; border: 2px solid #2b2b3a; }
+.card.squad { align-items: stretch; }
+.sqfaces { display: flex; flex-wrap: wrap; gap: 2px; margin: 4px 0; min-height: 30px; align-items: center; }
+.sqfaces img { width: 30px; height: 30px; object-fit: cover; border-radius: 5px; background: #3a2f2a; image-rendering: pixelated; }
+.sqfaces.big { justify-content: center; } .sqfaces.big img { width: 38px; height: 38px; }
+.stances { display: flex; gap: 4px; margin: 4px 0 2px; } .stances .btn { flex: 1; }
+.tiny-link { background: none; border: 0; padding: 0 4px; font-size: 11px; color: #ffe9a8; text-decoration: underline; }
+.card.light .tiny-link { color: #6b5a4c; }
+#squadBtns { position: absolute; right: 6px; top: calc(var(--safe-top) + 108px); display: flex; flex-direction: column; gap: 6px; }
+.sqbtn { position: relative; width: 38px; height: 42px; border: 0; padding: 0; background: none; }
+.sqbtn::before { content: ''; position: absolute; left: 4px; top: 2px; width: 30px; height: 36px; background: var(--c); clip-path: polygon(0 0, 100% 0, 100% 78%, 50% 100%, 0 78%); box-shadow: inset 0 0 0 3px rgba(0,0,0,.25); }
+.sqbtn::after { content: ''; position: absolute; left: 4px; top: 0; width: 30px; height: 4px; background: #3b2f2a; border-radius: 2px; }
+.sqbtn span { position: relative; color: #fff; font-size: 13px; text-shadow: 0 2px 0 rgba(0,0,0,.4); }
+.sqbtn:active { transform: translateY(2px); }
+.sqpicks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
+.sqpick { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; border: 2px solid #d6c39c; border-left: 8px solid var(--c); border-radius: 7px; background: #f7eedb; color: var(--ink); text-align: left; font-size: 12px; }
+.sqpick b { font-weight: normal; font-size: 14px; }
+.sqpick.on { background: #525b66; color: var(--cream); border-color: #3d444d; border-left-color: var(--c); }
+.sqpick:disabled { opacity: .5; }
+details.pickone > summary { text-align: center; margin: 6px 0; font-size: 13px; opacity: .85; }
+.card.squad .row-btns { flex-wrap: wrap; } .card.squad .row-btns .btn { flex: 1 1 40%; min-width: 0; }
