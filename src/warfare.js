@@ -129,7 +129,7 @@ export class Warfare {
       for (const r of crew) this.recXp(r, 30);
       for (const r of crew) if (r.general) this.addCommand(r);
       this.S.stats.seaWins = (this.S.stats.seaWins || 0) + 1;
-      K.news(`Your fleet sank a war fleet of ${name} at sea.`); if ((this.S.stats.seaWins || 0) <= 1 || (crew.some(r => r.type === 'king'))) this.R.saga.add('sea', `Your fleet sank a war fleet of ${name} at sea.`);
+      K.news(`Your fleet sank a war fleet of ${name} at sea.`); if ((this.S.stats.seaWins || 0) <= 1) this.R.saga.add('sea', `Your fleet won its first battle at sea, sinking a war fleet of ${name}.`); else if (crew.some(r => r.type === 'king') && !this.S.stats.kingSea) { this.S.stats.kingSea = 1; this.R.saga.add('sea', `The King sailed into battle in person and sank a war fleet of ${name}.`); }
     } else {
       const n = Math.max(1, Math.round(crew.length * (0.4 - this.ship().hull * 0.06)));
       const pool = crew.sort(() => Math.random() - 0.5).slice(0, n); // the King is carried off wounded like anyone else

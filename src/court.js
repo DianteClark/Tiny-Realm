@@ -89,7 +89,7 @@ export class Court {
       if (K) for (const id of Object.keys(S.world.conquered || {})) { const is = this.R.sea.ocean.islandById(id); if (is) K.st(is).loyalty -= 30; }
       this.R.ui.banner('A succession crisis', `${this.regnal(old)} died with no heir. A cousin, ${who}, takes the throne, but the vassals grumble and some renown is lost.`, 'red');
     } else this.R.ui.banner('The ruler is dead. Long live the ruler', `${this.regnal(old)} has died (${cause}). ${who} takes the throne.`, 'gold');
-    this.R.log(`${this.regnal(old)} died, ${cause}. ${who} rules now.`, 'succession');
+    this.R.log(crisis ? `${this.regnal(old)} died, ${cause}, leaving no heir. A cousin, ${who}, seized the throne in a succession crisis.` : `${this.regnal(old)} died, ${cause}. ${who} rules now.`, 'succession');
     // the crowned soldier's name follows the throne
     const king = S.soldiers.find(s => s.type === 'king'); if (king) king.name = 'King ' + who;
     this.changed(); this.R.save();
@@ -199,13 +199,12 @@ export class Court {
     this.R.dropGear && this.R.dropGear(4 + N.level * 2, { from: this.nemesisName(N) });
     this.R.ui.banner('Your nemesis is slain', `${this.nemesisName(N)} will trouble you no more. Their war chest held ${gold} gold.`, 'gold');
     this.R.log(`${this.nemesisName(N)}, your nemesis, was slain after ${N.met} meetings.`, 'nemesis');
-    this.R.kingdoms && this.R.kingdoms.news(`${this.nemesisName(N)} of ${N.house} fell in battle against your realm.`);
   }
   nemesisEscaped() {
     const N = this.N; if (!N || N.status !== 'active') return; N.onField = false;
     N.level = Math.min(6, N.level + 1); N.scars++; N.epithet = EPI[Math.min(EPI.length - 1, N.scars - 1)];
     this.R.ui.banner('Your nemesis got away', `${N.name} escaped to the boats, and will be back as ${this.nemesisName(N)}, stronger than before.`, 'red');
-    this.R.log(`${N.name} escaped, and is now called ${this.nemesisName(N)}.`, 'nemesis');
+    this.R.log(`${N.name} escaped, and is now called ${this.nemesisName(N)}.`);
   }
   onRaidLost(region) { const N = this.N; if (this.leads(region)) { N.level = Math.min(6, N.level + 1); N.wins++; this.R.log(`${this.nemesisName(N)} grows bolder after beating you.`); } }
   // ---------------------------------------------------------------- the slow clock

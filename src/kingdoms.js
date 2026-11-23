@@ -52,9 +52,9 @@ export class Kingdoms {
     const p = this.st(is).power / Math.max(1, this.myPower());
     return p > 2 ? 'Far stronger than you' : p > 1.25 ? 'Stronger than you' : p > 0.8 ? 'About your match' : p > 0.5 ? 'Weaker than you' : 'Much weaker than you';
   }
-  news(text, loud) {
+  news(text, loud, saga) {
     const W = this.W; W.news = W.news || []; W.news.unshift({ t: Date.now(), text }); W.news.length = Math.min(W.news.length, 40);
-    this.R.log(text, loud ? 'world' : null);
+    this.R.log(text, saga || null);
     if (loud && this.R.ui) this.R.ui.toast(text, 'gold');
   }
   // ---- the world turns
@@ -145,7 +145,7 @@ export class Kingdoms {
         ka.stance = 'war'; ka.rel = Math.max(-100, ka.rel - 40);
         kb.owner = a.id; kb.ownerK = { name: a.kingdom.name, color: a.kingdom.color, sigil: a.kingdom.sigil, ruler: a.kingdom.ruler, motto: a.kingdom.motto, temper: a.kingdom.temper };
         this.dress(b);
-        this.news(`${a.kingdom.name} seized your vassal ${b.name}. They are at war with you now.`, true);
+        this.news(`${a.kingdom.name} seized your vassal ${b.name}. They are at war with you now.`, true, 'world');
         if (this.R.ui && show && live) this.R.ui.banner('A vassal is lost', `${a.kingdom.name} stormed ${b.name} and took it from you.`, 'red');
       } else if (!this.houseKey(b)) {
         kb.owner = a.id; kb.ownerK = { name: a.kingdom.name, color: a.kingdom.color, sigil: a.kingdom.sigil, ruler: a.kingdom.ruler, motto: a.kingdom.motto, temper: a.kingdom.temper };
@@ -167,7 +167,7 @@ export class Kingdoms {
   rebel(is) {
     const W = this.W, k = this.st(is);
     delete W.conquered[is.id]; k.stance = 'war'; k.rel = -40; k.loyalty = 0; k.power = Math.max(k.power, this.myPower() * 0.6);
-    this.news(`${is.kingdom.name} of ${is.name} has risen in rebellion. Their tribute stops.`, true);
+    this.news(`${is.kingdom.name} of ${is.name} has risen in rebellion. Their tribute stops.`, true, 'world');
     if (this.R.ui) this.R.ui.banner('Rebellion', `${is.name} throws off your rule. Win them back by force, or make peace.`, 'red');
   }
   // while you were away the world kept turning, without the fleets to watch
@@ -220,7 +220,7 @@ export class Kingdoms {
       if ((k.demandAt || 0) > Date.now()) return `${name} paid you already. Ask again in ${Math.ceil((k.demandAt - Date.now()) / 60000)} minutes.`;
       const g = Math.round(20 + k.wealth * 0.4); k.wealth *= 0.6; R.addRes('gold', g); k.rel = Math.max(-100, k.rel - 25); k.demandAt = Date.now() + 3600000;
       if (s === 'ally') k.stance = 'peace';
-      if (k.rel < -50 && s !== 'war') { k.stance = 'war'; k.pact = false; return { ok: `${name} pays ${g} gold, then declares war on you. They will not be bled again.` }; }
+      if (k.rel < -50 && s !== 'war') { k.stance = 'war'; k.pact = false; R.saga && R.saga.add('war', `${name} declared war after paying tribute one time too many.`); return { ok: `${name} pays ${g} gold, then declares war on you. They will not be bled again.` }; }
       return { ok: `${name} pays ${g} gold to keep you away, and will not forget it.` };
     }
     if (what === 'war') {
@@ -247,7 +247,7 @@ export class Kingdoms {
     }
     if (s === 'war' && (t === 'cautious' || t === 'pious' || ratio < 0.8)) return { is, title: `An envoy from ${name}`, text: `${name} is weary of war and offers a truce of two hours.`, yes: 'Accept the truce', no: 'Send them away', onYes: () => { k.stance = 'truce'; k.until = Date.now() + 2 * 3600000; k.rel += 10; return `A truce with ${name}.`; } };
     if (s === 'war' && t === 'greedy') { const g = 120 + tier * 80; return { is, title: `An envoy from ${name}`, text: `${name} will make peace for ${g} gold.`, yes: `Pay ${g} gold`, cost: { gold: g }, no: 'Refuse', onYes: () => { k.stance = 'peace'; k.rel += 20; return `Peace is bought with ${name}.`; } }; }
-    if (s === 'peace' && t === 'warlike' && ratio > 1.2) { const g = 100 + tier * 90; return { is, title: `A demand from ${name}`, text: `${name} demands ${g} gold in tribute, or it will mean war.`, yes: `Pay ${g} gold`, cost: { gold: g }, no: 'Refuse: let them come', onYes: () => { k.rel += 5; return `You paid ${name}. For now they are content.`; }, onNo: () => { k.stance = 'war'; k.rel -= 30; return `${name} declares war on you.`; } }; }
+    if (s === 'peace' && t === 'warlike' && ratio > 1.2) { const g = 100 + tier * 90; return { is, title: `A demand from ${name}`, text: `${name} demands ${g} gold in tribute, or it will mean war.`, yes: `Pay ${g} gold`, cost: { gold: g }, no: 'Refuse: let them come', onYes: () => { k.rel += 5; return `You paid ${name}. For now they are content.`; }, onNo: () => { k.stance = 'war'; k.rel -= 30; R.saga && R.saga.add('war', `${name} declared war when its demand for tribute was refused.`); return `${name} declares war on you.`; } }; }
     if (s === 'peace' && !k.pact && (t === 'greedy' || t === 'cautious')) return { is, title: `An envoy from ${name}`, text: `${name} proposes a trade pact: a share of their harbour dues, every hour, for as long as there is peace.`, yes: 'Seal the pact', no: 'Decline', onYes: () => { k.rel += 15; k.pact = true; return `A trade pact with ${name}. Their harbour dues arrive every hour.`; } };
     if (s === 'ally' && (k.giftAt || 0) < Date.now()) { k.giftAt = Date.now() + 3 * 3600000; const g = 60 + tier * 50; return { is, title: `A gift from ${name}`, text: `Your allies of ${name} send wagons of goods as a sign of friendship.`, yes: 'Accept with thanks', no: null, onYes: () => { R.addAll({ gold: g, wood: g, meat: g }); return `${name} sent ${g} each of gold, wood and meat.`; } }; }
     if (s === 'peace' && k.rel > 30) return { is, title: `An envoy from ${name}`, text: `${name} speaks warmly of your realm and asks whether you would consider an alliance.`, yes: 'Swear an alliance', no: 'Not now', onYes: () => { k.stance = 'ally'; k.rel += 10; R.state.stats.alliances = (R.state.stats.alliances || 0) + 1; return `An alliance with ${name}.`; } };

@@ -123,7 +123,7 @@ export class Colonies {
         K.news(`Raiders of ${f.kingdom.name} were beaten back from ${is.name}.`, live);
       } else {
         this.collect(id); c.store = {}; c.sackStart = Date.now(); c.sackedUntil = Date.now() + 3600000;
-        K.news(`${f.kingdom.name} sacked ${is.name} and carried off its stores. Work stops there for an hour.`, live);
+        K.news(`${f.kingdom.name} sacked ${is.name} and carried off its stores. Work stops there for an hour.`, live, 'colony');
         if (live && this.R.ui) this.R.ui.banner('A colony is sacked', `${f.kingdom.name} raided ${is.name}. Leave a garrison there, or make peace.`, 'red');
       }
     }

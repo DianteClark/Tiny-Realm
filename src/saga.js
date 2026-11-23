@@ -50,10 +50,14 @@ export class Saga {
   }
   books() {
     const out = new Map();
-    for (const e of this.list) { if (!out.has(e.gen)) out.set(e.gen, { gen: e.gen, ruler: e.ruler, entries: [] }); out.get(e.gen).entries.push(e); }
+    for (const e of this.list) { if (!out.has(e.gen)) out.set(e.gen, { gen: e.gen, ruler: e.ruler, entries: [] }); out.get(e.gen).entries.unshift(e); } // each book reads from its first page
     return [...out.values()];
   }
-  summary() { return this.list.filter(e => e.kind !== 'minor').slice(0, 10).map(e => ({ day: e.day, text: e.text })).reverse(); }
+  // what the Hall of Realms keeps: how it began, how it was crowned, and its last great deeds, oldest first
+  summary() {
+    const L = this.list.filter(e => e.kind !== 'minor'), keep = new Set([...L.filter(e => e.kind === 'found' || e.kind === 'crown'), ...L.slice(0, 15)]);
+    return L.filter(e => keep.has(e)).reverse().map(e => ({ day: e.day, text: e.text }));
+  }
   // ---------------------------------------------------------------- bestiary
   get B() { const S = this.S; return S.bestiary || (S.bestiary = {}); }
   seen(type) { const f = family(type), b = this.B[f]; if (!b) { this.B[f] = { seen: Date.now(), kills: 0 }; } }
@@ -77,8 +81,7 @@ export class Saga {
     if (S.pawns > 0) X.u.pawn = X.u.pawn || Date.now();
     for (const s of S.soldiers) if (s.general && !X.g[s.general]) X.g[s.general] = Date.now();
     const W = S.world;
-    if (W && R.sea.ocean) for (const id of Object.keys(W.seen || {})) { if (X._seenN === Object.keys(W.seen).length) break; const is = R.sea.ocean.islandById(id); if (is && !X.p[is.kind]) X.p[is.kind] = Date.now(); }
-    if (W) X._seenN = Object.keys(W.seen || {}).length;
+    if (W && R.sea.ocean) { const ids = Object.keys(W.seen || {}); if (ids.length !== X._seenN && Object.keys(PLACES).some(k => !X.p[k])) for (const id of ids.slice(X._seenN || 0)) { const is = R.sea.ocean.islandById(id); if (is && !X.p[is.kind]) X.p[is.kind] = Date.now(); } X._seenN = ids.length; }
     X.p.home = X.p.home || Date.now();
     const a = R.decrees && R.decrees.active && R.decrees.active(); if (a) for (const [k, d] of Object.entries(DECREES)) if (d === a && !X.d[k]) X.d[k] = Date.now();
     try { const D = R.court.D; for (const p of [D.ruler, D.heir, ...D.past]) if (p) for (const t of p.traits || []) X.t[t] = X.t[t] || Date.now(); if (D.spouse) X.t[D.spouse.trait] = X.t[D.spouse.trait] || Date.now(); } catch (e) { /* ignore */ }
@@ -95,6 +98,6 @@ export class Saga {
       { key: 'd', name: 'Decrees', items: Object.entries(DECREES).map(([k, d]) => ({ k, name: d.name, desc: `${d.good}. But: ${d.bad.toLowerCase()}.`, on: !!X.d[k] })) },
     ];
   }
-  progress() { let n = 0, of = 0; for (const c of this.chapters()) for (const i of c.items) { of++; if (i.on) n++; } const fam = this.families(); of += fam.length; n += fam.filter(f => this.B[f]).length; return { n, of }; }
+  progress() { let n = 0, of = 0; for (const c of this.chapters()) for (const i of c.items) { of++; if (i.on) n++; } const fam = this.families(); return { n, of, bn: fam.filter(f => this.B[f]).length, bof: fam.length }; }
   update(dt) { this.t -= dt; if (this.t > 0) return; this.t = 5; this.scan(); }
 }

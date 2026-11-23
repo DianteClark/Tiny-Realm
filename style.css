@@ -453,3 +453,7 @@ details.tales, details.codex { margin: 6px 0; }
 details.tales summary, details.codex summary { cursor: pointer; padding: 6px 4px; font-size: 14px; }
 .card.locked { opacity: .6; }
 .qm { display: flex; width: 40px; height: 40px; align-items: center; justify-content: center; font-size: 22px; color: #8a6a3a; border: 2px dashed #c9b27a; border-radius: 6px; }
+.saga-line { display: flex; gap: 6px; }
+.saga-line .sday { flex: none; min-width: 48px; margin-right: 0; padding-top: 1px; }
+details.codex .card .thumb { align-items: center; justify-content: center; }
+details.tales.hall { margin: -4px 4px 10px; padding: 2px 8px; background: rgba(201,150,42,0.08); border-radius: 4px; }

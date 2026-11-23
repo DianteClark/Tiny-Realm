@@ -1012,7 +1012,7 @@ export class Realm {
     const f = this.castle.hp / this.castle.maxHp;
     this.castle.maxHp = Math.round(TIERS[S.tier].castleHp * (1 + this.bonus().castleHp));
     this.castle.hp = Math.max(this.castle.maxHp * f, this.castle.maxHp * 0.5);
-    this.log(`The realm grew into a ${TIERS[S.tier].name}.`, 'tier');
+    this.log(`The realm grew into a ${TIERS[S.tier].name}.`, S.tier < 5 ? 'tier' : null);
     this.castle.pop = 1;
     if (S.tier === 3) { this.home.fxAt('explosion2', this.castle.x, this.castle.y - 40, { scale: 2.2 }); for (let i = 0; i < 6; i++) this.home.fxAt('dust2', this.castle.x + (i - 2.5) * 50, this.castle.y + 6, { scale: 1.4 }); this.shake(8); }
     if (S.tier === 5) this.crown(quiet);
@@ -1336,7 +1336,7 @@ export class Realm {
       this.addRes('gold', reward);
       this.sfx('victory');
       this.ui.banner(R.kind === 'raid' ? 'Raid repelled' : R.title + ' survived', `The raiders are beaten. You recover ${reward} gold from the field.`, 'blue');
-      this.log(`Repelled a ${R.region ? R.region.name : ''} raid. +${reward} gold.`, S.stats.raidsSurvived === 1 ? 'raid' : R.title === 'Invasion' ? 'raid' : null);
+      this.log(`Repelled a ${R.region ? R.region.name + ' ' : ''}raid. +${reward} gold.`, S.stats.raidsSurvived === 1 && R.kind === 'raid' ? 'raid' : R.title === 'Invasion' ? 'raid' : null);
       if (Math.random() < 0.15 + R.level * 0.005) this.dropGear(R.level, { from: 'a raider' });
       this.chal.note('raid', { downs: R.downs || 0 });
       this.war.victory(this.home);

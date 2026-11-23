@@ -96,6 +96,7 @@ export class UI {
       this.abKey = null;
     });
     $('#btnPlaceCancel').onclick = () => this.cancelPlace();
+    this.body.addEventListener('toggle', e => { const d = e.target; if (d.classList && d.classList.contains('codex')) { this.codexOpen = this.codexOpen || new Set(); if (d.open) this.codexOpen.add(d.dataset.key); else this.codexOpen.delete(d.dataset.key); } }, true);
     this.body.addEventListener('click', e => { const el = e.target.closest('[data-act]'); if (el && !el.disabled) this.act(el.dataset.act, el); });
     this.tabs.addEventListener('click', e => { const el = e.target.closest('[data-tab]'); if (el) { this.tab = el.dataset.tab; this.renderPanel(); } });
     $('#undoBtn').onclick = () => this.doUndo();
@@ -822,11 +823,11 @@ export class UI {
   }
   sagaHtml() {
     const R = this.R, S = R.state, P = R.saga.progress();
-    let html = `<div class="row-btns"><button class="btn small" data-act="codex:bestiary">Bestiary</button><button class="btn small" data-act="codex:codex">Codex (${P.n} of ${P.of})</button></div>`;
+    let html = `<div class="row-btns"><button class="btn small" data-act="codex:bestiary">Bestiary (${P.bn} of ${P.bof})</button><button class="btn small" data-act="codex:codex">Codex (${P.n} of ${P.of})</button></div>`;
     const books = R.saga.books();
     if (!books.length) html += '<p class="section-title">Your saga has yet to be told.</p>';
     for (const b of books) {
-      html += `<div class="book"><p class="book-title">The Book of ${esc(b.ruler || 'the Founders')}</p>` + b.entries.filter(e => e.kind !== 'minor').map(e => `<p class="saga-line"><span class="sday">Day ${e.day}</span>${esc(e.text)}</p>`).join('') + `</div>`;
+      html += `<div class="book"><p class="book-title">The Book of ${esc(b.ruler || 'the Founders')}</p>` + b.entries.filter(e => e.kind !== 'minor').map(e => `<p class="saga-line"><span class="sday">Day ${e.day}</span><span>${esc(e.text)}</span></p>`).join('') + `</div>`;
     }
     html += `<details class="tales"><summary>Daily tales (${S.log.length})</summary>${S.log.map(l => `<p class="log"><span class="when">${ago(l.t)}</span>${esc(l.text)}</p>`).join('')}</details>`;
     return html;
@@ -843,7 +844,7 @@ export class UI {
         const b = B[f], I = familyInfo(f), d = I.def || {};
         if (!b) return `<div class="card light locked"><div class="thumb"><span class="qm">?</span></div><div class="grow"><h3>Unknown foe</h3><p class="muted">Not yet met.</p></div></div>`;
         const key = SHEETS[`${I.sprite}_idle`] ? `${I.sprite}_idle` : SHEETS[`${I.sprite}_run`] ? `${I.sprite}_run` : null, nx = Sg.nextLore(f), lo = Sg.lore(f.startsWith('house_') ? 'red_' + f.slice(6) : f);
-        return `<div class="card light"><div class="thumb">${key ? `<img src="${spriteThumb(key)}" alt="">` : ''}</div><div class="grow"><h3>${esc(I.name)} <span class="rel ${lo ? 'ally' : 'neutral'}">${Sg.loreWord(f)}</span></h3><p>${esc(Sg.loreText(f))}</p><p class="muted">Health ${d.hp || '?'}, ${d.dmg ? `damage ${d.dmg}` : d.heal ? `heals ${d.heal}` : 'damage ?'}${d.proj ? ', ranged' : ''}. Slain: ${b.kills}.${lo ? ` +${Math.round(lo * 100)}% damage against them.` : ''}${nx ? ` ${nx} more to learn more.` : ''}</p></div></div>`;
+        return `<div class="card light"><div class="thumb">${key ? `<img src="${spriteThumb(key)}" alt="">` : ''}</div><div class="grow"><h3>${esc(I.name)} <span class="rel ${lo ? 'ally' : 'neutral'}">${Sg.loreWord(f)}</span></h3><p>${esc(Sg.loreText(f))}</p><p class="muted">Health ${d.hp || '?'}, ${d.dmg ? `damage ${d.dmg}` : d.heal ? `heals ${d.heal}` : 'damage ?'}${d.proj ? ', ranged' : ''}. Slain: ${b.kills}.${lo ? ` +${Math.round(lo * 100)}% damage against them.` : ''}${nx ? ` Slay ${nx} more for the next step.` : ''}</p></div></div>`;
       }).join('');
       return html;
     }
@@ -851,7 +852,7 @@ export class UI {
     let html = `<p class="section-title">The Codex: ${P.n} of ${P.of} known</p>`;
     for (const c of Sg.chapters()) {
       const n = c.items.filter(i => i.on).length;
-      html += `<details class="codex" ${this.codexOpen === c.key ? 'open' : ''}><summary data-act="codexopen:${c.key}">${c.name} <span class="muted">${n} of ${c.items.length}</span></summary>` + c.items.map(i => i.on ? `<div class="card light"><div class="thumb">${i.img ? `<img src="${SHEETS[i.img] && SHEETS[i.img].fw ? spriteThumb(i.img) : src(i.img)}" alt="">` : '<i class="ic ic-shield"></i>'}</div><div class="grow"><h3>${esc(i.name)}</h3><p>${esc(i.desc || '')}</p></div></div>` : `<div class="card light locked"><div class="thumb"><span class="qm">?</span></div><div class="grow"><h3>Not yet known</h3></div></div>`).join('') + `</details>`;
+      html += `<details class="codex" data-key="${c.key}" ${this.codexOpen && this.codexOpen.has(c.key) ? 'open' : ''}><summary>${c.name} <span class="muted">${n} of ${c.items.length}</span></summary>` + c.items.map(i => i.on ? `<div class="card light"><div class="thumb">${i.img ? `<img src="${SHEETS[i.img] && SHEETS[i.img].fw ? spriteThumb(i.img) : src(i.img)}" alt="">` : '<i class="ic ic-shield"></i>'}</div><div class="grow"><h3>${esc(i.name)}</h3><p>${esc(i.desc || '')}</p></div></div>` : `<div class="card light locked"><div class="thumb"><span class="qm">?</span></div><div class="grow"><h3>Not yet known</h3></div></div>`).join('') + `</details>`;
     }
     return html;
   }
@@ -1447,7 +1448,7 @@ export class UI {
     html += Legacy.canFound(R) ? `<button class="btn wide" data-act="found">Found a new realm</button><p class="muted" style="text-align:center;font-size:12px">Bank this realm's points, choose a hero to sail with you, and begin again on a new island.</p>`
       : `<p style="text-align:center;font-size:13px">Raise the Castle to found a new realm and bank your Legacy.</p>`;
     // (this world's seed card is shown at the top of the Realm tab)
-    if (full && L.realms.length) html += '<p class="section-title">Hall of Realms</p>' + L.realms.map((r, i) => `<div class="card light"><div class="grow"><h3>Realm ${L.realms.length - i}${r.seed ? ` <span class="seedw small">${esc(r.seed)}</span>` : ''}</h3><p>${r.days} days, ${(TIERS[r.tier] || TIERS[1]).name}${r.renown ? ` renown ${r.renown}` : ''}, ${r.cleared} islands, Abyss floor ${r.abyss}, ${r.chapters} story chapters. Worth ${r.points} points. Ended ${ago(r.ended)}.</p>${r.saga && r.saga.length ? `<details class="tales"><summary>${esc(r.house || 'Its saga')}</summary>${r.saga.map(e => `<p class="saga-line"><span class="sday">Day ${e.day}</span>${esc(e.text)}</p>`).join('')}</details>` : ''}</div>${r.seed ? `<button class="btn small" data-act="copyseed:${esc(r.seed)}">Copy seed</button>` : ''}</div>`).join('');
+    if (full && L.realms.length) html += '<p class="section-title">Hall of Realms</p>' + L.realms.map((r, i) => `<div class="card light"><div class="grow"><h3>Realm ${L.realms.length - i}${r.seed ? ` <span class="seedw small">${esc(r.seed)}</span>` : ''}</h3><p>${r.days} days, ${(TIERS[r.tier] || TIERS[1]).name}${r.renown ? ` renown ${r.renown}` : ''}, ${r.cleared} islands, Abyss floor ${r.abyss}, ${r.chapters} story chapters. Worth ${r.points} points. Ended ${ago(r.ended)}.</p></div>${r.seed ? `<button class="btn small" data-act="copyseed:${esc(r.seed)}">Copy seed</button>` : ''}</div>${r.saga && r.saga.length ? `<details class="tales hall"><summary>The saga of ${esc(r.house || 'this realm')}</summary>${r.saga.map(e => `<p class="saga-line"><span class="sday">Day ${e.day}</span><span>${esc(e.text)}</span></p>`).join('')}</details>` : ''}`).join('');
     return html;
   }
   decreeHtml() {
@@ -1659,7 +1660,6 @@ export class UI {
     if (k === 'court') { this.openPanel('court', a.slice(6)); return; }
     if (k === 'throne') { this.openPanel('throne'); return; }
     if (k === 'codex') { this.openPanel('codex', x); this.tab = x; this.renderPanel(); return; }
-    if (k === 'codexopen') { this.codexOpen = this.codexOpen === x ? null : x; return; }
     if (k === 'marry') { const e = R.court.marry(a.slice(6)); if (e) this.toast(e, 'red'); else { this.toast('The wedding is held with great feasting.', 'gold'); R.sfx && R.sfx('victory'); } return this.refresh(); }
     if (k === 'hire') { const e = R.court.hire(+x, y); if (e) this.toast(e, 'red'); else this.toast('A new councillor takes their seat.', 'gold'); return this.refresh(); }
     if (k === 'cdis') { return this.confirm('Dismiss?', 'Send this councillor away? Their fee is not returned.', 'Dismiss', () => { R.court.dismiss(x); this.refresh(); }); }
