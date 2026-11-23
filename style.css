@@ -413,3 +413,8 @@ body.exp #hud:has(#abilitybar:not(.hidden)) #toasts { bottom: calc(var(--safe-bo
 /* only the ability buttons take taps; the strip around them lets taps reach the ground */
 #abilitybar { pointer-events: none; } #abilitybar .ab { pointer-events: auto; }
 body.sea #tut, body.sea #tutHand { display: none !important; }
+
+/* home-screen app on iOS: fill the whole physical screen (see the script in index.html) */
+html.standalone, html.standalone body { height: var(--app-h); min-height: var(--app-h); }
+html.standalone #app { bottom: auto; height: var(--app-h); }
+html.standalone #game { height: var(--app-h); }
