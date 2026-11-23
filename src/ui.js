@@ -780,13 +780,13 @@ export class UI {
     if (s === 'vassal') html += `<p style="text-align:center;font-size:13px">They pay you tribute every hour. Keep your army strong, or pay their lords when they grumble, and they stay loyal.</p>`;
     else {
       html += `<p class="section-title">Diplomacy</p><div class="court-acts">
-        ${B('gift', `Send a gift (${gift} gold)`, true)}
+        ${B('gift', `Send a gift (${gift} gold)`, R.state.res.gold >= gift)}
         ${B('truce', 'Offer a truce', s === 'war')}
         ${house ? '' : B('peace', 'Make peace', s === 'war' || s === 'truce')}
         ${house ? '' : B('alliance', 'Propose an alliance', s === 'peace')}
-        ${B('demand', 'Demand tribute', s !== 'ally')}
+        ${B('demand', (k.demandAt || 0) > Date.now() ? `Tribute paid (${time((k.demandAt - Date.now()) / 1000)})` : 'Demand tribute', s !== 'ally' && !((k.demandAt || 0) > Date.now()) && k.power / Math.max(1, Kd.myPower()) <= 0.67)}
         ${B('war', s === 'truce' || s === 'ally' ? 'Break faith: declare war' : 'Declare war', s !== 'war', 'red')}
-      </div><p class="muted" style="font-size:12px;text-align:center">${house ? 'A great house never makes a lasting peace. Truces buy time; only a siege ends the feud.' : 'Gifts raise their regard. Peace needs a friendly court, an alliance a warm one. Tribute is only paid to a far stronger realm.'}</p>`;
+      </div><p class="muted" style="font-size:12px;text-align:center">${house ? 'A great house never makes a lasting peace. Truces buy time; only a siege ends the feud.' : 'Gifts raise their regard. Peace needs a friendly court, an alliance a warm one. Tribute is only paid to a realm half again their strength, once an hour.'}</p>`;
     }
     html += `<button class="btn wide" data-act="tosea:${is0.id}">Back to the sea</button>`;
     return html;
@@ -802,7 +802,8 @@ export class UI {
   envoy(e) {
     const R = this.R, opts = [];
     const fin = msg => { this.toast(msg, 'gold'); R.kingdoms.news(msg); R.save(); };
-    opts.push({ label: e.yes, fn: () => { if (e.cost && !R.pay(e.cost)) { this.toast('Not enough gold.', 'red'); if (e.onNo) fin(e.onNo()); return; } fin(e.onYes()); } });
+    if (e.cost && !R.canAfford(e.cost)) opts.push({ label: `${e.yes} (you have ${Math.floor(R.state.res.gold)})`, cls: 'off', fn: () => { this.toast('Not enough gold. The envoy will wait for another day.', 'red'); } });
+    else opts.push({ label: e.yes, fn: () => { if (e.cost && !R.pay(e.cost)) return; fin(e.onYes()); } });
     if (e.no) opts.push({ label: e.no, cls: e.onNo ? 'red' : '', fn: () => { if (e.onNo) fin(e.onNo()); } });
     this.choice(e.title, e.text, opts);
   }

@@ -433,3 +433,4 @@ html.standalone #game { height: var(--app-h); }
 .court-acts .btn { font-size: 13px; padding-left: 4px; padding-right: 4px; }
 .court-card { width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; }
 .court-card .sig { width: 40px; height: 40px; }
+.btn.off { filter: grayscale(1); opacity: .6; }
