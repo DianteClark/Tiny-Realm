@@ -457,3 +457,23 @@ details.tales summary, details.codex summary { cursor: pointer; padding: 6px 4px
 .saga-line .sday { flex: none; min-width: 48px; margin-right: 0; padding-top: 1px; }
 details.codex .card .thumb { align-items: center; justify-content: center; }
 details.tales.hall { margin: -4px 4px 10px; padding: 2px 8px; background: rgba(201,150,42,0.08); border-radius: 4px; }
+/* 10.0 presentation */
+#fade { position: absolute; inset: 0; background: #0f1a22; opacity: 0; pointer-events: none; z-index: 30; }
+#fade.go { animation: fadeDip .5s ease-in-out; }
+@keyframes fadeDip { 0% { opacity: 0; } 40% { opacity: .85; } 100% { opacity: 0; } }
+#title { position: absolute; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; background: radial-gradient(ellipse at 50% 40%, rgba(40,90,100,.55) 0%, rgba(15,26,34,.82) 75%); transition: opacity .4s ease-out; }
+#title.out { opacity: 0; pointer-events: none; }
+.title-box { width: min(86vw, 360px); text-align: center; color: #fff; animation: titleIn .6s ease-out; }
+@keyframes titleIn { from { transform: translateY(14px); opacity: 0; } to { transform: none; opacity: 1; } }
+.title-castle { width: 150px; image-rendering: pixelated; filter: drop-shadow(0 6px 0 rgba(0,0,0,.25)); animation: titleBob 4s ease-in-out infinite; }
+@keyframes titleBob { 50% { transform: translateY(-4px); } }
+.title-box h1 { font-weight: normal; font-size: 52px; margin: 4px 0 10px; text-shadow: 0 4px 0 rgba(0,0,0,.35), 0 0 24px rgba(255,233,168,.25); letter-spacing: 1px; }
+.title-rib { display: inline-block; margin: 0 auto 6px; }
+.title-sub { margin: 4px 0 18px; font-size: 15px; color: #ffe9a8; text-shadow: 0 2px 0 rgba(0,0,0,.4); }
+.title-btns { display: grid; gap: 8px; }
+.title-btns .btn { font-size: 16px; }
+.title-seed { margin-top: 14px; font-size: 12px; opacity: .7; }
+html.text-l #panel, html.text-l #modal .dialog, html.text-l #seaCard, html.text-l #toasts, html.text-l #banner { zoom: 1.12; }
+html.text-s #panel, html.text-s #modal .dialog, html.text-s #seaCard, html.text-s #toasts, html.text-s #banner { zoom: 0.92; }
+html.calm *, html.calm *::before, html.calm *::after { animation-duration: 0.001s !important; animation-iteration-count: 1 !important; transition-duration: 0.001s !important; }
+body.titling #tut, body.titling #tutHand, body.titling #banner, body.titling #toasts { display: none !important; }

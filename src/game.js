@@ -156,7 +156,7 @@ export class Realm {
 
   // ------------------------------------------------------------ feedback
   sfx(name, pos, scene) { if (scene && scene !== this.scene) return; audio.play(name, pos); }
-  shake(n, scene) { if (scene && scene !== this.scene) return; this.shakeAmt = Math.min(14, Math.max(this.shakeAmt || 0, n)); }
+  shake(n, scene) { if (scene && scene !== this.scene) return; if (document.documentElement.classList.contains('calm')) return; this.shakeAmt = Math.min(14, Math.max(this.shakeAmt || 0, n)); }
 
   // ------------------------------------------------------------ bonuses
   provinceBonus() {

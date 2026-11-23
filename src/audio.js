@@ -152,10 +152,13 @@ const SFX = {
 
 // ------------------------------------------------------------ music
 // Scales as semitone offsets; songs pick a root, progression and texture.
-const DORIAN = [0, 2, 3, 5, 7, 9, 10], MINOR = [0, 2, 3, 5, 7, 8, 10], MIXO = [0, 2, 4, 5, 7, 9, 10];
+const DORIAN = [0, 2, 3, 5, 7, 9, 10], MINOR = [0, 2, 3, 5, 7, 8, 10], MIXO = [0, 2, 4, 5, 7, 9, 10], LYDIAN = [0, 2, 4, 6, 7, 9, 11], MAJOR = [0, 2, 4, 5, 7, 9, 11];
 const SONGS = {
   home: { bpm: 92, root: 62, scale: DORIAN, prog: [[0, 2, 4], [3, 5, 0], [4, 6, 1], [0, 2, 4], [6, 1, 3], [3, 5, 0], [4, 6, 1], [0, 2, 4]], lead: 'triangle', density: 0.45 },
   battle: { bpm: 140, root: 57, scale: MINOR, prog: [[0, 2, 4], [5, 0, 2], [6, 1, 3], [4, 6, 1], [0, 2, 4], [5, 0, 2], [3, 5, 0], [4, 6, 1]], lead: 'square', density: 0.65 },
+  sea: { bpm: 84, root: 60, scale: LYDIAN, prog: [[0, 2, 4], [1, 3, 5], [4, 6, 1], [0, 2, 4], [5, 0, 2], [1, 3, 5], [4, 6, 1], [0, 2, 4]], lead: 'triangle', density: 0.35 },
+  night: { bpm: 72, root: 57, scale: MINOR, prog: [[0, 2, 4], [5, 0, 2], [3, 5, 0], [4, 6, 1], [0, 2, 4], [3, 5, 0], [5, 0, 2], [4, 6, 1]], lead: 'triangle', density: 0.28 },
+  title: { bpm: 96, root: 60, scale: MAJOR, prog: [[0, 2, 4], [3, 5, 0], [4, 6, 1], [0, 2, 4], [5, 0, 2], [3, 5, 0], [4, 6, 1], [4, 6, 1]], lead: 'triangle', density: 0.5 },
   voyage: { bpm: 112, root: 57, scale: MIXO, prog: [[0, 2, 4], [6, 1, 3], [3, 5, 0], [0, 2, 4], [0, 2, 4], [4, 6, 1], [3, 5, 0], [4, 6, 1]], lead: 'square', density: 0.5 },
 };
 function deg(S, d, oct = 0) { const n = S.scale.length; const o = Math.floor(d / n); return S.root + S.scale[((d % n) + n) % n] + 12 * (o + oct); }

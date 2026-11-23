@@ -282,7 +282,7 @@ function frame(now) {
   if (ct && ct.t != null) { ct.t -= dt; if (ct.t <= 0) realm.cameraTarget = null; }
   if (ct) { const k = 1 - Math.pow(0.03, dt), c = [cam.x + vw / cam.z / 2, cam.y + vh / cam.z / 2]; if (ct.z) cam.z += (ct.z - cam.z) * k; view.centerOn(c[0] + (ct.x - c[0]) * k, c[1] + (ct.y - c[1]) * k); glide = null; }
   const raidOn = (realm.raid && realm.raid.active) || realm.events.pending || realm.events.active;
-  audio.setMood(realm.exp ? 'voyage' : raidOn ? 'battle' : 'home');
+  audio.setMood(ui.titleOpen ? 'title' : realm.exp ? 'voyage' : raidOn ? 'battle' : ui.seaOpen ? 'sea' : realm.env && realm.env.isNight ? 'night' : 'home');
   let sx = 0, sy = 0;
   if (realm.shakeAmt > 0.2) { sx = (Math.random() - 0.5) * realm.shakeAmt; sy = (Math.random() - 0.5) * realm.shakeAmt; realm.shakeAmt *= Math.pow(0.002, dt); } else realm.shakeAmt = 0;
   const zc = { x: cam.x + sx / cam.z, y: cam.y + sy / cam.z, z: cam.z * dpr };
@@ -311,7 +311,7 @@ async function boot() {
   cam.z = Math.max(0.6, Math.min(1, vw / (64 * 15)));
   view.focusScene();
   const ld = document.getElementById('loading'); ld.classList.add('hidden'); setTimeout(() => ld.classList.add('gone'), 500);
-  ui.welcome(info);
+  if (!info.fresh && !info.newAge && ui.prefs().title !== false) ui.title(info); else ui.welcome(info);
   tutorial = new Tutorial(realm, ui, view); tutorial.start();
   minimap = new Minimap(realm, view, cam);
   realm.save();

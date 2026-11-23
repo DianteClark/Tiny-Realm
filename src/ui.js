@@ -68,6 +68,7 @@ export class UI {
     this.place = null; this.squadPick = new Set(); this.modalQueue = [];
   }
   bind(realm, view) {
+    this.applyPrefs();
     this.R = realm; this.view = view;
     document.querySelectorAll('.navbtn').forEach(b => b.onclick = () => {
       if (b.dataset.panel === 'voyage') { if (this.R.exp) return this.toast('Finish the battle first, or Retreat.'); return this.seaOpen && !this.panel ? this.closeSea() : this.openSea(); }
@@ -681,6 +682,7 @@ export class UI {
   // ------------------------------------------------------------ the sea (4.0)
   openSea() {
     const R = this.R; if (R.exp) return;
+    this.fade();
     this.closePanel(); if (this.place) this.cancelPlace();
     R.scene.selected.clear(); this.refreshSel();
     this.seaOpen = true; R.seaOpen = true; document.body.classList.add('sea');
@@ -691,6 +693,7 @@ export class UI {
   }
   closeSea(quiet) {
     if (!this.seaOpen) return;
+    this.fade();
     this.seaOpen = false; this.R.seaOpen = false; document.body.classList.remove('sea');
     this.view.exitSea(); this.seaSel = null;
     $('#seaCard').classList.add('hidden'); $('#seaTop').classList.add('hidden');
@@ -815,6 +818,7 @@ export class UI {
       const L = Z.landing(is); if (L.act !== 'land') return;
       const ids = Z.crewRecs().map(r => r.id);
       this.closeSea(true);
+      this.fade();
       R.startExpedition(S.frontier, ids, L.mode);
       this.banner(R.exp.islandName, `${R.exp.region.name}, level ${R.exp.level}. ${is.kind === 'kingdom' ? 'Break the walls and take the castle.' : R.exp.structs.length ? 'Destroy every camp.' : 'Defeat every monster.'} Tap a soldier or All, then tap the ground or a foe.`, 'blue');
       return;
@@ -1582,9 +1586,56 @@ export class UI {
       <button class="btn small" data-act="trade:${i}" ${this.R.canAfford(o.give) ? '' : 'disabled'}>Trade</button></div>`).join('');
   }
 
+  // ---- 10.0 presentation: preferences, the title screen, fades
+  prefs() { try { return JSON.parse(localStorage.getItem('tinyrealm.prefs') || '{}'); } catch (e) { return {}; } }
+  setPref(k, v) { const p = this.prefs(); p[k] = v; localStorage.setItem('tinyrealm.prefs', JSON.stringify(p)); this.applyPrefs(); }
+  applyPrefs() {
+    const p = this.prefs(), h = document.documentElement;
+    h.classList.toggle('text-l', p.text === 'l'); h.classList.toggle('text-s', p.text === 's');
+    h.classList.toggle('calm', !!p.calm);
+  }
+  // a quick dip to black and back, to mark a change of place
+  fade() {
+    if (this.prefs().calm) return;
+    let f = $('#fade'); if (!f) { f = document.createElement('div'); f.id = 'fade'; document.getElementById('app').appendChild(f); }
+    f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
+  }
+  title(info) {
+    const R = this.R, S = R.state, Co = R.court;
+    this.titleOpen = true; document.body.classList.add('titling');
+    const el = document.createElement('div'); el.id = 'title';
+    let house = '', ruler = '';
+    try { house = Co.D.house; ruler = `${Co.title()} ${Co.regnal(Co.D.ruler)}`; } catch (e) { /* ignore */ }
+    const day = Math.floor((Date.now() - S.created) / 86400000) + 1;
+    el.innerHTML = `<div class="title-box">
+      <img class="title-castle" src="${src(S.tier >= 3 ? 'b_Castle' : 'b_House3')}" alt="">
+      <h1>Tiny Realm</h1>
+      <div class="ribbon blue title-rib"><span>${esc(house || 'Your realm')}</span></div>
+      <p class="title-sub">${esc(ruler)}${ruler ? ' - ' : ''}${TIERS[S.tier].name}, day ${day}</p>
+      <div class="title-btns">
+        <button class="btn wide" data-t="go">Continue</button>
+        <button class="btn wide" data-t="saga">The saga</button>
+        <button class="btn wide" data-t="set">Settings</button>
+      </div>
+      <p class="title-seed">${esc(R.sea.words ? R.sea.words() : '')} - ${VERSION}</p>
+    </div>`;
+    document.getElementById('app').appendChild(el);
+    el.addEventListener('click', e => {
+      const b = e.target.closest('[data-t]'); if (!b) return;
+      audio.unlock(); audio.play('click');
+      this.titleOpen = false; document.body.classList.remove('titling'); el.classList.add('out'); setTimeout(() => el.remove(), 420);
+      const t = b.dataset.t;
+      if (t === 'saga') { this.openPanel('chronicle'); this.tab = 'log'; this.renderPanel(); }
+      else if (t === 'set') this.openPanel('settings');
+      setTimeout(() => this.welcome(info), t === 'go' ? 350 : 0);
+    });
+  }
   panel_settings() {
     const lvl = (key, v) => `<div class="row" style="justify-content:center;gap:4px">${[['Off', 0], ['Low', 0.3], ['Mid', 0.6], ['High', 1]].map(([l, x]) => `<button class="btn small ${Math.abs(audio.settings[key] - x) < 0.05 ? 'on' : ''}" data-act="vol:${key}:${x}">${l}</button>`).join('')}</div>`;
     return `<p class="section-title">Music</p>${lvl('music')}<p class="section-title">Sound effects</p>${lvl('sfx')}
+      <p class="section-title">Text size</p><div class="row" style="justify-content:center;gap:4px">${[['Small', 's'], ['Normal', ''], ['Large', 'l']].map(([l, v]) => `<button class="btn small ${(this.prefs().text || '') === v ? 'on' : ''}" data-act="pref:text:${v}">${l}</button>`).join('')}</div>
+      <p class="section-title">Motion</p><div class="row" style="justify-content:center;gap:4px"><button class="btn small ${this.prefs().calm ? '' : 'on'}" data-act="pref:calm:">Full</button><button class="btn small ${this.prefs().calm ? 'on' : ''}" data-act="pref:calm:1">Reduced</button></div>
+      <p class="section-title">Title screen</p><div class="row" style="justify-content:center;gap:4px"><button class="btn small ${this.prefs().title !== false ? 'on' : ''}" data-act="pref:title:1">Show</button><button class="btn small ${this.prefs().title === false ? 'on' : ''}" data-act="pref:title:0">Skip</button></div>
       <p class="section-title">Minimap</p><div class="row" style="justify-content:center;gap:4px"><button class="btn small ${minimapOn() ? 'on' : ''}" data-act="mm:1">Show</button><button class="btn small ${minimapOn() ? '' : 'on'}" data-act="mm:0">Hide</button></div>
       <p class="section-title">Your realm is saved in this browser automatically.</p>
       <button class="btn wide" data-act="export">Export save</button><p></p>
@@ -1707,6 +1758,7 @@ export class UI {
       return;
     }
     if (k === 'mm') { setMinimap(x === '1'); return this.refresh(); }
+    if (k === 'pref') { this.setPref(x, x === 'title' ? y === '1' : x === 'calm' ? !!y : y); return this.refresh(); }
     if (k === 'vol') { audio.unlock(); audio.settings[x] = +y; audio.saveSettings(); if (x === 'sfx') audio.play('coin'); return this.refresh(); }
     if (k === 'buy') { err(R.events.buy(x)); return this.refresh(); }
     if (k === 'trade') { err(R.events.trade(+x)); return this.refresh(); }
