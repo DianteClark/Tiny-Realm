@@ -33,8 +33,10 @@ const HOUSE_B = ['wick', 'more', 'ford', 'hollow', 'wood', 'bury', 'ridge', 'mer
 const SEAT_A = ['Salt', 'Storm', 'Iron', 'High', 'Gull', 'Amber', 'Mist', 'Dawn', 'Rook', 'Tide', 'Bright', 'Frost', 'Wolf', 'Elder', 'Copper', 'Silver', 'Gold', 'Shiver'];
 const SEAT_B = ['holm', 'haven', 'keep', 'mouth', 'march', 'reach', 'hold', 'gate', 'crown', 'fast', 'spire', 'watch', 'wall', 'mark'];
 const REALM_FORMS = ['the Marches of %', 'the Kingdom of %', 'the Free Holds of %', 'the Principality of %', 'the Isles of %', 'the Duchy of %', 'the Sea-Realm of %', 'the Crown of %'];
-const RULER_TITLES = { warlike: ['Warlord', 'King', 'Queen'], greedy: ['Merchant Prince', 'Lord', 'Lady'], cautious: ['Regent', 'Duke', 'Duchess'], pious: ['High Abbot', 'Prior', 'Abbess'] };
-const RULER_NAMES = ['Aldric', 'Brannagh', 'Cedric', 'Dagny', 'Edda', 'Fenwick', 'Garrick', 'Hilde', 'Isolde', 'Jory', 'Leofric', 'Maude', 'Osric', 'Ragna', 'Sigrid', 'Tobin', 'Ulric', 'Vesna', 'Wynn', 'Yara'];
+// [title for a man, title for a woman] per temper
+const RULER_TITLES = { warlike: [['Warlord', 'Warlord'], ['King', 'Queen'], ['Marshal', 'Marshal']], greedy: [['Merchant Prince', 'Merchant Princess'], ['Lord', 'Lady']], cautious: [['Regent', 'Regent'], ['Duke', 'Duchess']], pious: [['High Abbot', 'Abbess'], ['Prior', 'Prioress']] };
+const RULER_M = ['Aldric', 'Cedric', 'Fenwick', 'Garrick', 'Jory', 'Leofric', 'Osric', 'Tobin', 'Ulric', 'Bertram', 'Corwin', 'Halden'];
+const RULER_F = ['Brannagh', 'Dagny', 'Edda', 'Hilde', 'Isolde', 'Maude', 'Ragna', 'Sigrid', 'Vesna', 'Yara', 'Wynn', 'Odile'];
 const MOTTOS = {
   warlike: ['Steel answers.', 'We take the shore.', 'No quarter, no retreat.', 'The tide bows to us.'],
   greedy: ['Gold buys every war.', 'All ships pay toll.', 'Count twice, strike once.', 'The sea is a ledger.'],
@@ -58,7 +60,8 @@ export function makeKingdom(r, ring = 0) {
   const chargeColor = metalOnColour ? pk(r, METALS) : pk(r, COLOURS);
   const division = pk(r, ['plain', 'plain', 'per pale', 'per fess', 'chevron']);
   const sigil = { field, charge: pk(r, CHARGE_KEYS), chargeColor, division };
-  const ruler = pk(r, RULER_TITLES[temper]) + ' ' + pk(r, RULER_NAMES);
+  const fem = r() < 0.5, title = pk(r, RULER_TITLES[temper])[fem ? 1 : 0];
+  const ruler = title + ' ' + pk(r, fem ? RULER_F : RULER_M);
   return { id: null, name, realm, seat, color, sigil, temper, ruler, motto: pk(r, MOTTOS[temper]) };
 }
 

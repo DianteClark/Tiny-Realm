@@ -1,0 +1,154 @@
+<!doctype html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Tiny Realm world preview</title>
+<style>
+@font-face { font-family: 'BoldPixels'; src: url('../assets/font/boldpixels.woff2') format('woff2'), url('../assets/font/boldpixels.woff') format('woff'); font-display: block; }
+html, body { margin: 0; height: 100%; background: #47aba9; overflow: hidden; font: 13px BoldPixels, monospace; color: #fff; touch-action: none; }
+canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+#hud { position: fixed; left: 6px; top: 6px; right: 6px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; pointer-events: none; }
+#hud > * { pointer-events: auto; }
+.box { background: rgba(27,23,32,.78); padding: 4px 7px; border-radius: 4px; text-shadow: 1px 1px 0 #000; }
+button, input { font: inherit; background: #e8d6a8; color: #3b2a18; border: 2px solid #3b2a18; border-radius: 4px; padding: 2px 6px; }
+input { width: 150px; }
+#info { position: fixed; left: 6px; bottom: 6px; right: 6px; }
+</style>
+</head><body>
+<canvas id="c"></canvas>
+<div id="hud">
+  <input id="seed" spellcheck="false"><button id="go">Go</button><button id="rnd">New</button>
+  <button id="fogBtn">Reveal all</button><button id="home">Home</button>
+  <span class="box" id="read"></span>
+</div>
+<div id="info" class="box" style="display:none"></div>
+<script type="module">
+// ?seed=SALT-RAVEN-4821   &fog=0 to start fully revealed   &x=&y=&z= start camera (world units, z in css px per unit)
+import { loadAll, SHEETS } from '../src/assets.js';
+import { Ocean, Fog, seedFromWords, wordsFromSeed, randomSeedWords, ringOf } from '../src/ocean.js';
+import { WorldMapRenderer } from '../src/worldmap.js';
+import { drawSigil, drawAllegiance, makeKingdom, CHARGE_KEYS } from '../src/heraldry.js';
+import { rng } from '../src/terrain.js';
+import { drawSprite } from '../src/assets.js';
+
+// ?sheet=1 : every charge at 16/24/48 px, random kingdoms, allegiance rings under castles
+async function heraldrySheet() {
+  try { await document.fonts.load('12px BoldPixels'); } catch (e) {}
+  document.getElementById('hud').style.display = 'none';
+  const cv = document.getElementById('c'), dpr = Math.min(3, devicePixelRatio || 1);
+  cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
+  const c = cv.getContext('2d'); c.imageSmoothingEnabled = false;
+  c.fillStyle = '#47aba9'; c.fillRect(0, 0, cv.width, cv.height);
+  c.font = `${12 * dpr}px BoldPixels, monospace`; c.fillStyle = '#fff';
+  const divs = ['plain', 'per pale', 'per fess', 'chevron'];
+  const fields = ['#c8372d', '#2f5fa8', '#2f7d3a', '#6a3d8f', '#f2c94c', '#ecebe4', '#26232a', '#2b8a8a', '#8a5a2b', '#c8372d', '#2f5fa8', '#26232a'];
+  CHARGE_KEYS.forEach((k, i) => {
+    const metal = fields[i] === '#f2c94c' || fields[i] === '#ecebe4';
+    const sig = { field: fields[i], charge: k, chargeColor: metal ? '#c8372d' : (i % 2 ? '#f2c94c' : '#ecebe4'), division: divs[i % 4] };
+    const col = i % 4, row = Math.floor(i / 4), x = (12 + col * 94) * dpr, y = (14 + row * 74) * dpr;
+    drawSigil(c, sig, x + 10 * dpr, y + 10 * dpr, 16 * dpr);
+    drawSigil(c, sig, x + 32 * dpr, y + 14 * dpr, 24 * dpr);
+    drawSigil(c, sig, x + 66 * dpr, y + 24 * dpr, 48 * dpr);
+    c.fillText(k, x, y + 60 * dpr);
+  });
+  // native 16 / 48 px (dpr 1 pixels) for a crispness check
+  const R = rng(5);
+  for (let i = 0; i < 12; i++) { const K = makeKingdom(R, i % 4); drawSigil(c, K.sigil, (16 + i * 26) * dpr, 250 * dpr, 16); drawSigil(c, K.sigil, (16 + i * 26) * dpr, 280 * dpr, 48); }
+  const rel = ['enemy', 'neutral', 'ally', 'own', 'enemy'];
+  ['blue', 'red', 'yellow', 'purple', 'black'].forEach((col, i) => {
+    const x = (40 + i * 72) * dpr, y = 380 * dpr, sc = 0.2 * dpr;
+    drawAllegiance(c, x, y - 2 * dpr, 70 * dpr, rel[i], 0.4);
+    drawSprite(c, col === 'blue' ? 'b_Castle' : `b${col}_Castle`, x, y, 0, { scale: sc });
+    c.fillStyle = '#fff'; c.textAlign = 'center'; c.fillText(rel[i], x, y + 22 * dpr);
+  });
+  ['warrior_idle', 'red_warrior_idle', 'yellow_archer_idle', 'purple_lancer_idle', 'black_monk_idle'].forEach((k, i) => {
+    const x = (40 + i * 72) * dpr, y = 470 * dpr;
+    drawAllegiance(c, x, y - 2 * dpr, 34 * dpr, rel[(i + 1) % 5], 0.4);
+    drawSprite(c, k, x, y, 0, { scale: 0.35 * dpr });
+  });
+  for (let i = 0; i < 6; i++) { const K = makeKingdom(R, i); c.fillStyle = '#fff'; c.textAlign = 'left'; c.font = `${10 * dpr}px BoldPixels, monospace`; c.fillText(`${K.name}, ${K.realm} (${K.color}, ${K.temper}) ${K.ruler}`, 8 * dpr, (510 + i * 16) * dpr); drawSigil(c, K.sigil, 0, 0, 1); }
+  document.title = 'ready';
+}
+
+await loadAll();
+const qs0 = new URLSearchParams(location.search);
+if (qs0.get('sheet')) { await heraldrySheet(); throw new Error('sheet mode'); }
+try { await document.fonts.load('12px BoldPixels'); } catch (e) {}
+const q = new URLSearchParams(location.search);
+const words = wordsFromSeed(seedFromWords(q.get('seed') || 'SALT-RAVEN-4821'));
+const ocean = new Ocean(seedFromWords(words));
+const map = new WorldMapRenderer(ocean, SHEETS);
+const fog = new Fog();
+// a plausible early game: home waters charted plus a voyage trail eastwards
+fog.reveal(0, 0, 1000);
+for (let i = 0; i <= 12; i++) fog.reveal(900 + i * 110, Math.sin(i * 0.7) * 260, 330);
+let showFog = q.get('fog') !== '0';
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const dpr = Math.min(3, window.devicePixelRatio || 1);
+const cam = { x: 0, y: 0, z: 1 };
+let zoomCss = +(q.get('z') || 0.45); // css px per world unit
+function setCenter(wx, wy) { cam.z = zoomCss * dpr; cam.x = wx - cv.width / cam.z / 2; cam.y = wy - cv.height / cam.z / 2; }
+function resize() { const c = center(); cv.width = Math.round(innerWidth * dpr); cv.height = Math.round(innerHeight * dpr); setCenter(c[0], c[1]); }
+let started = false;
+function center() { if (!started) { started = true; return [+(q.get('x') || 0), +(q.get('y') || 0)]; } return true ? [cam.x + cv.width / cam.z / 2, cam.y + cv.height / cam.z / 2] : [+(q.get('x') || 0), +(q.get('y') || 0)]; }
+resize(); addEventListener('resize', resize);
+document.getElementById('seed').value = words;
+const go = w => { const u = new URL(location.href); u.searchParams.set('seed', w); location.href = u.href; };
+document.getElementById('go').onclick = () => go(document.getElementById('seed').value);
+document.getElementById('rnd').onclick = () => go(randomSeedWords());
+const fogBtn = document.getElementById('fogBtn');
+const syncFogBtn = () => fogBtn.textContent = showFog ? 'Reveal all' : 'Show fog';
+fogBtn.onclick = () => { showFog = !showFog; syncFogBtn(); }; syncFogBtn();
+document.getElementById('home').onclick = () => setCenter(0, 0);
+
+// pan / zoom (mouse, wheel, touch pinch)
+const MINZ = 0.12, MAXZ = 4;
+function zoomAt(f, sx, sy) {
+  const wx = cam.x + sx / cam.z, wy = cam.y + sy / cam.z;
+  zoomCss = Math.max(MINZ, Math.min(MAXZ, zoomCss * f)); cam.z = zoomCss * dpr;
+  cam.x = wx - sx / cam.z; cam.y = wy - sy / cam.z;
+}
+const ptrs = new Map(); let pinch = null, moved = 0, cursor = null, selected = null;
+cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]); moved = 0; if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = Math.hypot(a[0] - b[0], a[1] - b[1]); } });
+cv.addEventListener('pointermove', e => {
+  cursor = [e.clientX * dpr, e.clientY * dpr];
+  const p = ptrs.get(e.pointerId); if (!p) return;
+  if (ptrs.size === 1) { const dx = e.clientX - p[0], dy = e.clientY - p[1]; moved += Math.abs(dx) + Math.abs(dy); cam.x -= dx * dpr / cam.z; cam.y -= dy * dpr / cam.z; }
+  ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+  if (ptrs.size === 2 && pinch) { const [a, b] = [...ptrs.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]); zoomAt(d / pinch, (a[0] + b[0]) / 2 * dpr, (a[1] + b[1]) / 2 * dpr); pinch = d; moved = 99; }
+});
+const up = e => {
+  if (ptrs.size === 1 && moved < 6) {
+    const s = map.hitTest(cam, e.clientX * dpr, e.clientY * dpr, showFog ? fog : null);
+    selected = s ? s.id : null;
+    if (!s && e.shiftKey) fog.reveal(cam.x + e.clientX * dpr / cam.z, cam.y + e.clientY * dpr / cam.z, 300);
+    const info = document.getElementById('info');
+    if (s) { info.style.display = ''; info.textContent = `${s.name} | ${s.kind}${s.region ? ' ' + s.region : ''}${s.boss ? ' boss' : ''}${s.chapter ? ' ch' + s.chapter : ''} | Lv ${s.level} | ring ${s.ring} | id ${s.id} | r ${s.r}` + (s.kingdom ? ` | ${s.kingdom.name}, ${s.kingdom.realm}, ${s.kingdom.color}, ${s.kingdom.temper}` : ''); }
+    else info.style.display = 'none';
+  }
+  ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null;
+};
+cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', e => { ptrs.delete(e.pointerId); pinch = null; });
+cv.addEventListener('wheel', e => { e.preventDefault(); zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX * dpr, e.clientY * dpr); }, { passive: false });
+
+const relations = id => (id.charCodeAt(id.length - 1) % 5 === 0 ? 'ally' : id.charCodeAt(id.length - 2) % 4 === 0 ? 'neutral' : 'enemy');
+const times = []; let shown = 0;
+window.__map = { map, ocean, fog, cam, setCenter, setZoom: z => { const c = center(); zoomCss = z; setCenter(c[0], c[1]); }, times, showFog: v => { showFog = v; syncFogBtn(); }, select: id => selected = id };
+const t0 = performance.now();
+function frame() {
+  const t = (performance.now() - t0) / 1000;
+  const a = performance.now();
+  map.draw(ctx, cam, showFog ? fog : null, { t, dpr, relations, selectedId: selected, marks: [{ x: 300, y: 120, kind: 'ship' }] });
+  const ms = performance.now() - a; times.push(ms); if (times.length > 120) times.shift();
+  if (performance.now() - shown > 250) {
+    shown = performance.now();
+    const p = cursor || [cv.width / 2, cv.height / 2], wx = cam.x + p[0] / cam.z, wy = cam.y + p[1] / cam.z, R = ringOf(wx, wy);
+    const avg = times.reduce((s, v) => s + v, 0) / times.length;
+    document.getElementById('read').textContent = `${words} | ${R.name} Lv ${R.level} | ${Math.round(wx)},${Math.round(wy)} | z ${zoomCss.toFixed(2)} | draw ${avg.toFixed(2)} ms | ${map.stats.chunks} chunks ${map.stats.islands} isles`;
+  }
+  requestAnimationFrame(frame);
+}
+frame();
+document.title = 'ready';
+</script>
+</body></html>

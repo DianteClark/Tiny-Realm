@@ -96,6 +96,7 @@ const KIND_W = [
   [['lair', 40], ['wild', 22], ['kingdom', 27], ['port', 3], ['ruins', 5]],
   [['lair', 42], ['wild', 20], ['kingdom', 27], ['port', 3], ['ruins', 6]],
 ];
+const SIZE = { kingdom: [66, 110], lair: [40, 80], wild: [44, 110], port: [50, 72], ruins: [40, 62] };
 const pickW = (r, list) => { let t = 0; for (const [, w] of list) t += w; let v = r() * t; for (const [k, w] of list) { if ((v -= w) < 0) return k; } return list[0][0]; };
 const REGION_KEYS = ['goblin', 'gnome', 'badlands', 'reef', 'crypt']; // easiest to hardest, as in data.js REGIONS
 function regionFor(r, ring) {
@@ -120,7 +121,7 @@ export const chunkOf = v => Math.floor((v + CHUNK / 2) / CHUNK);
 // Cell size in world units is 2r/n; the grid is centred on the island centre.
 export function makeShape(seed, r, opts = {}) {
   const R = rng(seed ^ 0x51ED);
-  const n = Math.max(7, Math.min(12, Math.round(r / 9.5)));
+  const n = Math.max(7, Math.min(12, Math.round(r / 8.5)));
   const g = new Uint8Array(n * n);
   // low-res value noise (4x4 lattice) bilinearly sampled
   const L = 4, lat = []; for (let i = 0; i < L * L; i++) lat.push(R());
@@ -129,20 +130,23 @@ export function makeShape(seed, r, opts = {}) {
     const a = lat[y0 * L + x0], b = lat[y0 * L + x0 + 1], c = lat[(y0 + 1) * L + x0], d = lat[(y0 + 1) * L + x0 + 1];
     return (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy;
   };
-  const sx = 0.85 + R() * 0.3, sy = 0.85 + R() * 0.3;
+  const sx = 0.88 + R() * 0.24, sy = 0.88 + R() * 0.24;
   const c = (n - 1) / 2;
   for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
     const dx = (x - c) / (c + 0.5) / sx, dy = (y - c) / (c + 0.5) / sy;
     const d = Math.hypot(dx, dy);
-    const v = 1 - d + (noise(x / (n - 1), y / (n - 1)) - 0.5) * 0.75;
-    g[y * n + x] = v > 0.22 ? 1 : 0;
+    const v = 1 - d + (noise(x / (n - 1), y / (n - 1)) - 0.5) * 0.55;
+    g[y * n + x] = v > 0.1 ? 1 : 0;
   }
-  // smooth: one cellular pass, then fill holes and keep the largest component
+  // smooth: fill one-cell notches and drop one-cell spurs, a few passes
   const at = (a, x, y) => x >= 0 && y >= 0 && x < n && y < n ? a[y * n + x] : 0;
-  const g2 = new Uint8Array(n * n);
-  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
-    let k = 0; for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) if (i || j) k += at(g, x + i, y + j);
-    g2[y * n + x] = k >= 5 ? 1 : k <= 2 ? 0 : g[y * n + x];
+  const g2 = new Uint8Array(g);
+  for (let pass = 0; pass < 3; pass++) {
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      const k = at(g2, x - 1, y) + at(g2, x + 1, y) + at(g2, x, y - 1) + at(g2, x, y + 1);
+      if (!g2[y * n + x] && k >= 3) g2[y * n + x] = 1;
+      else if (g2[y * n + x] && k <= 1) g2[y * n + x] = 0;
+    }
   }
   g2[Math.floor(c) * n + Math.floor(c)] = 1;
   // largest component (4-connected)
@@ -266,13 +270,17 @@ export class Ocean {
     };
     const lm = this.landmarks.get(cx + ',' + cy);
     if (lm) placed.push({ x: lm.x, y: lm.y, r: lm.r, lm });
-    // 0..3 islands: try a handful of candidates
-    const want = pickW(R, [[0, 12], [1, 30], [2, 38], [3, 20]]);
-    for (let t = 0; t < 14 && placed.length < want + (lm ? 1 : 0) && placed.length < 3; t++) {
-      const r = Math.round(40 + Math.pow(R(), 1.6) * 70);
+    // 0..3 islands: kind first (by the ring at the chunk centre), size by kind, then a free spot
+    const want = pickW(R, [[0, 5], [1, 25], [2, 42], [3, 28]]) + (lm ? 1 : 0);
+    const ring = ringIndexAtDist(Math.hypot(cx * CHUNK, cy * CHUNK));
+    for (let t = 0; t < 30 && placed.length < Math.min(3, want); t++) {
+      let kind = pickW(R, KIND_W[Math.min(ring, KIND_W.length - 1)]);
+      const [ra, rb] = SIZE[kind];
+      const r = Math.round(ra + Math.pow(R(), 1.3) * (rb - ra));
       const m = r + GAP / 2;
       const x = Math.round(bx + m + R() * (CHUNK - 2 * m)), y = Math.round(by + m + R() * (CHUNK - 2 * m));
-      if (fits(x, y, r)) placed.push({ x, y, r });
+      if (kind === 'kingdom' && Math.hypot(x, y) < 700) kind = 'lair';
+      if (fits(x, y, r)) placed.push({ x, y, r, kind });
     }
     placed.forEach((p, i) => out.islands.push(this._island(cx, cy, i, p)));
     return out;
@@ -284,7 +292,7 @@ export class Ocean {
     const R = rng(seed);
     const d = Math.hypot(p.x, p.y), ring = ringIndexAtDist(d);
     const lm = p.lm;
-    const kind = lm ? lm.kind : (ring === 0 && d < 700 ? pickW(R, KIND_W[0].filter(k => k[0] !== 'kingdom')) : pickW(R, KIND_W[Math.min(ring, KIND_W.length - 1)]));
+    const kind = lm ? lm.kind : p.kind;
     const isl = { id, x: p.x, y: p.y, r: p.r, kind, name: islandName(R), level: levelAtDist(d), ring, seed, shape: null, kingdom: null, region: null, boss: false };
     if (lm && lm.starter) isl.starter = true;
     if (kind === 'lair') {
