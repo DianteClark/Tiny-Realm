@@ -908,6 +908,11 @@ export class Scene {
       if (!u.alive || u.hidden || u.kind === 'pawn') continue;
       if (u.hp < u.maxHp || this.selected.has(u)) this.bar(ctx, u.x, u.y - (u.big ? 110 : 72) * (u.def.scale || 1), u.big ? 56 : 40, u.hp / u.maxHp, u.team === 0 ? '#6dbb5b' : '#d9534f', u);
       if (u.cursed > 0) this.bar(ctx, u.x, u.y - 78, 40, u.cursed / 45, '#a874c9');
+      if (u.nemesis && u.alive) { // your nemesis: his name over his head, his health always shown
+        if (u.hp >= u.maxHp && !this.selected.has(u)) this.bar(ctx, u.x, u.y - 72 * (u.def.scale || 1), 52, 1, '#d9534f', u);
+        ctx.font = '12px BoldPixels, monospace'; ctx.textAlign = 'center'; const ny = u.y - 86 * (u.def.scale || 1);
+        ctx.fillStyle = '#2b2b3a'; ctx.fillText(u.nemName, u.x + 1, ny + 1); ctx.fillStyle = '#ff8a7e'; ctx.fillText(u.nemName, u.x, ny);
+      }
     }
     for (const b of [...this.buildings, ...this.structs]) {
       const hall = b.type === 'castle' && this.kind === 'home' && this.game.state && this.game.state.tier < 3; // the hall's pennant reaches higher than the castle art

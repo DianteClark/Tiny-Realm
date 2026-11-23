@@ -22,11 +22,12 @@ import { sigilCanvas } from './heraldry.js';
 import { temperWord } from './kingdoms.js';
 import { COLONY_LEVELS } from './colonies.js';
 import { DOCTRINES, SHIP } from './warfare.js';
+import { RULER_TRAITS, SEATS } from './court.js';
 import { SPEED } from './sea.js';
 import { parseSeedWords, normalizeSeedWords } from './ocean.js';
 
-export const VERSION = '7.0';
-const NOTES_SEEN = '7.0'; // the what's-new notes below were last changed in 7.0
+export const VERSION = '8.0';
+const NOTES_SEEN = '8.0'; // the what's-new notes below were last changed in 8.0
 
 const $ = s => document.querySelector(s);
 const src = k => SHEETS[k] ? encodeURI(SHEETS[k].src) : '';
@@ -208,6 +209,11 @@ export class UI {
     if (!info.fresh && localStorage.getItem('tinyrealm.seen') !== NOTES_SEEN) {
       const div = document.createElement('div');
       div.innerHTML = `<p style="text-align:left;font-size:14px;line-height:1.4">
+        <b>8.0 Dynasty, Court and Nemesis</b><br>
+        Tap the castle, then The throne room. Your realm has a ruling house now.<br>
+        Dynasty: your ruler has traits that help the whole realm, and ages a year every four hours. Marry into a kingdom at peace with you for an heir. When the ruler dies the heir takes the throne; with no heir, a succession crisis.<br>
+        Council: hire a Steward, Marshal, Chancellor and Spymaster. They draw wages, and leave if unpaid.<br>
+        Nemesis: a captain who escapes your blades may swear vengeance. He leads raids in person with his name over his head, flees when badly hurt, and comes back stronger. Cut him down before he reaches his boat.<br><br>
         <b>7.0 Generals and Sea Battles</b><br>
         Generals: open a veteran of level 6 or more in Army and appoint them with a doctrine: Vanguard, Bulwark, Marksman or Warden. Everyone who fights beside them gains from it.<br>
         Generals rise from Captain to Commander to Marshal as they win battles, and their doctrine grows stronger.<br>
@@ -809,6 +815,41 @@ export class UI {
     }
     this.seaKey = null; this.renderSeaCard();
   }
+  panel_throne() {
+    const R = this.R, S = R.state, Co = R.court;
+    if (!['dynasty', 'council', 'nemesis'].includes(this.tab)) this.tab = 'dynasty';
+    this.setTabs([['dynasty', 'Dynasty'], ['council', 'Council'], ['nemesis', 'Nemesis']]);
+    const traits = ts => ts.map(t => `<span class="trait" title="${esc(RULER_TRAITS[t].desc)}">${RULER_TRAITS[t].name}</span>`).join('');
+    const tdesc = ts => ts.map(t => RULER_TRAITS[t].desc).join('; ');
+    if (this.tab === 'dynasty') {
+      const D = Co.D, r = D.ruler, left = Math.max(0, r.dies - Co.age(r));
+      let html = `<p class="section-title">${esc(D.house)}, generation ${D.gen}</p>`;
+      html += `<div class="card"><div class="thumb"><img src="${src(r.avatar)}" class="av" alt=""></div><div class="grow"><h3><span class="rank">${Co.title()}</span> ${esc(Co.regnal(r))}</h3><p>Age ${Co.age(r)}. ${left <= 6 ? 'Grey and failing: the end is near.' : left <= 15 ? 'In the autumn of life.' : 'Hale and strong.'} A year passes every four hours.</p><div>${traits(r.traits)}</div><p class="muted">${esc(tdesc(r.traits))}.</p></div></div>`;
+      if (D.spouse) html += `<div class="card light"><div class="thumb"><img src="${src(D.spouse.avatar)}" class="av" alt=""></div><div class="grow"><h3>${esc(D.spouse.name)}, consort</h3><p>Of ${esc(D.spouse.house)}.</p><div>${traits([D.spouse.trait])}</div><p class="muted">${esc(tdesc([D.spouse.trait]))}.</p></div></div>`;
+      if (D.heir) html += `<div class="card light"><div class="thumb"><img src="${src(D.heir.avatar)}" class="av" alt=""></div><div class="grow"><h3>${esc(D.heir.name)}, heir</h3><p>Age ${Co.age(D.heir)}. Takes the throne when ${esc(r.name)} dies.</p><div>${traits(D.heir.traits)}</div></div></div>`;
+      else if (D.spouse) html += `<p style="text-align:center;font-size:13px">No heir yet. ${D.childAt ? 'A child is expected before long.' : ''}</p>`;
+      else {
+        const su = Co.suitors(), cost = Co.marryCost();
+        html += `<p class="section-title">A match for the ruler</p><p style="text-align:center;font-size:13px">Without an heir, the ruler's death brings a succession crisis. Marry into a kingdom at peace with you: their regard rises, and a child will follow.</p>`;
+        html += su.length ? su.map(is => { const k = R.kingdoms.st(is); return `<div class="card light"><div class="sig" data-sigil="${esc(is.id)}"></div><div class="grow"><h3>${esc(is.kingdom.name)} ${this.stanceTag(is)}</h3><p>Regard: ${R.kingdoms.regardWord(is).toLowerCase()}.</p>${this.costHtml(cost)}</div><button class="btn small" data-act="marry:${is.id}" ${k.rel >= 20 ? '' : 'disabled'}>Propose</button></div>`; }).join('') : '<p class="muted" style="text-align:center;font-size:13px">No court at peace with you knows of you yet. Sail out, make peace, send gifts.</p>';
+      }
+      if (D.past.length) html += `<p class="section-title">Those who ruled before</p>` + D.past.map(p => `<div class="card light"><div class="thumb"><img src="${src(p.avatar)}" class="av" alt="" style="filter:grayscale(1)"></div><div class="grow"><h3>${esc(p.name)}</h3><p>Died ${esc(p.cause)} at ${p.age}, ${ago(p.to)}.</p><div>${traits(p.traits)}</div></div></div>`).join('');
+      return html;
+    }
+    if (this.tab === 'council') {
+      const C = Co.C, pool = Co.candidates();
+      let html = `<p class="section-title">The council</p>`;
+      html += Object.entries(SEATS).map(([k, D]) => { const c = C.seats[k]; return c ? `<div class="card"><div class="thumb"><img src="${src(c.avatar)}" class="av" alt=""></div><div class="grow"><h3><span class="rank">${D.name}</span> ${esc(c.name)}</h3><p>Skill ${c.skill}: ${D.desc(c.skill)}. Wage ${Co.wage(c)} gold an hour.</p><p class="muted">Loyalty: ${c.loyalty >= 70 ? 'devoted' : c.loyalty >= 40 ? 'content' : 'unhappy'}.</p></div><button class="btn small red" data-act="cdis:${k}">Dismiss</button></div>` : `<div class="card light"><div class="grow"><h3>${D.name}: empty</h3><p>${D.desc(1)} at skill 1, more with greater skill.</p></div></div>`; }).join('');
+      html += `<p class="section-title">Seeking a place at court</p>` + pool.map(c => `<div class="card light"><div class="thumb"><img src="${src(c.avatar)}" class="av" alt=""></div><div class="grow"><h3>${esc(c.name)}</h3><p>Skill ${c.skill}. Asks ${Co.wage(c)} gold an hour.</p>${this.costHtml(Co.hireCost(c))}<div class="seatbtns">${Object.entries(SEATS).map(([k, D]) => `<button class="btn small" data-act="hire:${c.id}:${k}">${D.name}</button>`).join('')}</div></div></div>`).join('');
+      html += `<p class="muted" style="text-align:center;font-size:13px">New petitioners arrive every two hours. Councillors who go unpaid grow unhappy, and leave.</p>`;
+      return html;
+    }
+    const N = Co.N;
+    if (!N) return `<p class="section-title">No nemesis, yet</p><p style="text-align:center;font-size:13px">When raiders of a rival house or a kingdom at war are beaten off, one of their captains may escape and swear vengeance. He will lead their raids himself, and grow stronger each time he gets away.</p>`;
+    const alive = N.status === 'active';
+    return `<p class="section-title">${alive ? 'Your nemesis' : 'Your last nemesis'}</p><div class="card ${alive ? '' : 'light'}"><div class="thumb"><img src="${src('av_h' + (3 + (N.name.length % 20)))}" class="av" alt="" style="${alive ? '' : 'filter:grayscale(1)'}"></div><div class="grow"><h3>${esc(Co.nemesisName(N))}</h3><p>Captain of ${esc(N.house)}. ${alive ? `Strength ${N.level}, with ${N.scars} scar${N.scars === 1 ? '' : 's'} from your blades. You have met ${N.met - 1} time${N.met === 2 ? '' : 's'}${N.wins ? `, and he has beaten you ${N.wins} time${N.wins === 1 ? '' : 's'}` : ''}.` : `Slain ${ago(N.endAt)}.`}</p></div></div>
+      <p style="text-align:center;font-size:13px">${alive ? 'He leads some raids of his house in person, with his name over his head. Bring him below a quarter of his health and he runs for his boat: cut him down before he reaches it, or he returns stronger.' : 'Another may rise in time.'}</p>`;
+  }
   generalHtml(rec) {
     const Wf = this.R.war;
     if (rec.type === 'king') return '';
@@ -965,7 +1006,7 @@ export class UI {
   renderPanel() {
     this.live = [];
     const p = this.panel;
-    const titles = { crew: 'Crew', voyage: 'Trade', hero: 'Hero', nightmarket: 'Night Market', build: 'Build', workers: 'Workers', army: 'Army', chronicle: 'Chronicle', settings: 'Settings', merchant: 'Merchant', building: '', court: 'Court' };
+    const titles = { crew: 'Crew', voyage: 'Trade', hero: 'Hero', nightmarket: 'Night Market', build: 'Build', workers: 'Workers', army: 'Army', chronicle: 'Chronicle', settings: 'Settings', merchant: 'Merchant', building: '', court: 'Court', throne: 'Throne room' };
     $('#panelTitle').textContent = p === 'building' ? (this.panelArg.type === 'castle' && this.R.state.tier < 3 ? TIERS[this.R.state.tier].name + ' Hall' : this.panelArg.def.name) : p === 'hero' ? this.panelArg.name : titles[p];
     this.setTabs(null);
     const fn = this['panel_' + p];
@@ -1313,7 +1354,7 @@ export class UI {
       const hols = upcomingHolidays(5).map(h => `<div class="card light"><div class="grow"><h3>${h.name}</h3><p>${h.date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}. ${esc(h.desc)}</p></div></div>`).join('');
       const moonHtml = `<div class="card"><div class="grow"><h3>${moon.name}</h3><p>${moon.full ? 'Full moon tonight: the Moonlit Hunt stirs.' : moon.dark ? "A thieves' moon: dark nights bring extra thieves." : `Full moon in about ${Math.round(((29.53 / 2) - moon.age + 29.53) % 29.53)} days.`}</p></div></div>`;
       const seedCard = `<p class="section-title">This world</p><div class="card light"><div class="grow"><h3 class="seedw">${esc(R.sea.words())}</h3><p class="muted">Your world's seed. Paste it when you start a new realm to sail these same seas again.</p></div><button class="btn small" data-act="copyseed:${esc(R.sea.words())}">Copy</button></div>`;
-      return seedCard + `<div class="stat-grid">${rows.map(([a, b]) => `<span>${a}</span><span>${b}</span>`).join('')}</div><p class="section-title">The moon</p>${moonHtml}<p class="section-title">Holy days and festivals</p>${hols}<p class="section-title">Provinces</p>${provHtml}<p class="section-title">Rival houses</p>${rv}${this.legacyHtml(true)}`;
+      return seedCard + `<button class="btn wide" data-act="throne">The throne room: dynasty, council and nemesis</button><div class="stat-grid">${rows.map(([a, b]) => `<span>${a}</span><span>${b}</span>`).join('')}</div><p class="section-title">The moon</p>${moonHtml}<p class="section-title">Holy days and festivals</p>${hols}<p class="section-title">Provinces</p>${provHtml}<p class="section-title">Rival houses</p>${rv}${this.legacyHtml(true)}`;
     }
     if (this.tab === 'log') {
       if (!S.log.length) return '<p class="section-title">Your tale has yet to be told.</p>';
@@ -1402,6 +1443,7 @@ export class UI {
       html += `<p style="text-align:center;font-size:13px">Builders working here make it rise twice as fast.</p>`;
     }
     if (b.type === 'castle') {
+      html += `<button class="btn wide" data-act="throne">The throne room</button>`;
       if (S.upgradeEnd) {
         html += `<p class="section-title" id="bup">Growing into a ${TIERS[S.tier + 1].name}: ${time((S.upgradeEnd - Date.now()) / 1000)}</p>`;
         this.live.push(() => { const e = $('#bup'); if (e) { if (!S.upgradeEnd) return this.refresh(); e.textContent = `Growing into a ${TIERS[S.tier + 1].name}: ${time((S.upgradeEnd - Date.now()) / 1000)}`; } });
@@ -1578,6 +1620,10 @@ export class UI {
     if (k === 'embark') { R.sea.embark([...this.squadPick]); this.crewInit = false; this.squadPick.clear(); this.openSea(); return; }
     if (k === 'tosea') { this.openSea(); if (x) { const is = R.sea.ocean.islandById(a.slice(6)); if (is) { this.seaSel = is; this.view.seaFocus(is.x, is.y); this.seaKey = null; this.renderSeaCard(); } } return; }
     if (k === 'court') { this.openPanel('court', a.slice(6)); return; }
+    if (k === 'throne') { this.openPanel('throne'); return; }
+    if (k === 'marry') { const e = R.court.marry(a.slice(6)); if (e) this.toast(e, 'red'); else { this.toast('The wedding is held with great feasting.', 'gold'); R.sfx && R.sfx('victory'); } return this.refresh(); }
+    if (k === 'hire') { const e = R.court.hire(+x, y); if (e) this.toast(e, 'red'); else this.toast('A new councillor takes their seat.', 'gold'); return this.refresh(); }
+    if (k === 'cdis') { return this.confirm('Dismiss?', 'Send this councillor away? Their fee is not returned.', 'Dismiss', () => { R.court.dismiss(x); this.refresh(); }); }
     if (k === 'genapp') { const rec = R.state.soldiers.find(s => s.id === +x); if (rec) { const e = R.war.appoint(rec, y); if (e) this.toast(e, 'red'); else this.toast(`${rec.name} is now a general.`, 'gold'); } return this.refresh(); }
     if (k === 'gendis') { const rec = R.state.soldiers.find(s => s.id === +x); if (rec) this.confirm('Relieve this general?', `${rec.name} goes back to the ranks. Their victories are remembered if they are appointed again.`, 'Relieve', () => { R.war.dismiss(rec); this.refresh(); }); return; }
     if (k === 'refit') { const e = R.war.refit(x); if (e) this.toast(e, 'red'); else { this.toast('The shipwrights finish their work.', 'gold'); R.sfx && R.sfx('build'); } return this.refresh(); }

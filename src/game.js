@@ -22,6 +22,7 @@ import { Sea } from './sea.js';
 import { Kingdoms } from './kingdoms.js';
 import { Colonies } from './colonies.js';
 import { Warfare } from './warfare.js';
+import { Court } from './court.js';
 import { seedFromWords, randomSeedWords } from './ocean.js';
 import { SHEETS } from './assets.js';
 import { audio } from './audio.js';
@@ -81,6 +82,7 @@ export class Realm {
     this.kingdoms = new Kingdoms(this);
     this.colonies = new Colonies(this);
     this.war = new Warfare(this);
+    this.court = new Court(this);
   }
 
   // ------------------------------------------------------------ persistence
@@ -177,6 +179,7 @@ export class Realm {
     for (const k in P) b[k] = (b[k] || 0) + P[k];
     if (this.state.legacyRank) { const L = Legacy.rankBonus(this.state.legacyRank); for (const k of ['hp', 'dmg', 'gather', 'xp']) b[k] = (b[k] || 0) + L[k]; }
     if (this.decrees) { const a = this.decrees.active(); if (a) for (const k of ['dmg', 'gather', 'towerDmg', 'xp']) if (a.fx[k]) b[k] = (b[k] || 0) + a.fx[k]; }
+    if (this.court && this.state.soldiers) { const c = this.court.bonus(); for (const k of ['hp', 'dmg', 'gather', 'towerDmg', 'xp']) if (c[k]) b[k] = (b[k] || 0) + c[k]; }
     return b;
   }
   get tierDef() { return TIERS[this.state.tier]; }
@@ -1034,6 +1037,7 @@ export class Realm {
     for (const b of this.home.buildings) for (const q of b.queue) if (now >= q.end) report.done.push(UNITS[q.unit].name + ' trained');
     if (S.upgradeEnd && now >= S.upgradeEnd) report.done.push(`Grew into a ${TIERS[Math.min(5, S.tier + 1)].name}`);
     this.colonies.catchUp(secs);
+    this.court.catchUp();
     { const n = this.kingdoms.catchUp(secs); if (n > 0) report.done.push(n === 1 ? 'News came from across the sea' : `${n} tidings came from across the sea`); }
     { const tg = this.trade.catchUp(); for (const k in tg) report.got[k] += tg[k]; if (tg.gold + tg.wood + tg.meat > 0) report.done.push('Trade boats came and went'); }
     this.tickTimers(true);
@@ -1195,6 +1199,7 @@ export class Realm {
     this.kingdoms.update(dt);
     this.colonies.update(dt);
     this.war.update(dt);
+    this.court.update(dt);
     this.envoyT = (this.envoyT ?? 240 + Math.random() * 240) - dt;
     if (this.envoyT <= 0) { this.envoyT = 360 + Math.random() * 360; if (!this.exp && !(this.raid && this.raid.active) && this.state.tier >= 2 && this.ui && this.ui.envoy) { const e = this.kingdoms.envoy(); if (e) this.ui.envoy(e); } }
     this.trade.visuals(Date.now());
@@ -1239,6 +1244,7 @@ export class Realm {
         u.home = { x: center(sp.lx), y: center(sp.ly) + 8 };
         u.raidId = R.id;
         if (e.flagDuel) e.flagDuel(u);
+        if (e.nemesis) this.court.empower(u);
         R.units.push(u);
         if (sp.ground) h.fxAt('dust2', u.x, u.y, { scale: 1.6 }); else { h.fxAt('splash', center(sp.wx), center(sp.wy) + 20); this.sfx('splash', u, h); }
         if (u.def.boss) { this.sfx('roar'); this.shake(6, h); }
@@ -1253,8 +1259,9 @@ export class Realm {
     const unlocked = Math.min(REGIONS.length, 1 + Math.floor(S.cleared / 5));
     let region = opts.region || REGIONS[Math.floor(Math.random() * unlocked)];
     // rival houses take a share of the raids once they know of you
-    const rivals = this.activeRivals();
-    if (!opts.region && !opts.units && kind === 'raid' && rivals.length && Math.random() < 0.35) {
+    const rivals = this.activeRivals(), nem = !opts.region && !opts.units && kind === 'raid' && Math.random() < 0.25 ? this.court.nemesisRegion() : null;
+    if (nem) region = nem;
+    else if (!opts.region && !opts.units && kind === 'raid' && rivals.length && Math.random() < 0.35) {
       const rv = rivals[Math.floor(Math.random() * rivals.length)];
       region = { key: 'rival', name: rv.name, rival: rv.key, enemies: rivalRoster(rv.key, this.rivalLevel(rv.key)) };
       if (!S.rivals[rv.key].met) { S.rivals[rv.key].met = true; this.log(`${rv.name} declared war. "${rv.motto}"`); }
@@ -1264,7 +1271,7 @@ export class Realm {
       if (ki) { const c = ki.kingdom.color; region = { key: 'rival', name: ki.kingdom.name, kingdomIsle: ki.id, enemies: rivalRoster(c, Math.max(1, Math.round(ki.level * 0.8))) }; }
     }
     const days = (Date.now() - S.created) / 86400000;
-    const budget = (opts.budget ?? (3 + S.tier * 2.5 + S.stats.raidsSurvived * 0.7 + Math.min(days, 60) * 0.25 + S.renown * 2)) * (1 + this.decrees.fx('raidSize')) * (S.stats.raidsSurvived + S.stats.raidsLost < 3 && !opts.units ? 0.7 : 1);
+    const budget = (opts.budget ?? (3 + S.tier * 2.5 + S.stats.raidsSurvived * 0.7 + Math.min(days, 60) * 0.25 + S.renown * 2)) * (1 + this.decrees.fx('raidSize') + this.court.fx('raidSize')) * (S.stats.raidsSurvived + S.stats.raidsLost < 3 && !opts.units ? 0.7 : 1);
     const level = 1 + Math.floor(S.stats.raidsSurvived / 4) + (S.tier - 1) + S.renown;
     // landing spots far from the castle
     const far = this.shore.filter(s => dist(s.lx, s.ly, CASTLE.x + 2, CASTLE.y + 1) > 11);
@@ -1292,6 +1299,7 @@ export class Realm {
         b -= ENEMIES[k].cost;
       }
     }
+    if (!opts.units && this.court.leads(region)) queue.splice(Math.min(3, queue.length), 0, { type: this.court.nemesisUnit(), si: 0, nemesis: true });
     return { kind, region, level, spawns, queue, dir, gap: opts.gap, night: this.env.isNight };
   }
   showBoat(plan) {
@@ -1328,6 +1336,7 @@ export class Realm {
       if (Math.random() < 0.15 + R.level * 0.005) this.dropGear(R.level, { from: 'a raider' });
       this.chal.note('raid', { downs: R.downs || 0 });
       this.war.victory(this.home);
+      this.court.maybeNemesis(R.region);
       if (R.region && R.region.kingdomIsle) this.kingdoms.onRaidBeaten(this.sea.ocean.islandById(R.region.kingdomIsle));
     }
     if (R.onEnd) R.onEnd(won);
@@ -1345,6 +1354,7 @@ export class Realm {
     const lost = {};
     for (const r of ['gold', 'wood', 'meat']) { lost[r] = Math.floor(S.res[r] * 0.25); S.res[r] -= lost[r]; }
     S.stats.raidsLost++;
+    this.court.onRaidLost(R.region);
     for (const u of R.units) if (u.alive) { u.leaving = true; u.target = null; }
     this.sfx('defeat'); this.shake(10);
     this.ui.banner(`The ${this.seatName()} has fallen`, `Raiders plundered ${lost.gold} gold, ${lost.wood} wood and ${lost.meat} meat, then sailed off. The walls will mend.`, 'red');

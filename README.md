@@ -27,6 +27,12 @@ Import, and Wipe Realm to start over.
 
 ## How the game works
 
+**8.0, Dynasty, Court and Nemesis.**
+- **The throne room** (tap the castle): your ruling house, its council and your nemesis.
+- **Dynasty:** the ruler has two traits that help the whole realm and ages a year every four hours. Marry into a kingdom at peace with you (their regard rises, and the consort brings a trait of their own) and an heir is born. When the ruler dies the heir succeeds with a regnal number; with no heir, a cousin takes the throne in a succession crisis that costs renown and vassal loyalty.
+- **Council:** four seats (Steward, Marshal, Chancellor, Spymaster) for courtiers of skill 1 to 5. They boost gathering, soldiers, diplomacy and trade, or shrink raids, draw an hourly wage, and leave if unpaid.
+- **Nemesis:** when you beat off raiders of a rival house or a kingdom at war, a captain may escape and swear vengeance. He leads some of their raids in person, much stronger than his men, flees for his boat when badly hurt, and returns scarred and stronger if he gets away. Slay him for his war chest and a piece of gear.
+
 **7.0, Generals and Sea Battles.**
 - **Generals:** appoint veterans (level 6 and up) as generals with a doctrine: Vanguard (+damage, +speed), Bulwark (+health, +armour), Marksman (+ranged damage) or Warden (mends soldiers nearby in battle). Their aura lifts everyone fighting beside them, and grows as they rise from Captain to Commander to Marshal with each victory. A realm keeps more generals as it grows.
 - **War fleets against you:** kingdoms at war send fleets you can see sailing at your island and your colonies. A fleet that reaches your island lands an invasion; one that reaches a colony raids it.
