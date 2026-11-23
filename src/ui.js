@@ -24,8 +24,8 @@ import { COLONY_LEVELS } from './colonies.js';
 import { SPEED } from './sea.js';
 import { parseSeedWords, normalizeSeedWords } from './ocean.js';
 
-export const VERSION = '5.0';
-const NOTES_SEEN = '5.0'; // the what's-new notes below were last changed in 5.0
+export const VERSION = '6.0';
+const NOTES_SEEN = '6.0'; // the what's-new notes below were last changed in 6.0
 
 const $ = s => document.querySelector(s);
 const src = k => SHEETS[k] ? encodeURI(SHEETS[k].src) : '';
@@ -207,6 +207,12 @@ export class UI {
     if (!info.fresh && localStorage.getItem('tinyrealm.seen') !== NOTES_SEEN) {
       const div = document.createElement('div');
       div.innerHTML = `<p style="text-align:left;font-size:14px;line-height:1.4">
+        <b>6.0 Colonies and Trade Fleets</b><br>
+        Settle wild land, or any lair or ruin you have cleared: sail there and tap Found a colony. Two pawns stay behind as settlers.<br>
+        Colonies fill their stores every hour and grow from Outpost to Settlement to Town. A Town adds a trade boat.<br>
+        Bring the stores home with a trade boat, or load them aboard your fleet. Leave your crew as a garrison to guard against raids.<br>
+        Trade routes now reach your colonies and the harbours of kingdoms you have a pact or alliance with, and you can watch your boats sail on the sea.<br>
+        Trade, Colonies lists every colony you hold.<br><br>
         <b>5.0 Living Rivals</b><br>
         Every kingdom on the sea now has its own strength, temper and stance toward you: at war, at peace, in a truce, allied, or your vassal.<br>
         Watch their war fleets sail. Kingdoms seize each other's islands, and a taken island flies its conqueror's colours.<br>

@@ -27,6 +27,12 @@ Import, and Wipe Realm to start over.
 
 ## How the game works
 
+**6.0, Colonies and Trade Fleets.**
+- **Colonies:** settle wild land, cleared lairs and picked-over ruins. Each colony costs two pawns, fills its stores every hour with what its land yields (richer farther out), and grows from Outpost to Settlement to Town.
+- **Getting the goods home:** send a trade boat on a colony route, or load the stores aboard your fleet and sail home. A Town's wharf adds a trade boat.
+- **Garrisons:** leave a crew behind to guard a colony. Kingdoms at war with you raid colonies near their shores.
+- **Trade fleets:** routes to your colonies, free ports, and the harbours of kingdoms bound to you by a pact or an alliance. Boats sail visibly on the sea, and routes near enemy waters carry more risk.
+
 **5.0, Living Rivals.**
 - **Kingdoms that think:** every kingdom near your waters has its own strength, temper (warlike, greedy, cautious or pious) and stance toward you: war, peace, truce, alliance or vassal.
 - **A sea that moves:** war fleets sail between kingdoms, islands change hands and fly their conqueror's colours, and the world keeps turning while you are away.
