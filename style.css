@@ -434,3 +434,6 @@ html.standalone #game { height: var(--app-h); }
 .court-card { width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; }
 .court-card .sig { width: 40px; height: 40px; }
 .btn.off { filter: grayscale(1); opacity: .6; }
+.rel.own { background: #4a90c0; }
+.colcard .cost { margin: 2px 0; }
+.colcard .btn.small { margin-top: 4px; }

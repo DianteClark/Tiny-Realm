@@ -359,6 +359,14 @@ export class WorldMapRenderer {
     const m = this.anchor(s), fx = SX(m.ax), fy = SY(m.ay);
     const r = s.r * z;
     const relation = s.kind === 'home' ? 'own' : s.kind === 'kingdom' ? (opts.relations ? opts.relations(s.kingdom.id) : 'enemy') : null;
+    if (s.colony) { // one of your colonies: a cluster of houses that grows with it, on your own ring
+      const w = s.r * 1.1 * z, sc = w / 320, h = sc * 1.9, put = (k, dx, k2) => this.sprite(ctx, k, Math.round(fx + dx * h), fy, h * k2);
+      drawAllegiance(ctx, fx, fy - 2 * sc, w * 0.95, 'own', t);
+      if (s.colony === 1) put('b_House1', 0, 0.85);
+      else if (s.colony === 2) { put('b_House2', -60, 0.8); put('b_House1', 60, 0.8); }
+      else { put('b_House2', -96, 0.85); put('b_House1', 96, 0.85); put('b_House3', 0, 1.05); }
+      return;
+    }
     switch (s.kind) {
       case 'home': case 'kingdom': {
         const key = s.kind === 'home' || s.kingdom.color === 'blue' ? 'b_Castle' : `b${s.kingdom.color}_Castle`;
@@ -569,12 +577,13 @@ export class WorldMapRenderer {
     }
   }
   subtitle(s) {
+    if (s.colony) return ['', 'Your outpost', 'Your settlement', 'Your town'][s.colony];
     switch (s.kind) {
       case 'kingdom': return `${s.kingdom.name}  Lv ${s.level}`;
       case 'lair': return `${REGION_NAMES[s.region] || ''} ${s.boss ? 'stronghold' : 'lair'}  Lv ${s.level}`;
       case 'port': return 'Free port';
       case 'ruins': return `Ruins  Lv ${s.level}`;
-      case 'wild': return 'Unclaimed';
+      case 'wild': return s.colony ? ['', 'Your outpost', 'Your settlement', 'Your town'][s.colony] : 'Unclaimed';
       case 'abyss': return 'Endless depths';
       case 'story': return `Chapter ${s.chapter}`;
       case 'home': return 'Your realm';
@@ -602,7 +611,7 @@ export class WorldMapRenderer {
       if (m.flip) { ctx.save(); ctx.translate(Math.round(x) * 2, 0); ctx.scale(-1, 1); }
       this.sprite(ctx, 'boat', x, y + bob, sc, Math.floor(t * 8));
       if (m.flip) ctx.restore();
-      if (m.sigil) drawSigil(ctx, m.sigil, Math.round(x), Math.round(y - Math.max(14 * dpr, z * 52)), Math.max(10 * dpr, Math.round(z * 30)));
+      if (m.sigil && m.relation !== 'own') drawSigil(ctx, m.sigil, Math.round(x), Math.round(y - Math.max(14 * dpr, z * 52)), Math.max(10 * dpr, Math.round(z * 30)));
     } else if (m.kind === 'target') {
       this.sprite(ctx, 'cursorRing', x, y, Math.max(0.3 * dpr, z * 0.5), Math.floor(t * 10));
     } else {

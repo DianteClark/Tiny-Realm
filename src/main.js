@@ -246,6 +246,7 @@ function drawSea(t) {
     if (h && h.kind === 'home' && d < h.r) { const k = 1 - d / h.r; marks[0].x += h.r * 0.95 * k; marks[0].y += h.r * 0.35 * k; }
   }
   if (Z.W.dest) marks.push({ x: Z.W.dest.x, y: Z.W.dest.y, kind: 'target' });
+  for (const b of realm.trade.seaBoats()) if (Z.fog.isRevealed(b.x, b.y)) marks.push({ x: b.x, y: b.y, kind: 'fleet', flip: b.flip, relation: 'own' });
   for (const fl of Z.W.fleets || []) { if (!Z.fog.isRevealed(fl.x, fl.y)) continue; const a = Z.ocean.islandById(fl.from); if (a) marks.push({ x: fl.x, y: fl.y, kind: 'fleet', flip: fl.flip, sigil: a.kingdom.sigil, relation: Z.relation(a) }); }
   seaRenderer.draw(ctx, { x: cam.x, y: cam.y, z: cam.z * dpr }, Z.fog, {
     t, dpr, marks, selectedId: ui.seaSel ? ui.seaSel.id : null, homeTier: realm.state.tier, padTop: 132, padBottom: ui.seaCardH ? ui.seaCardH() : 180,

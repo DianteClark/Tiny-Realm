@@ -24,12 +24,28 @@ export function ports(R) {
   if (Z && Z.ocean && W) for (const id of Object.keys(W.seen || {})) {
     const is = Z.ocean.islandById(id); if (!is || is.kind !== 'port') continue;
     const d = Math.hypot(is.x, is.y), base = 60 + is.level * 22;
-    out.push({ key: 'wport:' + id, name: `${is.name} port`, sub: `A free port out at sea, ${Math.round(d)} leagues away`, mins: Math.max(5, Math.round(4 + d / 400)), risk: Math.min(0.3, 0.06 + is.level * 0.012), cargo: { gold: base + t * 25, wood: Math.round(base * 0.7), meat: Math.round(base * 0.5) } });
+    out.push({ key: 'wport:' + id, name: `${is.name} port`, sub: `A free port out at sea, ${Math.round(d)} leagues away`, mins: Math.max(5, Math.round(4 + d / 400)), risk: Math.min(0.3, 0.06 + is.level * 0.012), cargo: { gold: base + t * 25, wood: Math.round(base * 0.7), meat: Math.round(base * 0.5) }, x: is.x, y: is.y });
+  }
+  // your colonies: a boat carries the storehouse home (6.0)
+  if (R.colonies && Z && Z.ocean) for (const { id, is, c } of R.colonies.list()) {
+    const d = Math.hypot(is.x, is.y);
+    out.push({ key: 'col:' + id, name: `${is.name} ${['', 'outpost', 'settlement', 'town'][c.level]}`, sub: 'Your colony. The boat brings home whatever its stores hold', mins: Math.max(5, Math.round(4 + d / 450)), risk: 0.06, cargo: R.colonies.stores(id), colony: id, x: is.x, y: is.y });
+  }
+  // kingdoms that trade with you: a pact or an alliance opens their harbour (6.0)
+  if (R.kingdoms && Z && Z.ocean && W && W.k) for (const [id, k] of Object.entries(W.k)) {
+    if (!k.pact && k.stance !== 'ally') continue;
+    const is = Z.ocean.islandById(id); if (!is || !is.kingdom || R.kingdoms.stance(is) === 'war') continue;
+    const d = Math.hypot(is.x, is.y), base = 80 + is.level * 26, ally = k.stance === 'ally';
+    out.push({ key: 'kport:' + id, name: `${is.name} harbour`, sub: `${is.kingdom.name}, ${ally ? 'your ally' : 'bound to you by a trade pact'}`, mins: Math.max(6, Math.round(5 + d / 420)), risk: ally ? 0.04 : 0.07, cargo: { gold: Math.round(base * (ally ? 1.3 : 1.1)) + t * 30, wood: Math.round(base * 0.6), meat: Math.round(base * 0.6) }, x: is.x, y: is.y });
   }
   for (const r of RIVALS) {
     const st = S.rivals[r.key]; if (!st || !st.subjugated) continue;
     const rate = R.tributeRate(r.key);
     out.push({ key: 'vassal:' + r.key, name: `${r.name} harbour`, sub: `Your vassal, ${r.ruler}`, mins: 15, risk: 0.15, cargo: { gold: Math.round(rate.gold * 1.3), wood: Math.round(rate.wood * 1.3), meat: 40 + t * 25 } });
+  }
+  if (R.kingdoms && Z && Z.ocean) for (const p of out) if (p.x != null) {
+    const war = R.kingdoms.islands().some(k => R.kingdoms.stance(k) === 'war' && Math.hypot(k.x - p.x, k.y - p.y) < 800);
+    if (war) { p.risk = Math.min(0.4, p.risk + 0.1); p.sub += '. Enemy waters lie close by'; }
   }
   return out;
 }
@@ -37,7 +53,7 @@ export function ports(R) {
 export class Trade {
   constructor(realm) { this.R = realm; }
   get st() { const S = this.R.state; return S.trade || (S.trade = { slots: [] }); }
-  boats() { let n = 0; for (const b of this.R.home.buildings) if (b.type === 'market' && b.done && !b.ruined) n += levelEffects('market', b.level).boats; return n; }
+  boats() { let n = 0; for (const b of this.R.home.buildings) if (b.type === 'market' && b.done && !b.ruined) n += levelEffects('market', b.level).boats; if (n && this.R.colonies) n += this.R.colonies.list().filter(o => o.c.level >= 3).length; return n; } // a colony Town has a wharf of its own
   port(key) { return ports(this.R).find(p => p.key === key); }
   dock() {
     const R = this.R; if (this._dock && this._dockFor === R.home.map) return this._dock;
@@ -62,6 +78,7 @@ export class Trade {
   }
   deliver(slot, mult = 1, quiet) {
     const R = this.R, got = {};
+    if (slot.port && slot.port.startsWith('col:') && R.colonies && R.colonies.C[slot.port.slice(4)]) slot.cargo = R.colonies.empty(slot.port.slice(4));
     for (const k in slot.cargo) got[k] = R.addRes(k, Math.round(slot.cargo[k] * mult * (1 + R.decrees.fx('trade'))));
     R.state.stats.tradeTrips = (R.state.stats.tradeTrips || 0) + 1;
     if (!quiet) {
@@ -116,6 +133,19 @@ export class Trade {
       },
     });
     R.state.timers.raid = keep; // an ambush does not reset the usual raid clock
+  }
+  // boats on routes out at sea, for the sea chart
+  seaBoats(now = Date.now()) {
+    const out = [];
+    for (const s of this.st.slots) {
+      if (!s.port || !s.back || !s.leave) continue;
+      const p = this.port(s.port); if (!p || p.x == null) continue;
+      let k = (now - s.leave) / Math.max(1, s.back - s.leave); k = Math.max(0, Math.min(1, k));
+      const there = k < 0.5, f = there ? k * 2 : (1 - k) * 2, L = Math.hypot(p.x, p.y) || 1, ux = p.x / L, uy = p.y / L;
+      const sx = ux * 140, sy = uy * 140, ex = p.x - ux * 90, ey = p.y - uy * 90; // from off home's shore to off theirs
+      out.push({ x: sx + (ex - sx) * f, y: sy + (ey - sy) * f, flip: there ? p.x < 0 : p.x > 0 });
+    }
+    return out;
   }
   // boats are seen leaving and arriving near the dock
   visuals(now) {

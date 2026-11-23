@@ -30,6 +30,7 @@ export class Sea {
     if (is.kind === 'abyss') is.name = 'The Abyss';
     const key = this.W && this.W.houses && Object.keys(this.W.houses).find(k => this.W.houses[k] === is.id);
     if (this.R.kingdoms && is.kingdom && !key) this.R.kingdoms.dress(is);
+    if (this.R.colonies && this.W && this.W.colonies) this.R.colonies.dress(is);
     if (key && is.kingdom) { const rv = RIVALS.find(r => r.key === key); is.kingdom.name = rv.name; is.kingdom.color = key; is.kingdom.ruler = rv.ruler; is.kingdom.motto = rv.motto; is.house = key; }
   }
   // the four great houses sit on real islands: the nearest kingdom of their colour (stable once chosen)
@@ -75,7 +76,8 @@ export class Sea {
         f.x = d.x; f.y = d.y; W.dest = null;
         const is = this.ocean.islandById(d.id);
         this.fog.reveal(f.x, f.y, SIGHT);
-        if (is) { W.seen[is.id] = 1; if (is.kind === 'home' && W.crew.length) { this.disembark(); this.R.ui.toast('Home again. The crew comes ashore.', 'gold'); } this.R.ui.onFleetArrive && this.R.ui.onFleetArrive(is); }
+        if (is) { W.seen[is.id] = 1; if (is.kind === 'home' && W.crew.length) { this.disembark(); this.R.ui.toast('Home again. The crew comes ashore.', 'gold'); }
+          if (is.kind === 'home' && W.hold) { const h = W.hold; W.hold = null; const got = {}; for (const k in h) got[k] = this.R.addRes(k, h[k]); const txt = Object.entries(got).filter(([, v]) => v > 0).map(([k, v]) => v + ' ' + k).join(', '); this.R.ui.toast(txt ? `The fleet unloads colony stores: ${txt}.` : 'The fleet is home, but the stores are full.', 'gold'); this.R.sfx('coin'); } this.R.ui.onFleetArrive && this.R.ui.onFleetArrive(is); }
         else this.R.ui.toast('The fleet drops anchor in open water.');
         this.persist();
       } else { f.x += dx / L * step; f.y += dy / L * step; f.flip = dx < 0; }
@@ -106,6 +108,7 @@ export class Sea {
     const S = this.R.state, W = this.W;
     if (!is) return null;
     if (is.kind === 'home') return { act: 'home' };
+    if (W.colonies && W.colonies[is.id]) return { act: 'colony' };
     if (is.kind === 'story') {
       const i = is.chapter - 1, done = (S.story && S.story.done) || 0;
       if (i < done) return { act: 'none', note: 'The tale of this island is told.' };
@@ -116,7 +119,7 @@ export class Sea {
     }
     if (is.kind === 'abyss') return S.tier < 3 ? { act: 'none', note: 'The Abyss swallows small realms whole. Raise the Castle before you descend.' } : { act: 'land', mode: 'abyss', label: `Descend to floor ${(S.abyss && S.abyss.depth) || 1}` };
     if (is.kind === 'port') return { act: 'port' };
-    if (is.kind === 'wild') return { act: 'none', note: 'Nothing to fight and nothing to take. Settling new land comes in a later update.' };
+    if (is.kind === 'wild') return { act: 'settle' };
     if (is.kind === 'kingdom') {
       const h = this.houseOf(is);
       const st = this.R.kingdoms.stance(is);
@@ -130,7 +133,7 @@ export class Sea {
       if (st !== 'war') return { act: 'none', note: `You are ${st === 'ally' ? 'allied' : st === 'truce' ? 'in a truce' : 'at peace'} with ${is.kingdom.name}. Declare war from Diplomacy before you lay siege.` };
       return { act: 'land', mode: 'isle:' + is.id, label: 'Lay siege' };
     }
-    if (W.cleared[is.id]) return { act: 'none', note: is.kind === 'ruins' ? 'The ruins are picked clean.' : 'Cleared. The monsters have not come back yet.' };
+    if (W.cleared[is.id]) return { act: 'settle', note: is.kind === 'ruins' ? 'The ruins are picked clean. The land could be settled.' : 'Cleared. The land is free to settle.' };
     return { act: 'land', mode: 'isle:' + is.id, label: is.kind === 'ruins' ? 'Search the ruins' : 'Land and attack' };
   }
   // the parameters an island gives a voyage

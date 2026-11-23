@@ -20,6 +20,7 @@ import * as Legacy from './legacy.js';
 import { Squads, districtAt, DISTRICTS } from './squads.js';
 import { Sea } from './sea.js';
 import { Kingdoms } from './kingdoms.js';
+import { Colonies } from './colonies.js';
 import { seedFromWords, randomSeedWords } from './ocean.js';
 import { SHEETS } from './assets.js';
 import { audio } from './audio.js';
@@ -77,6 +78,7 @@ export class Realm {
     this.squads = new Squads(this);
     this.sea = new Sea(this);
     this.kingdoms = new Kingdoms(this);
+    this.colonies = new Colonies(this);
   }
 
   // ------------------------------------------------------------ persistence
@@ -1028,6 +1030,7 @@ export class Realm {
     for (const b of this.home.buildings) if (b.buildEnd && now >= b.buildEnd) report.done.push(BUILDINGS[b.type].name + ' completed');
     for (const b of this.home.buildings) for (const q of b.queue) if (now >= q.end) report.done.push(UNITS[q.unit].name + ' trained');
     if (S.upgradeEnd && now >= S.upgradeEnd) report.done.push(`Grew into a ${TIERS[Math.min(5, S.tier + 1)].name}`);
+    this.colonies.catchUp(secs);
     { const n = this.kingdoms.catchUp(secs); if (n > 0) report.done.push(n === 1 ? 'News came from across the sea' : `${n} tidings came from across the sea`); }
     { const tg = this.trade.catchUp(); for (const k in tg) report.got[k] += tg[k]; if (tg.gold + tg.wood + tg.meat > 0) report.done.push('Trade boats came and went'); }
     this.tickTimers(true);
@@ -1187,6 +1190,7 @@ export class Realm {
     this.needs.update(dt);
     this.sea.update(dt);
     this.kingdoms.update(dt);
+    this.colonies.update(dt);
     this.envoyT = (this.envoyT ?? 240 + Math.random() * 240) - dt;
     if (this.envoyT <= 0) { this.envoyT = 360 + Math.random() * 360; if (!this.exp && !(this.raid && this.raid.active) && this.state.tier >= 2 && this.ui && this.ui.envoy) { const e = this.kingdoms.envoy(); if (e) this.ui.envoy(e); } }
     this.trade.visuals(Date.now());

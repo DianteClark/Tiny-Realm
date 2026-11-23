@@ -20,6 +20,7 @@ import { COLORS, STANCES, DISTRICTS, districtAt } from './squads.js';
 import { minimapOn, setMinimap } from './minimap.js';
 import { sigilCanvas } from './heraldry.js';
 import { temperWord } from './kingdoms.js';
+import { COLONY_LEVELS } from './colonies.js';
 import { SPEED } from './sea.js';
 import { parseSeedWords, normalizeSeedWords } from './ocean.js';
 
@@ -704,18 +705,29 @@ export class UI {
     } else if (is) {
       const rel = is.kingdom ? Z.relation(is) : null, here = !sail && docked && docked.id === is.id;
       const d = Math.round(Math.hypot(is.x - W.fleet.x, is.y - W.fleet.y)), eta = time(d / SPEED);
-      const sub = is.kind === 'home' ? `The ${TIERS[S.tier].name.toLowerCase()} of your realm` : is.kind === 'kingdom' ? `${esc(is.kingdom.name)}, ${esc(is.kingdom.realm || '')}` : is.kind === 'lair' ? `${(REGION_NAMES[is.region] || 'Monsters')}${is.boss ? ', with a boss' : ''}` : is.kind === 'story' ? `The Drowned Crown, chapter ${is.chapter}` : { port: 'Trade routes, and rest for the crew', ruins: 'Old stones that may still hold treasure', abyss: 'Monsters from every shore, floor after floor', wild: 'Unclaimed land with good soil' }[is.kind] || this.kindLabel(is);
+      const sub = R.colonies.C[is.id] ? `Your ${COLONY_LEVELS[R.colonies.C[is.id].level].name.toLowerCase()}, founded ${ago(R.colonies.C[is.id].founded)}` : is.kind === 'home' ? `The ${TIERS[S.tier].name.toLowerCase()} of your realm` : is.kind === 'kingdom' ? `${esc(is.kingdom.name)}, ${esc(is.kingdom.realm || '')}` : is.kind === 'lair' ? `${(REGION_NAMES[is.region] || 'Monsters')}${is.boss ? ', with a boss' : ''}` : is.kind === 'story' ? `The Drowned Crown, chapter ${is.chapter}` : { port: 'Trade routes, and rest for the crew', ruins: 'Old stones that may still hold treasure', abyss: 'Monsters from every shore, floor after floor', wild: 'Unclaimed land with good soil' }[is.kind] || this.kindLabel(is);
       const L = Z.landing(is);
       let acts = '';
       if (here) {
         if (L.act === 'land') acts = crew.length ? `<button class="btn" data-sea="land">${esc(L.label)} (${crew.length})</button>` : `<button class="btn" disabled>${esc(L.label)}</button><p class="note">No crew aboard. Sail home and choose a crew.</p>`;
         else if (L.act === 'home') acts = `<button class="btn" data-sea="crew">Choose crew</button>${crew.length ? `<button class="btn red" data-sea="disembark">Disembark (${crew.length})</button>` : ''}`;
+        else if (L.act === 'settle') {
+          const Co = R.colonies, why = Co.canSettle(is);
+          acts = why ? `${L.note ? `<p class="note">${esc(L.note)}</p>` : ''}<p class="note">${esc(why)}</p>` : `<button class="btn" data-sea="settle">Found a colony</button>${this.costHtml(Co.cost())}<p class="note">Two pawns stay behind as settlers.</p>`;
+        }
+        else if (L.act === 'colony') {
+          const Co = R.colonies, c = Co.C[is.id], gar = Co.garrison(is.id).length, st = Co.stores(is.id), any = Object.values(st).some(v => v > 0), cap = TIERS[S.tier].squad;
+          acts = `<button class="btn" data-sea="load" ${any ? '' : 'disabled'}>Load the stores</button>`
+            + (crew.length && gar < 4 + c.level * 2 ? `<button class="btn" data-sea="garrison">Leave the crew as garrison</button>` : '')
+            + (gar && crew.length < cap ? `<button class="btn" data-sea="ungarrison">Take the garrison aboard (${gar})</button>` : '');
+        }
         else if (L.act === 'port') acts = `<button class="btn" data-sea="rest" ${crew.length ? '' : 'disabled'}>Rest the crew</button><button class="btn" data-sea="trade">Trade routes</button>`;
         else acts = `<p class="note">${esc(L.note)}</p>`;
       } else if ((is.kind !== 'home' || !Z.atHome()) && !(sail && sail.id === is.id)) acts = `<button class="btn" data-sea="go">${is.kind === 'home' ? 'Sail home' : 'Sail here'} (${eta})</button>`;
-      const relHtml = rel ? this.stanceTag(is) : '';
+      const relHtml = rel ? this.stanceTag(is) : R.colonies.C[is.id] ? '<span class="rel own">Your colony</span>' : '';
+      const colInfo = R.colonies.C[is.id] ? this.colonyLine(is.id) : '';
       if (is.kind === 'kingdom') acts += `<button class="btn" data-sea="court">Diplomacy</button>`;
-      html += `<div class="isle"><div class="isle-head"><div class="sig" data-sig></div><div class="grow"><h3>${esc(is.name)} ${relHtml}</h3><p>${sub}</p>${is.kind !== 'home' ? `<p class="muted">${this.kindLabel(is)} - ${is.kind === 'abyss' ? `floor ${(S.abyss && S.abyss.depth) || 1} awaits` : `level ${is.level}`} - ${esc(Z.ocean.ringOf(is.x, is.y).name)}${W.cleared[is.id] ? ' - cleared' : ''}</p>` : ''}</div><button class="tiny-btn red" data-sea="close" aria-label="Close"><i class="ic ic-x"></i></button></div>
+      html += `<div class="isle"><div class="isle-head"><div class="sig" data-sig></div><div class="grow"><h3>${esc(is.name)} ${relHtml}</h3><p>${sub}</p>${is.kind !== 'home' ? `<p class="muted">${this.kindLabel(is)} - ${is.kind === 'abyss' ? `floor ${(S.abyss && S.abyss.depth) || 1} awaits` : `level ${is.level}`} - ${esc(Z.ocean.ringOf(is.x, is.y).name)}${W.cleared[is.id] && !R.colonies.C[is.id] ? ' - cleared' : ''}</p>` : ''}${colInfo}</div><button class="tiny-btn red" data-sea="close" aria-label="Close"><i class="ic ic-x"></i></button></div>
         <div class="isle-acts">${acts}</div></div>`;
     }
     html += `<div class="sea-bar"><button class="btn small" data-sea="fleet">Fleet${crew.length ? ` (${crew.length})` : ''}</button><button class="btn small" data-sea="crewview">Crew</button><button class="btn small" data-sea="trade">Trade</button><button class="btn small" data-sea="homeview">Home</button></div>`;
@@ -737,6 +749,10 @@ export class UI {
     else if (a === 'fleet') this.view.seaFocus(Z.W.fleet.x, Z.W.fleet.y);
     else if (a === 'homeview') { this.closeSea(); return; }
     else if (a === 'trade') { this.closeSea(true); this.openPanel('voyage'); this.tab = 'trade'; this.renderPanel(); return; }
+    else if (a === 'settle' && is) { const e = R.colonies.settle(is); if (e) return this.toast(e, 'red'); this.banner('A colony is founded', `Settlers raise an outpost on ${is.name}. Its stores fill every hour: send a trade boat, or load them aboard your fleet.`, 'blue'); }
+    else if (a === 'load' && is) { const st = R.colonies.empty(is.id), W = Z.W; W.hold = W.hold || {}; for (const k in st) W.hold[k] = (W.hold[k] || 0) + st[k]; this.toast('The stores are loaded. They are unloaded when the fleet reaches home.', 'gold'); R.save(); }
+    else if (a === 'garrison' && is) { R.colonies.leaveGarrison(is.id, Z.crewRecs()); this.toast('The crew stays to guard the colony.', 'gold'); R.save(); }
+    else if (a === 'ungarrison' && is) { R.colonies.takeGarrison(is.id, TIERS[S.tier].squad); this.toast('The garrison comes aboard.', 'gold'); R.save(); }
     else if (a === 'court' && is) { const id = is.id; this.closeSea(true); this.openPanel('court', id); return; }
     else if (a === 'crew' || a === 'crewview') { this.closeSea(true); this.openPanel('crew'); return; }
     else if (a === 'disembark') { Z.disembark(); this.toast('The crew comes ashore.'); }
@@ -754,6 +770,22 @@ export class UI {
       return;
     }
     this.seaKey = null; this.renderSeaCard();
+  }
+  colonyLine(id) {
+    const Co = this.R.colonies, c = Co.C[id], r = Co.rate(id), st = Co.stores(id), gar = Co.garrison(id).length, Lv = COLONY_LEVELS[c.level];
+    const res = o => Object.entries(o).map(([k, v]) => `<span><i class="ic ic-${k}"></i>${fmt(v)}</span>`).join('');
+    return `<p class="muted">${Lv.name}${c.sackedUntil > Date.now() ? ', sacked: work resumes in ' + time((c.sackedUntil - Date.now()) / 1000) : ''}. Garrison: ${gar || 'none'}.</p><div class="cost"><span class="muted" style="font-size:12px">Per hour</span>${res(r)}</div><div class="cost"><span class="muted" style="font-size:12px">Stores</span>${res(st)}</div>`;
+  }
+  coloniesHtml() {
+    const R = this.R, S = R.state, Co = R.colonies, L = Co.list();
+    let html = `<p class="section-title">Colonies (${L.length} of ${Co.max()})</p>`;
+    if (!L.length) return html + `<p style="text-align:center;font-size:13px">Sail to wild land, or to a lair you have cleared, and found a colony there. ${S.tier < 2 ? 'Your hamlet must grow into a Village first.' : 'Each one costs two pawns as settlers.'}</p>`;
+    for (const { id, c, is } of L) {
+      const up = c.level < 3 ? `<button class="btn small" data-act="colup:${id}">Grow into a ${COLONY_LEVELS[c.level + 1].name}</button>${this.costHtml(Co.upCost(c))}` : '<p class="muted" style="font-size:12px">A Town, with a wharf that adds a trade boat.</p>';
+      const route = R.trade.st.slots.some(s => s.port === 'col:' + id);
+      html += `<div class="card light colcard"><div class="thumb"><img src="${src(['', 'b_House1', 'b_House2', 'b_House3'][c.level])}" alt=""></div><div class="grow"><h3>${esc(is.name)}</h3>${this.colonyLine(id)}<p class="muted" style="font-size:12px">${route ? 'A trade boat serves this colony.' : 'No trade boat serves it yet. Send one from Trade.'}</p>${up}</div><button class="btn small" data-act="tosea:${id}">Find</button></div>`;
+    }
+    return html + `<p class="muted" style="text-align:center;font-size:13px">Kingdoms at war with you may raid colonies near their shores. A garrison, or peace, keeps the stores safe.</p>`;
   }
   stanceTag(is) {
     const s = this.R.kingdoms.stance(is), cls = { war: 'enemy', truce: 'neutral', peace: 'neutral', ally: 'ally', vassal: 'ally' }[s];
@@ -917,7 +949,7 @@ export class UI {
     const xpPct = next ? Math.min(100, (rec.xp - prev) / (next - prev) * 100) : 100;
     const u = this.R.home.units.find(x => x.rec === rec && x.alive && !x.dead) || (this.R.exp && this.R.exp.units.find(x => x.rec === rec && x.alive));
     const hpPct = u ? u.hp / u.maxHp * 100 : 100;
-    const status = rec.status === 'away' ? (this.R.exp && this.R.exp.units.some(u => u.rec === rec) ? 'In battle' : 'Aboard the ship') : rec.status === 'wounded' ? `Wounded, ${time((rec.woundedUntil - Date.now()) / 1000)}` : 'At home';
+    const status = rec.status === 'away' ? (this.R.exp && this.R.exp.units.some(u => u.rec === rec) ? 'In battle' : 'Aboard the ship') : rec.status === 'garrison' ? `Guarding ${esc((this.R.sea.ocean.islandById(rec.colony) || { name: 'a colony' }).name)}` : rec.status === 'wounded' ? `Wounded, ${time((rec.woundedUntil - Date.now()) / 1000)}` : 'At home';
     return `<div class="card ${opts.pick ? 'light' : ''}" ${opts.pick ? `data-act="pick:${rec.id}"` : ''}>
       ${opts.pick ? `<button class="check ${this.squadPick.has(rec.id) ? 'on' : ''}"></button>` : ''}
       <div class="thumb"><img src="${src(rec.avatar)}" class="av" alt=""></div>
@@ -1036,8 +1068,9 @@ export class UI {
 
   panel_voyage() {
     const R = this.R, S = R.state;
-    this.setTabs(null); this.tab = 'trade';
-    return this.tradeHtml() + `<button class="btn wide" data-act="tosea">Back to the sea</button>`;
+    if (this.tab !== 'colonies') this.tab = 'trade';
+    this.setTabs([['trade', 'Trade'], ['colonies', 'Colonies']]);
+    return (this.tab === 'colonies' ? this.coloniesHtml() : this.tradeHtml()) + `<button class="btn wide" data-act="tosea">Back to the sea</button>`;
     if (R.raid && R.raid.active) return '<p class="section-title">You cannot sail while the realm is under attack.</p>';
     if (R.events.pending) return '<p class="section-title">A great threat approaches. Stay and defend.</p>';
     const home = S.soldiers.filter(s => s.status === 'home');
@@ -1473,6 +1506,7 @@ export class UI {
     if (k === 'embark') { R.sea.embark([...this.squadPick]); this.crewInit = false; this.squadPick.clear(); this.openSea(); return; }
     if (k === 'tosea') { this.openSea(); if (x) { const is = R.sea.ocean.islandById(a.slice(6)); if (is) { this.seaSel = is; this.view.seaFocus(is.x, is.y); this.seaKey = null; this.renderSeaCard(); } } return; }
     if (k === 'court') { this.openPanel('court', a.slice(6)); return; }
+    if (k === 'colup') { const e = R.colonies.upgrade(a.slice(6)); if (e) this.toast(e, 'red'); else { this.toast('The colony grows.', 'gold'); R.sfx && R.sfx('build'); } return this.refresh(); }
     if (k === 'dip') {
       const id = a.slice(5 + x.length), is = R.sea.ocean.islandById(id); if (!is) return;
       const go = () => { const r = R.kingdoms.act(is, x); if (typeof r === 'string') this.toast(r, 'red'); else { this.toast(r.ok, 'gold'); R.sfx && R.sfx('coin'); R.save(); } this.refresh(); };
