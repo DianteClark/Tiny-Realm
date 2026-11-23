@@ -87,10 +87,19 @@ Import, and Wipe Realm to start over.
   Midsummer War follow the real seasons, with tasks, a weekly boss and a shop.
 - **New Game+ (Legacy)**: from Stronghold, found a new realm. Legacy points
   give every future realm lasting bonuses, and one hero comes along.
+- **Town planning**: move any building with its level and queue intact, drag
+  buildings and wall lines into place, undo, decorations from the pack, and
+  neighbourhood bonuses for placing things well.
+- **Squads and districts**: named squads with banners and stances (Hold,
+  Defend, Chase) guard the district around their banner; raid landings are
+  marked and the right squads march to meet them; send a squad on a voyage in
+  one tap.
+- **Battle clarity**: red brackets on what your troops attack, dashed order
+  lines, a pennant where they are headed, and a minimap.
 - **Holy days and the moon**: Advent, Christmas, Epiphany, Palm Sunday, Good
   Friday, Easter, Ascension and Pentecost on the real calendar with verses;
   a full-moon Moonlit Hunt and a Night Market after dark.
-- **Feats and tutorial**: 46 achievements, and a guided first session.
+- **Feats and tutorial**: 49 achievements, and a guided first session.
 
 Controls: drag to pan, pinch or scroll to zoom. Tap a soldier (or All), then
 tap the ground to move or tap a foe to attack. Tap buildings to train and
@@ -110,6 +119,7 @@ upgrade.
   - `tutorial.js`: guided tutorial and Feats
   - `gear.js`, `challenges.js`, `needs.js`, `campaign.js`, `trade.js`: the 3.4 systems
   - `decrees.js`, `seasonal.js`, `legacy.js`: the 3.5 systems
+  - `squads.js`, `minimap.js`: the 3.6 systems
   - `calendar.js`: holy days, festivals and moon phases
   - `orders.js`: Day and Night Orders
   - `audio.js`: synthesized sound effects and procedural music

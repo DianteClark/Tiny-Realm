@@ -467,7 +467,11 @@ export class Scene {
         // attackers storm a walled capital: go for the gate, else the nearest palisade they can reach
         if (u.team === 0 && !(t.def && t.def.palisade) && this.structs.some(s => s.def.palisade)) {
           const pal = this.structs.filter(s => s.def.palisade && s.alive).sort((a, b) => (u.distTo(a) - (a.def.gate ? 3 * T : 0)) - (u.distTo(b) - (b.def.gate ? 3 * T : 0)));
-          for (const w of pal.slice(0, 5)) if (u.setPath(w.x, w.y - 10, this.adjacentGoal(w.cells))) { u.target = w; u.pathT = 0.6; return; }
+          for (const w of pal.slice(0, 5)) if (u.setPath(w.x, w.y - 10, this.adjacentGoal(w.cells))) {
+            u.target = w; u.pathT = 0.6;
+            if (u.order && u.order.type === 'attack') u.order = { type: 'attack', target: w, resume: u.order.resume || u.order.target }; // break through, then carry on
+            return;
+          }
         }
         u.giveUp = 2.5; u.target = null; u.stop(); return;
       }
@@ -497,6 +501,7 @@ export class Scene {
     }
     if (u.order && u.order.type === 'attack') {
       const t = u.order.target;
+      if (!t.alive && u.order.resume && u.order.resume.alive) { u.order = { type: 'attack', target: u.order.resume }; u.path = null; return; }
       if (!t.alive) { u.order = null; u.target = null; if (this.kind !== 'home') u.home = { x: u.x, y: u.y }; }
       else {
         // fight back against anyone in our face while battering a structure

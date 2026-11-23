@@ -19,7 +19,7 @@ import * as Legacy from './legacy.js';
 import { COLORS, STANCES, DISTRICTS, districtAt } from './squads.js';
 import { minimapOn, setMinimap } from './minimap.js';
 
-export const VERSION = '3.5';
+export const VERSION = '3.6';
 
 const $ = s => document.querySelector(s);
 const src = k => SHEETS[k] ? encodeURI(SHEETS[k].src) : '';
@@ -152,6 +152,12 @@ export class UI {
     if (!info.fresh && localStorage.getItem('tinyrealm.seen') !== VERSION) {
       const div = document.createElement('div');
       div.innerHTML = `<p style="text-align:left;font-size:14px;line-height:1.4">
+        <b>3.6</b><br>
+        Move any building: tap it, then Move. Drag buildings and walls into place, with Undo.<br>
+        Squads in Army: give each a banner and a stance, and it guards that district. Raid landings are marked, and the squads guarding there march to meet them.<br>
+        Red brackets show what your troops are attacking, and a flag shows where they are going.<br>
+        Decorations, neighbourhood bonuses, and a minimap in the corner.<br>
+        A new loading screen, cursors, progress bars over buildings, and many small fixes.<br><br>
         <b>3.5</b><br>
         Promotions: level 10 soldiers become Knights, Berserkers, Cavaliers or Elites, and grow to level 15.<br>
         The Abyss: an endless descent in the top-left of the sea chart. Press on or come home after every floor.<br>
