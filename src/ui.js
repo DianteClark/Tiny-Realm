@@ -21,7 +21,8 @@ import { minimapOn, setMinimap } from './minimap.js';
 import { sigilCanvas } from './heraldry.js';
 import { parseSeedWords, normalizeSeedWords } from './ocean.js';
 
-export const VERSION = '3.6';
+export const VERSION = '4.0';
+const NOTES_SEEN = '3.6'; // the what's-new notes below were last changed in 3.6; 4.0 is introduced by the 'A new age' dialog
 
 const $ = s => document.querySelector(s);
 const src = k => SHEETS[k] ? encodeURI(SHEETS[k].src) : '';
@@ -35,6 +36,7 @@ const ago = t => { const s = (Date.now() - t) / 1000; return s < 60 ? 'just now'
 const UNIT_AV = { pawn: 'av_h5', warrior: 'av_h1', archer: 'av_h3', lancer: 'av_h2', monk: 'av_h4', swordsman: 'av_swordsman1', berserker: 'av_berserker1', horseman: 'av_horseman1', catapult: 'av_catapult1', king: 'av_king1' };
 const REGION_NAMES = Object.fromEntries(REGIONS.map(r => [r.key, r.name]));
 const BLD_IMG = { lantern: 'fire1', wall: 'fence', gate: 'fence', castle: 'b_Castle', house: 'b_House1', barracks: 'b_Barracks', archery: 'b_Archery', monastery: 'b_Monastery', tower: 'b_Tower', tavern: 'b_Tavern', market: 'b_Market', chapel: 'b_Chapel', bush: 'bush1', rock: 'rock1', stump: 'stump1' };
+const cap1 = s => s && !/^x\d/.test(s) ? s[0].toUpperCase() + s.slice(1) : s; // "x1.35 damage" stays as it is
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 export class UI {
@@ -90,14 +92,14 @@ export class UI {
     // the same message again just bumps a counter and restarts its timer
     const same = [...this.toastsEl.children].find(t => t.dataset.text === text && !t.classList.contains('out'));
     if (same) {
-      const n = (+same.dataset.n || 1) + 1; same.dataset.n = n;
+      const n = (+same.dataset.n || 1) + 1; same.dataset.n = n; if (this.panel) same.classList.add('over');
       same.querySelector('.tn').textContent = 'x' + n;
       same.classList.remove('bump'); void same.offsetWidth; same.classList.add('bump');
       clearTimeout(same._t); same._t = setTimeout(() => this.dropToast(same), 3600);
       return;
     }
     const el = document.createElement('div');
-    el.className = 'toast paper-dark' + (kind ? ' ' + kind : '');
+    el.className = 'toast paper-dark' + (kind ? ' ' + kind : '') + (this.panel || kind === 'red' ? ' over' : '');
     el.dataset.text = text;
     el.innerHTML = `<span class="tt"></span><b class="tn"></b>`;
     el.firstChild.textContent = fixText(text);
@@ -107,17 +109,35 @@ export class UI {
     el._t = setTimeout(() => this.dropToast(el), 3600 + Math.min(2400, text.length * 25));
   }
   dropToast(el) { if (el.classList.contains('out')) return; el.classList.add('out'); setTimeout(() => el.remove(), 450); }
+  // a dialog, an open panel (unless it is a warning) or another banner holds a banner back until it is clear
+  bannerBlocked(color) { return !this.modalEl.classList.contains('hidden') || (this.panel && color !== 'red'); }
   banner(title, text, color = 'blue') {
-    // a dialog is up: hold the banner until it closes so the two never overlap
-    if (!this.modalEl.classList.contains('hidden')) { (this.bannerQueue = this.bannerQueue || []).push([title, text, color]); if (this.bannerQueue.length > 3) this.bannerQueue.shift(); return; }
+    const Q = this.bannerQueue = this.bannerQueue || [];
+    if (this.bannerBlocked(color) || (!this.bannerEl.classList.contains('hidden') && color !== 'red')) { Q.push([title, text, color]); if (Q.length > 4) Q.shift(); return; }
+    this.showBanner(title, text, color);
+  }
+  flushBanners() {
+    const Q = this.bannerQueue; if (!Q || !Q.length || !this.bannerEl.classList.contains('hidden')) return;
+    const i = Q.findIndex(q => !this.bannerBlocked(q[2])); if (i < 0) return;
+    const [t, x, c] = Q.splice(i, 1)[0]; this.showBanner(t, x, c);
+  }
+  hideBanner() { this.bannerEl.classList.add('hidden'); clearTimeout(this.bannerT); setTimeout(() => this.flushBanners(), 350); }
+  // a panel or dialog opening over a calm banner tucks it away to show again afterwards
+  stashBanner() {
+    const c = this.bannerCur; if (!c || this.bannerEl.classList.contains('hidden') || !this.bannerBlocked(c[2])) return;
+    this.bannerEl.classList.add('hidden'); clearTimeout(this.bannerT);
+    (this.bannerQueue = this.bannerQueue || []).unshift(c);
+  }
+  showBanner(title, text, color) {
+    this.bannerCur = [title, text, color];
     const b = this.bannerEl;
     b.querySelector('.banner-ribbon').innerHTML = `<div class="ribbon ${color === 'gold' ? 'yellow' : color}"><span>${esc(title)}</span></div>`;
     const p = b.querySelector('p'); p.textContent = fixText(text); p.className = 'paper';
     b.classList.remove('hidden');
     b.style.animation = 'none'; void b.offsetWidth; b.style.animation = '';
     clearTimeout(this.bannerT);
-    this.bannerT = setTimeout(() => b.classList.add('hidden'), 6500);
-    b.onclick = () => b.classList.add('hidden');
+    this.bannerT = setTimeout(() => this.hideBanner(), (this.bannerQueue && this.bannerQueue.length ? 4000 : 6500) + Math.min(2000, text.length * 15));
+    b.onclick = () => this.hideBanner();
   }
   choice(title, text, options) {
     if (!this.modalEl.classList.contains('hidden')) { this.modalQueue.push([title, text, options]); return; }
@@ -133,11 +153,12 @@ export class UI {
       btns.appendChild(b);
     }
     this.modalEl.classList.remove('hidden');
+    this.stashBanner();
   }
   closeModal() {
     this.modalEl.classList.add('hidden');
     if (this.modalQueue.length) { const [a, b, c] = this.modalQueue.shift(); setTimeout(() => this.choice(a, b, c), 150); }
-    else if (this.bannerQueue && this.bannerQueue.length) { const q = this.bannerQueue; this.bannerQueue = []; const last = q[q.length - 1]; setTimeout(() => { if (this.modalEl.classList.contains('hidden')) this.banner(...last); else this.bannerQueue.push(last); }, 250); }
+    else setTimeout(() => this.flushBanners(), 250);
   }
   confirm(title, text, ok, fn) { this.choice(title, text, [{ label: ok, cls: 'red', fn }, { label: 'Cancel' }]); }
   welcome(info) {
@@ -163,9 +184,13 @@ export class UI {
         ${Object.values(S.res).some(v => v >= R.storage()) ? '<p>Your stores are full. Grow the realm to hold more.</p>' : ''}`;
       this.choice('Welcome back', div, [{ label: 'To work' }]);
     }
-    if (!info.fresh && localStorage.getItem('tinyrealm.seen') !== VERSION) {
+    if (!info.fresh && localStorage.getItem('tinyrealm.seen') !== NOTES_SEEN) {
       const div = document.createElement('div');
       div.innerHTML = `<p style="text-align:left;font-size:14px;line-height:1.4">
+        <b>4.0</b><br>
+        Every realm begins as a hamlet with two heroes and grows into a Kingdom.<br>
+        Voyage opens the open sea: sail your fleet to islands, kingdoms, ports and ruins with a crew of your choosing.<br>
+        Every world grows from a seed you can keep and sail again.<br><br>
         <b>3.6</b><br>
         Move any building: tap it, then Move. Drag buildings and walls into place, with Undo.<br>
         Squads in Army: give each a banner and a stance, and it guards that district. Raid landings are marked, and the squads guarding there march to meet them.<br>
@@ -174,7 +199,7 @@ export class UI {
         A new loading screen, cursors, progress bars over buildings, and many small fixes.<br><br>
         <b>3.5</b><br>
         Promotions: level 10 soldiers become Knights, Berserkers, Cavaliers or Elites, and grow to level 15.<br>
-        The Abyss: an endless descent in the top-left of the sea chart. Press on or come home after every floor.<br>
+        The Abyss: an endless descent. Press on or come home after every floor.<br>
         Royal decrees: choose one law each week. Every law has a price.<br>
         Seasonal events: The Harvest Fair runs until December, then The Long Night. Tasks, a weekly boss and a season shop live in Chronicle, Season.<br>
         New Game+: once the Castle is raised, found a new realm. Your Legacy grows, and one hero sails with you.<br>
@@ -183,7 +208,7 @@ export class UI {
         Hero gear: weapons, armour and trinkets drop from voyages and great events. Equip them from Army.<br>
         Daily and weekly challenges with a streak: every 7th day in a row brings a legendary piece.<br>
         Tavern, Market and Chapel keep your people happy. Happy realms gather faster and grow on their own.<br>
-        The Drowned Crown: an eight chapter story along the bottom of the sea chart.<br>
+        The Drowned Crown: an eight chapter story across the sea.<br>
         Rival capitals now stand behind walls and a gate. Trade boats sail from your Market.<br><br>
         <b>3.3</b><br>
         When placing a building, every spot it can go is shaded green, and the ghost starts on the nearest good spot.
@@ -200,7 +225,7 @@ export class UI {
         Annexed land becomes a province with a lasting bonus. Grass changes colour with the seasons.<br>
         <b>3.0</b><br>
         Your island lives in a much bigger sea now. Conquer a boss island or a rival capital and its land sails over and slams into your coast. Coastal tiles stay clear of buildings to make room.<br>
-        Four rival houses now raid you. Conquer their capitals from the new sea chart in Voyage to make them pay tribute.<br>
+        Four rival houses now raid you. Conquer their capitals from Voyage to make them pay tribute.<br>
         Build walls and gates. Raiders must hack their way through.<br>
         Every soldier type has a special ability, and squads can march in formations. Expeditions have a 2x speed button.<br>
         Seasons, weather, and a day and night cycle.<br>
@@ -216,9 +241,9 @@ export class UI {
         Screen shake, hit flashes, damage numbers, a goal tracker, and smoother camera glide.<br>
         Islands rebuilt to follow the Tiny Swords tilemap rules: chunky coastlines, sea cliffs, two levels of high ground, and boats and clouds layered properly.${R.migrated ? '<br>Your island has been reshaped. Buildings were moved to the nearest solid ground.' : ''}</p>
         <p class="muted" style="font-size:12px">Sound starts after your first tap. Volume is in Settings.</p>`;
-      this.choice('Tiny Realm ' + VERSION, div, [{ label: 'Onward' }]);
+      this.choice("What's new", div, [{ label: 'Onward' }]);
     }
-    localStorage.setItem('tinyrealm.seen', VERSION);
+    localStorage.setItem('tinyrealm.seen', NOTES_SEEN);
     if (R.pendingDaily) {
       const d = R.pendingDaily; R.pendingDaily = null;
       const div = document.createElement('div');
@@ -715,6 +740,7 @@ export class UI {
     if (this.panel !== name) audio.play('open');
     this.panel = name; this.panelArg = arg; this.tab = null;
     this.panelEl.classList.remove('hidden');
+    this.stashBanner();
     document.querySelectorAll('.navbtn').forEach(b => b.classList.toggle('on', b.dataset.panel === name));
     this.renderPanel();
     this.body.scrollTop = 0;
@@ -723,6 +749,7 @@ export class UI {
     if (this.panel) { audio.play('close'); const el = this.panelEl; el.classList.add('closing'); clearTimeout(this.closeT); this.closeT = setTimeout(() => el.classList.remove('closing'), 190); }
     this.panel = null; this.live = [];
     this.panelEl.classList.add('hidden');
+    setTimeout(() => this.flushBanners(), 250);
     document.querySelectorAll('.navbtn').forEach(b => b.classList.remove('on'));
   }
   refresh() { if (this.panel) { const st = this.body.scrollTop; this.renderPanel(); this.body.scrollTop = st; } }
@@ -898,8 +925,10 @@ export class UI {
     }
     if (this.tab === 'relics') {
       const owned = Object.keys(RELICS).filter(k => S.relics[k]);
-      return `<p class="section-title">${owned.length} of ${Object.keys(RELICS).length} relics</p>` + Object.entries(RELICS).map(([k, r]) => `<div class="card ${S.relics[k] ? '' : 'light'}"><i class="ic ic-shield" style="${S.relics[k] ? '' : 'filter:grayscale(1);opacity:.5'}"></i>
-        <div class="grow"><h3>${S.relics[k] ? r.name : 'Unknown relic'}</h3><p>${S.relics[k] ? r.desc : 'Won from bosses, great events, bounties, and stranger places.'}</p></div></div>`).join('');
+      const unknown = Object.keys(RELICS).length - owned.length;
+      return `<p class="section-title">${owned.length} of ${Object.keys(RELICS).length} relics</p>` + owned.map(k => `<div class="card"><i class="ic ic-shield"></i>
+        <div class="grow"><h3>${RELICS[k].name}</h3><p>${RELICS[k].desc}</p></div></div>`).join('') +
+        (unknown ? `<div class="card light"><i class="ic ic-shield" style="filter:grayscale(1);opacity:.5"></i><div class="grow"><h3>${unknown} still unknown</h3><p>Won from bosses, great events, bounties, and stranger places.</p></div></div>` : '');
     }
     const list = [...S.soldiers].sort((a, b) => b.level - a.level || b.kills - a.kills);
     const pop = `<p class="section-title">${S.soldiers.length} soldier${S.soldiers.length === 1 ? '' : 's'} - room ${R.popUsed()}/${R.popCap()}</p>`;
@@ -1079,7 +1108,7 @@ export class UI {
       const moon = R.moon();
       const hols = upcomingHolidays(5).map(h => `<div class="card light"><div class="grow"><h3>${h.name}</h3><p>${h.date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}. ${esc(h.desc)}</p></div></div>`).join('');
       const moonHtml = `<div class="card"><div class="grow"><h3>${moon.name}</h3><p>${moon.full ? 'Full moon tonight: the Moonlit Hunt stirs.' : moon.dark ? "A thieves' moon: dark nights bring extra thieves." : `Full moon in about ${Math.round(((29.53 / 2) - moon.age + 29.53) % 29.53)} days.`}</p></div></div>`;
-      return `<div class="stat-grid">${rows.map(([a, b]) => `<span>${a}</span><span>${b}</span>`).join('')}</div><p class="section-title">The moon</p>${moonHtml}<p class="section-title">Holy days and festivals</p>${hols}<p class="section-title">Provinces</p>${provHtml}<p class="section-title">Rival houses</p>${rv}<p class="section-title">Legacy</p>${this.legacyHtml(true)}`;
+      return `<div class="stat-grid">${rows.map(([a, b]) => `<span>${a}</span><span>${b}</span>`).join('')}</div><p class="section-title">The moon</p>${moonHtml}<p class="section-title">Holy days and festivals</p>${hols}<p class="section-title">Provinces</p>${provHtml}<p class="section-title">Rival houses</p>${rv}${this.legacyHtml(true)}`;
     }
     if (this.tab === 'log') {
       if (!S.log.length) return '<p class="section-title">Your tale has yet to be told.</p>';
@@ -1094,9 +1123,9 @@ export class UI {
     return this.decreeHtml() + this.chalHtml() + orders + `<p class="section-title">Chronicle</p><div class="card"><i class="ic ic-info" style="width:40px;height:40px"></i><div class="grow"><h3>${esc(q.text)}</h3><p>${Math.min(v, q.n)} / ${q.n}</p><div class="xpbar"><i style="width:${pct}%"></i></div>
       <p style="margin-top:4px">Reward</p>${this.costHtml(q.reward).replace(/lack/g, '')}</div></div>
       ${(() => { const nx = nextChapter(S); if (nx < 0) return '<p class="section-title">The Drowned Crown</p><div class="card"><div class="grow"><p>Complete. The crown of the Sea Kings is yours.</p></div></div>'; const ch = CHAPTERS[nx];
-        return `<p class="section-title">The Drowned Crown</p><div class="card light"><div class="grow"><h3>Chapter ${nx + 1}: ${esc(ch.name)}</h3><p>${chapterOpen(S, nx) ? 'Ready. Find it along the bottom of the sea chart in Voyage.' : `Clear ${ch.need} frontier islands to reach it (${S.cleared} so far).`}</p><div class="xpbar"><i style="width:${nx / CHAPTERS.length * 100}%"></i></div></div></div>`; })()}
+        return `<p class="section-title">The Drowned Crown</p><div class="card light"><div class="grow"><h3>Chapter ${nx + 1}: ${esc(ch.name)}</h3><p>${chapterOpen(S, nx) ? `Ready. In Voyage, sail to the isle flying a gold banner marked ${nx + 1}.` : `Clear ${ch.need} islands at sea to reach it (${S.cleared} so far).`}</p><div class="xpbar"><i style="width:${nx / CHAPTERS.length * 100}%"></i></div></div></div>`; })()}
       <p class="section-title">Goals that never end</p>
-      <div class="card light"><div class="grow"><p>Push the frontier: island ${S.frontier} awaits. Every fifth island holds a boss and a relic.</p></div></div>
+      <div class="card light"><div class="grow"><p>Explore the sea: ${S.cleared} islands cleared so far. Lairs with a boss guard a relic.</p></div></div>
       <div class="card light"><div class="grow"><p>Grow the realm: ${S.tier < 5 ? 'next is a ' + TIERS[S.tier + 1].name + '.' : 'the Kingdom is crowned. Raise your Renown without limit.'}</p></div></div>
       <div class="card light"><div class="grow"><p>Relics found: ${relicsOwned} of ${Object.keys(RELICS).length}. Great events like the Troll Breakout hold the rarest.</p></div></div>`;
   }
@@ -1134,7 +1163,7 @@ export class UI {
       ${next ? `<div class="xpbar"><i style="width:${(L.points % 100)}%"></i></div>` : ''}<p class="muted">This realm is worth ${sc.total} points: ${sc.parts.map(p => `${p[0].toLowerCase()} ${p[1]}`).join(', ') || 'nothing yet'}.</p></div></div>`;
     html += Legacy.canFound(R) ? `<button class="btn wide" data-act="found">Found a new realm</button><p class="muted" style="text-align:center;font-size:12px">Bank this realm's points, choose a hero to sail with you, and begin again on a new island.</p>`
       : `<p style="text-align:center;font-size:13px">Raise the Castle to found a new realm and bank your Legacy.</p>`;
-    if (full) html = `<p class="section-title">This world</p><div class="card light"><div class="grow"><h3 class="seedw">${esc(R.sea.words())}</h3><p class="muted">Your world's seed. Paste it when you start a new realm to sail these same seas again.</p></div><button class="btn small" data-act="copyseed:${esc(R.sea.words())}">Copy</button></div>` + html;
+    if (full) html = `<p class="section-title">This world</p><div class="card light"><div class="grow"><h3 class="seedw">${esc(R.sea.words())}</h3><p class="muted">Your world's seed. Paste it when you start a new realm to sail these same seas again.</p></div><button class="btn small" data-act="copyseed:${esc(R.sea.words())}">Copy</button></div><p class="section-title">Legacy</p>` + html;
     if (full && L.realms.length) html += '<p class="section-title">Hall of Realms</p>' + L.realms.map((r, i) => `<div class="card light"><div class="grow"><h3>Realm ${L.realms.length - i}${r.seed ? ` <span class="seedw small">${esc(r.seed)}</span>` : ''}</h3><p>${r.days} days, ${(TIERS[r.tier] || TIERS[1]).name}${r.renown ? ` renown ${r.renown}` : ''}, ${r.cleared} islands, Abyss floor ${r.abyss}, ${r.chapters} story chapters. Worth ${r.points} points. Ended ${ago(r.ended)}.</p></div>${r.seed ? `<button class="btn small" data-act="copyseed:${esc(r.seed)}">Copy seed</button>` : ''}</div>`).join('');
     return html;
   }
@@ -1201,7 +1230,7 @@ export class UI {
         ${t.hired ? '' : `<button class="btn small" data-act="hire">Hire</button>`}</div>`;
     }
     if (b.done && !b.ruined && b.type === 'market') {
-      html += `<p class="section-title">Exchange</p>` + EXCHANGE.map(x => `<div class="card light"><div class="grow"><h3>${x.label}</h3><div class="cost">${Object.entries(x.give).map(([k, v]) => `<span><i class="ic ic-${k}"></i>${v}</span>`).join('')} for ${Object.entries(x.get).map(([k, v]) => `<span><i class="ic ic-${k}"></i>${v}</span>`).join('')}</div></div>
+      html += `<p class="section-title">Exchange</p>` + EXCHANGE.map(x => `<div class="card light"><div class="grow"><h3>${x.label}</h3><div class="cost">${Object.entries(x.give).map(([k, v]) => `<span><i class="ic ic-${k}"></i>${v}</span>`).join('')}<span class="for">for</span>${Object.entries(x.get).map(([k, v]) => `<span><i class="ic ic-${k}"></i>${v}</span>`).join('')}</div></div>
         <button class="btn small" data-act="xchg:${x.id}" ${R.canAfford(x.give) ? '' : 'disabled'}>Trade</button></div>`).join('') + `<p class="muted" style="text-align:center;font-size:13px">Trade boats sail from the Voyage panel.</p>`;
     }
     if (b.done && !b.ruined && b.type === 'chapel') {
@@ -1221,7 +1250,7 @@ export class UI {
       } else if (b.level < 5) {
         const block = R.upgradeBlock(b);
         const c = upgradeCost(b.type, b.level);
-        html += `<div class="card"><div class="grow"><h3>Upgrade to level ${b.level + 1}</h3><p>${describeLevel(b.type, b.level + 1)}. Also +30% health. Takes ${time(upgradeTime(b.type, b.level))}.</p>${this.costHtml(c)}${block && block.tierCap ? `<p class="warn">${block.msg}</p>` : ''}</div>
+        html += `<div class="card"><div class="grow"><h3>Upgrade to level ${b.level + 1}</h3><p>${cap1(describeLevel(b.type, b.level + 1))}. Also +30% health. Takes ${time(upgradeTime(b.type, b.level))}.</p>${this.costHtml(c)}${block && block.tierCap ? `<p class="warn">${block.msg}</p>` : ''}</div>
           <button class="btn small" data-act="bup:${b.id}" ${block ? 'disabled' : ''}>Upgrade</button></div>`;
       }
     }

@@ -384,8 +384,8 @@ body.sea #toasts { bottom: calc(var(--safe-bot) + 250px); }
 body.exp #toasts { bottom: calc(var(--safe-bot) + 178px); }
 body.exp #hud:has(#abilitybar:not(.hidden)) #toasts { bottom: calc(var(--safe-bot) + 226px); }
 body.exp #minimap { top: calc(var(--safe-top) + 116px); }
-/* on phones the banner sits under the minimap rather than over it */
-@media (max-width: 699px) { #hud:has(#minimap:not(.hidden)) #banner { top: calc(var(--safe-top) + 196px); } }
+/* while a banner is up the corner notices, minimap and squad flags step aside on phones */
+@media (max-width: 699px) { #hud:has(#banner:not(.hidden)) #pills, #hud:has(#banner:not(.hidden)) #minimap, #hud:has(#banner:not(.hidden)) #squadBtns { visibility: hidden; } }
 #banner { z-index: 4; }
 .exp-info span { display: flex; gap: 12px; }
 /* sea card */
@@ -393,3 +393,8 @@ body.exp #minimap { top: calc(var(--safe-top) + 116px); }
 .isle-head h3 { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 4px; }
 .isle-head .rel { margin-left: 2px; vertical-align: 0; }
 .sea-bar .btn.small { min-height: 40px; }
+#toasts { z-index: 3; }
+#hud:has(#panel:not(.hidden)) .toast:not(.over) { visibility: hidden; }
+.cost { align-items: center; } .cost .for { font-size: 12px; opacity: .7; }
+#hud:has(#banner:not(.hidden)) #seaTop { visibility: hidden; }
+@media (min-width: 700px) { #statusbar { width: 560px; align-self: center; } }
