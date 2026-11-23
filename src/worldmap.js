@@ -345,7 +345,7 @@ export class WorldMapRenderer {
     if (fog) this.drawFog(ctx, cam, fog, W, H, t, c0, c1, r0, r1);
 
     // ring names, labels, marks, selection
-    this.drawRings(ctx, cam, W, H, dpr, true);
+    this.drawRings(ctx, cam, W, H, dpr, true, vis, opts);
     if (opts.selectedId) {
       const s = vis.find(v => v.id === opts.selectedId);
       if (s) this.drawSelection(ctx, s, SX, SY, z, t, dpr);
@@ -443,7 +443,7 @@ export class WorldMapRenderer {
   }
 
   // ---------- rings ----------
-  drawRings(ctx, cam, W, H, dpr, labels) {
+  drawRings(ctx, cam, W, H, dpr, labels, vis = [], opts = {}) {
     const z = cam.z, ox = -cam.x * z, oy = -cam.y * z;
     // distance range of the view from the home centre
     const nx = Math.max(cam.x, Math.min(cam.x + W / z, 0)), ny = Math.max(cam.y, Math.min(cam.y + H / z, 0));
@@ -464,10 +464,20 @@ export class WorldMapRenderer {
         ctx.beginPath(); ctx.arc(Math.round(ox), Math.round(oy), pr, 0, Math.PI * 2); ctx.stroke();
         ctx.restore();
       } else {
-        // names where the circle crosses the top of the chart: inner ring below the line, outer above
-        const tx = Math.round(ox), ty = Math.round(oy - pr);
-        if (tx < -200 * dpr || tx > W + 200 * dpr || ty < -30 * dpr || ty > H + 30 * dpr) continue;
-        const nxt = ringInfo(i + 1);
+        // names where the circle crosses the chart, inner ring below the line and outer above; the first
+        // spot along the circle that is on screen, clear of the HUD and clear of every island and its label
+        const nxt = ringInfo(i + 1), hw = Math.round(64 * dpr), top = (opts.padTop || 0) * dpr, bot = H - (opts.padBottom || 0) * dpr;
+        const boxes = vis.filter(v => v.r * z >= 12 * dpr).map(v => { const vx = (v.x - cam.x) * z, vy = (v.y - cam.y) * z, vr = Math.max(v.r * z, 8 * dpr); const lab = vr >= 26 * dpr, hx = lab ? Math.max(vr, 40 * dpr) : vr; return [vx - hx, vy - vr * 1.4, vx + hx, vy + vr + (lab ? 30 * dpr : 0)]; });
+        let spot = null;
+        for (const deg of [-90, -75, -105, -60, -120, -45, -135, -30, -150, 0, 180, 90, 60, 120]) {
+          const a = deg * Math.PI / 180, tx = Math.round(ox + Math.cos(a) * pr), ty = Math.round(oy + Math.sin(a) * pr);
+          const r0 = [tx - hw, ty - 20 * dpr, tx + hw, ty + 20 * dpr];
+          if (r0[0] < 4 * dpr || r0[2] > W - 4 * dpr || r0[1] < top || r0[3] > bot) continue;
+          if (boxes.some(b => b[0] < r0[2] && b[2] > r0[0] && b[1] < r0[3] && b[3] > r0[1])) continue;
+          spot = [tx, ty]; break;
+        }
+        if (!spot) continue;
+        const [tx, ty] = spot;
         this.text(ctx, R.name.toUpperCase(), tx, ty + Math.round(16 * dpr), Math.round(10 * dpr), 'rgba(255,248,220,0.75)', dpr);
         this.text(ctx, nxt.name.toUpperCase(), tx, ty - Math.round(7 * dpr), Math.round(10 * dpr), nxt.color, dpr);
       }

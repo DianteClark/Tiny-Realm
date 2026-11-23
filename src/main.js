@@ -247,7 +247,7 @@ function drawSea(t) {
   }
   if (Z.W.dest) marks.push({ x: Z.W.dest.x, y: Z.W.dest.y, kind: 'target' });
   seaRenderer.draw(ctx, { x: cam.x, y: cam.y, z: cam.z * dpr }, Z.fog, {
-    t, dpr, marks, selectedId: ui.seaSel ? ui.seaSel.id : null, homeTier: realm.state.tier,
+    t, dpr, marks, selectedId: ui.seaSel ? ui.seaSel.id : null, homeTier: realm.state.tier, padTop: 132, padBottom: ui.seaCardH ? ui.seaCardH() : 180,
     relations: kid => { const is = Z.ocean.islandById(String(kid).replace(/^k/, '')); return Z.relation(is); },
   });
   seaT -= 1 / 60; if (seaT <= 0) { seaT = 0.5; ui.renderSeaCard(); }

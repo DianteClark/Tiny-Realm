@@ -525,7 +525,7 @@ export class UI {
       $('#placebar').classList.remove('hidden'); $('#placeText').textContent = BUILDINGS[type].name;
       $('#bottombar').classList.add('hidden');
       this.R.scene.selected.clear(); this.refreshSel();
-      this.toast(BUILDINGS[type].decor ? 'Tap or drag to a spot, then Build here. You can place several.' : type === 'wall' ? 'Drag along the ground to lay a wall, or tap its two ends.' : type === 'lantern' ? 'Tap a spot near your woodcutters and miners.' : 'Tap a spot, or an existing wall to turn it into a gate.');
+      this.toast(BUILDINGS[type].decor ? 'Tap or drag to a spot, then Build here. You can place several.' : type === 'wall' ? 'Drag along the ground to lay a wall, or tap its two ends.' : type === 'lantern' ? 'Tap a spot near your woodcutters and miners.' : 'Tap a spot, or an existing wall to turn it into a gate.', 'hint');
       return;
     }
     const c = this.view.centerCell();
@@ -534,7 +534,7 @@ export class UI {
     $('#placeText').textContent = BUILDINGS[type].name;
     $('#bottombar').classList.add('hidden');
     this.R.scene.selected.clear(); this.refreshSel();
-    this.toast('Drag the building where you want it, or tap a spot. Green tiles are free.');
+    this.toast('Drag the building where you want it, or tap a spot. Green tiles are free.', 'hint');
   }
   startMove(b) {
     this.closePanel();
@@ -546,7 +546,7 @@ export class UI {
     $('#bottombar').classList.add('hidden');
     this.R.scene.selected.clear(); this.refreshSel();
     this.R.sfx('build');
-    this.toast('Drag it to its new home. Green tiles are free.');
+    this.toast('Drag it to its new home. Green tiles are free.', 'hint');
   }
   // a few seconds to take back the last placement or move
   offerUndo(u) {
@@ -608,13 +608,14 @@ export class UI {
     this.cancelPlace();
     if (nb && nb.type === p.type) this.offerUndo({ kind: 'place', b: nb });
   }
-  endBanner() { this.bannerFor = null; $('#placebar').classList.add('hidden'); $('#btnPlaceOk').classList.remove('hidden'); if (!this.R.exp) $('#bottombar').classList.remove('hidden'); }
+  dropHints() { for (const t of this.toastsEl.querySelectorAll('.toast.hint')) this.dropToast(t); }
+  endBanner() { this.dropHints(); this.bannerFor = null; $('#placebar').classList.add('hidden'); $('#btnPlaceOk').classList.remove('hidden'); if (!this.R.exp) $('#bottombar').classList.remove('hidden'); }
   cancelPlace() {
     if (this.bannerFor) return this.endBanner();
     const p = this.place;
     $('#btnPlaceOk').textContent = 'Build here';
     if (p && p.move && !this.R.home.buildings.includes(p.move)) this.R.dropBuilding(p.move, p.from[0], p.from[1], true); // put it back
-    this.place = null;
+    this.place = null; this.dropHints();
     $('#placebar').classList.add('hidden');
     if (!this.R.exp) $('#bottombar').classList.remove('hidden');
   }
@@ -648,6 +649,7 @@ export class UI {
     this.toast(`The fleet reaches ${is.name}.`, 'gold');
     if (this.seaOpen) { this.seaSel = is; this.seaKey = null; this.renderSeaCard(); }
   }
+  seaCardH() { return this.seaCardPx || 180; } // keeps ring names clear of the island card (measured twice a second)
   kindLabel(is) { return { home: 'Your island', kingdom: 'Kingdom', lair: 'Monster lair', ruins: 'Ruins', port: 'Free port', wild: 'Wild land', abyss: 'The Abyss', story: 'Story isle' }[is.kind] || ''; }
   renderSeaCard() {
     const R = this.R, S = R.state, Z = R.sea, W = Z.W, el = $('#seaCard'), top = $('#seaTop');
@@ -677,7 +679,7 @@ export class UI {
     }
     html += `<div class="sea-bar"><button class="btn small" data-sea="fleet">Fleet${crew.length ? ` (${crew.length} aboard)` : ''}</button><button class="btn small" data-sea="crewview">Crew</button><button class="btn small" data-sea="trade">Trade</button><button class="btn small" data-sea="homeview">Home</button></div>`;
     const key = html + (is ? is.id : '');
-    if (key === this.seaKey) return; this.seaKey = key;
+    if (key === this.seaKey) { this.seaCardPx = window.innerHeight - el.getBoundingClientRect().top + 8; return; } this.seaKey = key;
     el.innerHTML = html; el.classList.remove('hidden');
     const sig = el.querySelector('[data-sig]');
     if (sig) {
@@ -1357,7 +1359,7 @@ export class UI {
       this.closePanel(); this.bannerFor = q;
       $('#placebar').classList.remove('hidden'); $('#placeText').textContent = q.name + ' banner'; $('#btnPlaceOk').classList.add('hidden'); $('#bottombar').classList.add('hidden');
       if (q.banner) this.view.centerOn(q.banner.cx * T + 32, q.banner.cy * T);
-      this.toast('Tap where the banner should stand. The squad will guard that district.');
+      this.toast('Tap where the banner should stand. The squad will guard that district.', 'hint');
       return;
     }
     if (k === 'sqpick') {

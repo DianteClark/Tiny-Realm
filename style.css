@@ -398,3 +398,6 @@ body.exp #minimap { top: calc(var(--safe-top) + 116px); }
 .cost { align-items: center; } .cost .for { font-size: 12px; opacity: .7; }
 #hud:has(#banner:not(.hidden)) #seaTop { visibility: hidden; }
 @media (min-width: 700px) { #statusbar { width: 560px; align-self: center; } }
+/* Undo steps up above the selection bar, and toasts above both */
+#hud:has(#selbar:not(.hidden)) #undoBtn { bottom: calc(var(--safe-bot) + 156px); }
+#hud:has(#selbar:not(.hidden)):has(#undoBtn:not(.hidden)) #toasts { bottom: calc(var(--safe-bot) + 206px); }
