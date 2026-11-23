@@ -54,7 +54,7 @@ export class Kingdoms {
   }
   news(text, loud) {
     const W = this.W; W.news = W.news || []; W.news.unshift({ t: Date.now(), text }); W.news.length = Math.min(W.news.length, 40);
-    this.R.log(text);
+    this.R.log(text, loud ? 'world' : null);
     if (loud && this.R.ui) this.R.ui.toast(text, 'gold');
   }
   // ---- the world turns
@@ -211,6 +211,7 @@ export class Kingdoms {
       if (s !== 'peace') return 'Make peace first.';
       if (k.rel < 50) return `${name} will not ally with a realm it barely trusts. Their regard must be warm.`;
       k.stance = 'ally'; R.state.stats.alliances = (R.state.stats.alliances || 0) + 1;
+      R.saga && R.saga.add('alliance', `An alliance was sworn with ${name}.`);
       return { ok: `${name} swears an alliance. They will send gifts, and their fleets will not trouble you.` };
     }
     if (what === 'demand') {
@@ -229,6 +230,7 @@ export class Kingdoms {
       k.stance = 'war'; k.until = 0; k.pact = false; k.rel = Math.min(k.rel, -50);
       if (this.houseKey(is)) R.state.rivals[this.houseKey(is)].truceUntil = 0;
       if (broke) { for (const o of this.islands()) if (o !== is) { const q = this.st(o); q.rel = Math.max(-100, q.rel - 10); } this.news(`You broke faith with ${name}. Every court on the sea has heard of it.`); }
+      R.saga && R.saga.add('war', `War was declared on ${name}${broke ? ', and faith was broken' : ''}.`);
       return { ok: `You declare war on ${name}.${broke ? ' Breaking your word has cost you the trust of every kingdom.' : ''}` };
     }
     return 'Nothing happens.';

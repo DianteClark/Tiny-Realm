@@ -40,7 +40,7 @@ export class Warfare {
     if (!DOCTRINES[doctrine]) return 'Choose a doctrine.';
     if (!this.R.pay(this.appointCost())) return 'Not enough gold.';
     rec.general = doctrine; rec.command = rec.command || 0;
-    this.R.log(`${rec.name} was made a general, of the ${DOCTRINES[doctrine].name} school.`);
+    this.R.log(`${rec.name} was made a general, of the ${DOCTRINES[doctrine].name} school.`, 'general');
     this.restat(); this.R.save(); return null;
   }
   dismiss(rec) { rec.general = null; this.restat(); this.R.save(); }
@@ -129,7 +129,7 @@ export class Warfare {
       for (const r of crew) this.recXp(r, 30);
       for (const r of crew) if (r.general) this.addCommand(r);
       this.S.stats.seaWins = (this.S.stats.seaWins || 0) + 1;
-      K.news(`Your fleet sank a war fleet of ${name} at sea.`);
+      K.news(`Your fleet sank a war fleet of ${name} at sea.`); if ((this.S.stats.seaWins || 0) <= 1 || (crew.some(r => r.type === 'king'))) this.R.saga.add('sea', `Your fleet sank a war fleet of ${name} at sea.`);
     } else {
       const n = Math.max(1, Math.round(crew.length * (0.4 - this.ship().hull * 0.06)));
       const pool = crew.sort(() => Math.random() - 0.5).slice(0, n); // the King is carried off wounded like anyone else

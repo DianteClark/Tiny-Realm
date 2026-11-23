@@ -54,7 +54,7 @@ export class Colonies {
     this.C[is.id] = { level: 1, at: Date.now(), founded: Date.now(), store: {}, garrison: [] };
     S.stats.colonies = (S.stats.colonies || 0) + 1;
     this.dress(is);
-    R.log(`Settlers founded an outpost on ${is.name}.`);
+    R.log(`Settlers founded an outpost on ${is.name}.`, 'colony');
     R.sfx && R.sfx('build');
     R.save();
     return null;
@@ -65,7 +65,7 @@ export class Colonies {
     if (c.level === 2 && R.state.tier < 4) return 'Raise your realm to a Stronghold before a colony can become a Town.';
     if (!R.pay(this.upCost(c))) return 'Not enough wood, gold and meat.';
     this.collect(id); c.level++; this.dress(R.sea.ocean.islandById(id));
-    R.log(`${R.sea.ocean.islandById(id).name} grew into a ${COLONY_LEVELS[c.level].name}.`); R.save();
+    R.log(`${R.sea.ocean.islandById(id).name} grew into a ${COLONY_LEVELS[c.level].name}.`, c.level >= 3 ? 'colony' : null); R.save();
     return null;
   }
   dress(is) { if (!is) return; const c = this.C[is.id]; is.colony = c ? c.level : 0; }

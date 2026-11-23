@@ -69,7 +69,7 @@ export class Court {
     const k = K.st(is); k.rel = Math.min(100, k.rel + 30); if (k.stance === 'peace' && k.rel >= 50) k.stance = 'ally';
     D.childAt = Date.now() + (0.5 + Math.random()) * YEAR;
     this.changed();
-    this.R.log(`${this.regnal(D.ruler)} wed ${D.spouse.name} of ${is.kingdom.name}.`);
+    this.R.log(`${this.regnal(D.ruler)} wed ${D.spouse.name} of ${is.kingdom.name}.`, 'marriage');
     K.news(`Your ruler wed ${D.spouse.name} of ${is.kingdom.name}. The two houses are bound.`);
     this.R.save(); return null;
   }
@@ -89,7 +89,7 @@ export class Court {
       if (K) for (const id of Object.keys(S.world.conquered || {})) { const is = this.R.sea.ocean.islandById(id); if (is) K.st(is).loyalty -= 30; }
       this.R.ui.banner('A succession crisis', `${this.regnal(old)} died with no heir. A cousin, ${who}, takes the throne, but the vassals grumble and some renown is lost.`, 'red');
     } else this.R.ui.banner('The ruler is dead. Long live the ruler', `${this.regnal(old)} has died (${cause}). ${who} takes the throne.`, 'gold');
-    this.R.log(`${this.regnal(old)} died, ${cause}. ${who} rules now.`);
+    this.R.log(`${this.regnal(old)} died, ${cause}. ${who} rules now.`, 'succession');
     // the crowned soldier's name follows the throne
     const king = S.soldiers.find(s => s.type === 'king'); if (king) king.name = 'King ' + who;
     this.changed(); this.R.save();
@@ -149,7 +149,7 @@ export class Court {
     S.nemesis = { name: pick(FIRST_NAMES), epithet: pick(['the Grim', 'Blackhand', 'the Cruel', 'Ironjaw', 'the Wolf', 'Redaxe']), color, rival: key, isle: region.kingdomIsle || null, house, level: 1, scars: 0, met: 1, wins: 0, status: 'active', since: Date.now() };
     const N = S.nemesis;
     this.R.ui.banner('A nemesis rises', `${this.nemesisName(N)}, a captain of ${house}, escaped the field and swore to return. They will lead their raids in person, and grow stronger each time they get away.`, 'red');
-    this.R.log(`${this.nemesisName(N)} of ${house} swore vengeance on your realm.`);
+    this.R.log(`${this.nemesisName(N)} of ${house} swore vengeance on your realm.`, 'nemesis');
   }
   // does this raid belong to him? if so he leads it
   // is his house still at war with you?
@@ -198,14 +198,14 @@ export class Court {
     const gold = this.R.addRes('gold', 300 + N.level * 150);
     this.R.dropGear && this.R.dropGear(4 + N.level * 2, { from: this.nemesisName(N) });
     this.R.ui.banner('Your nemesis is slain', `${this.nemesisName(N)} will trouble you no more. Their war chest held ${gold} gold.`, 'gold');
-    this.R.log(`${this.nemesisName(N)}, your nemesis, was slain after ${N.met} meetings.`);
+    this.R.log(`${this.nemesisName(N)}, your nemesis, was slain after ${N.met} meetings.`, 'nemesis');
     this.R.kingdoms && this.R.kingdoms.news(`${this.nemesisName(N)} of ${N.house} fell in battle against your realm.`);
   }
   nemesisEscaped() {
     const N = this.N; if (!N || N.status !== 'active') return; N.onField = false;
     N.level = Math.min(6, N.level + 1); N.scars++; N.epithet = EPI[Math.min(EPI.length - 1, N.scars - 1)];
     this.R.ui.banner('Your nemesis got away', `${N.name} escaped to the boats, and will be back as ${this.nemesisName(N)}, stronger than before.`, 'red');
-    this.R.log(`${N.name} escaped, and is now called ${this.nemesisName(N)}.`);
+    this.R.log(`${N.name} escaped, and is now called ${this.nemesisName(N)}.`, 'nemesis');
   }
   onRaidLost(region) { const N = this.N; if (this.leads(region)) { N.level = Math.min(6, N.level + 1); N.wins++; this.R.log(`${this.nemesisName(N)} grows bolder after beating you.`); } }
   // ---------------------------------------------------------------- the slow clock
@@ -218,7 +218,7 @@ export class Court {
     if (D.spouse && !D.heir && D.childAt && now > D.childAt) {
       D.heir = this.person(pick(FIRST_NAMES), 0, 2, [pick(D.ruler.traits), D.spouse.trait]); D.heir.born = D.childAt; D.childAt = 0;
       this.R.ui.banner('An heir is born', `${D.spouse.name} has given birth to ${D.heir.name}, heir to the throne.`, 'gold');
-      this.R.log(`${D.heir.name} was born, heir to ${D.house}.`); this.R.save();
+      this.R.log(`${D.heir.name} was born, heir to ${D.house}.`, 'birth'); this.R.save();
     }
     if (this.age(D.ruler) >= D.ruler.dies && !this.R.exp && !(this.R.raid && this.R.raid.active)) this.succeed('of old age');
   }

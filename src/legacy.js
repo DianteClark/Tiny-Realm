@@ -35,7 +35,7 @@ export const canFound = R => R.state.tier >= 3;
 // wiping starts over completely, but the realm (and its seed) is still remembered in the Hall
 export function recordWipe(R) {
   const S = R.state, L = loadLegacy();
-  L.realms.unshift({ seed: R.sea && R.sea.ocean ? R.sea.words() : null, ended: Date.now(), days: Math.floor((Date.now() - S.created) / 86400000) + 1, tier: S.tier, renown: S.renown, cleared: S.cleared, abyss: (S.abyss && S.abyss.best) || 0, chapters: (S.story && S.story.done) || 0, points: 0, wiped: true });
+  L.realms.unshift({ seed: R.sea && R.sea.ocean ? R.sea.words() : null, ended: Date.now(), days: Math.floor((Date.now() - S.created) / 86400000) + 1, tier: S.tier, renown: S.renown, cleared: S.cleared, abyss: (S.abyss && S.abyss.best) || 0, chapters: (S.story && S.story.done) || 0, points: 0, wiped: true, saga: R.saga ? R.saga.summary() : null, house: S.dynasty ? S.dynasty.house : null });
   L.realms.length = Math.min(L.realms.length, 20);
   L.points = 0; L.founder = null;
   saveLegacy(L);
@@ -46,7 +46,7 @@ export function foundNewRealm(R, founderId) {
   const S = R.state, L = loadLegacy(), sc = realmScore(R);
   const days = Math.floor((Date.now() - S.created) / 86400000) + 1;
   L.points += sc.total;
-  L.realms.unshift({ seed: R.sea && R.sea.ocean ? R.sea.words() : null, ended: Date.now(), days, tier: S.tier, renown: S.renown, cleared: S.cleared, abyss: (S.abyss && S.abyss.best) || 0, chapters: (S.story && S.story.done) || 0, points: sc.total });
+  L.realms.unshift({ seed: R.sea && R.sea.ocean ? R.sea.words() : null, ended: Date.now(), days, tier: S.tier, renown: S.renown, cleared: S.cleared, abyss: (S.abyss && S.abyss.best) || 0, chapters: (S.story && S.story.done) || 0, points: sc.total, saga: R.saga ? R.saga.summary() : null, house: S.dynasty ? S.dynasty.house : null });
   L.realms.length = Math.min(L.realms.length, 20);
   const rec = S.soldiers.find(s => s.id === founderId);
   if (rec) {

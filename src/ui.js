@@ -23,11 +23,12 @@ import { temperWord } from './kingdoms.js';
 import { COLONY_LEVELS } from './colonies.js';
 import { DOCTRINES, SHIP } from './warfare.js';
 import { RULER_TRAITS, SEATS } from './court.js';
+import { familyInfo, LORE_STEPS } from './saga.js';
 import { SPEED } from './sea.js';
 import { parseSeedWords, normalizeSeedWords } from './ocean.js';
 
-export const VERSION = '8.0';
-const NOTES_SEEN = '8.0'; // the what's-new notes below were last changed in 8.0
+export const VERSION = '9.0';
+const NOTES_SEEN = '9.0'; // the what's-new notes below were last changed in 9.0
 
 const $ = s => document.querySelector(s);
 const src = k => SHEETS[k] ? encodeURI(SHEETS[k].src) : '';
@@ -209,6 +210,10 @@ export class UI {
     if (!info.fresh && localStorage.getItem('tinyrealm.seen') !== NOTES_SEEN) {
       const div = document.createElement('div');
       div.innerHTML = `<p style="text-align:left;font-size:14px;line-height:1.4">
+        <b>9.0 Saga, Bestiary and Codex</b><br>
+        Chronicle, Saga: the great deeds of your realm are written down as they happen, one book for each ruler. Past realms keep their sagas in the Hall of Realms.<br>
+        Bestiary: every kind of foe you meet, with what you have learned of it. Slay 25, 100 and 300 of a kind and your soldiers strike it 5% harder each time.<br>
+        Codex: the realm's book of knowledge, filled in as you build, train, sail, find relics, appoint generals and pass decrees.<br><br>
         <b>8.0 Dynasty, Court and Nemesis</b><br>
         Tap the castle, then The throne room. Your realm has a ruling house now.<br>
         Dynasty: your ruler has traits that help the whole realm, and ages a year every four hours. Marry into a kingdom at peace with you for an heir. When the ruler dies the heir takes the throne; with no heir, a succession crisis.<br>
@@ -815,6 +820,41 @@ export class UI {
     }
     this.seaKey = null; this.renderSeaCard();
   }
+  sagaHtml() {
+    const R = this.R, S = R.state, P = R.saga.progress();
+    let html = `<div class="row-btns"><button class="btn small" data-act="codex:bestiary">Bestiary</button><button class="btn small" data-act="codex:codex">Codex (${P.n} of ${P.of})</button></div>`;
+    const books = R.saga.books();
+    if (!books.length) html += '<p class="section-title">Your saga has yet to be told.</p>';
+    for (const b of books) {
+      html += `<div class="book"><p class="book-title">The Book of ${esc(b.ruler || 'the Founders')}</p>` + b.entries.filter(e => e.kind !== 'minor').map(e => `<p class="saga-line"><span class="sday">Day ${e.day}</span>${esc(e.text)}</p>`).join('') + `</div>`;
+    }
+    html += `<details class="tales"><summary>Daily tales (${S.log.length})</summary>${S.log.map(l => `<p class="log"><span class="when">${ago(l.t)}</span>${esc(l.text)}</p>`).join('')}</details>`;
+    return html;
+  }
+  panel_codex() {
+    const R = this.R, Sg = R.saga;
+    if (!['bestiary', 'codex'].includes(this.tab)) this.tab = this.panelArg || 'bestiary';
+    this.setTabs([['bestiary', 'Bestiary'], ['codex', 'Codex']]);
+    if (this.tab === 'bestiary') {
+      const fams = Sg.families(), B = Sg.B, known = fams.filter(f => B[f]);
+      let html = `<p class="section-title">${known.length} of ${fams.length} kinds of foe</p><p style="text-align:center;font-size:13px">Every 25, 100 and 300 of a kind slain teaches your soldiers to strike it 5% harder.</p>`;
+      const order = fams.slice().sort((a, b) => (B[b] ? 1 : 0) - (B[a] ? 1 : 0) || ((B[b] || {}).kills || 0) - ((B[a] || {}).kills || 0));
+      html += order.map(f => {
+        const b = B[f], I = familyInfo(f), d = I.def || {};
+        if (!b) return `<div class="card light locked"><div class="thumb"><span class="qm">?</span></div><div class="grow"><h3>Unknown foe</h3><p class="muted">Not yet met.</p></div></div>`;
+        const key = SHEETS[`${I.sprite}_idle`] ? `${I.sprite}_idle` : SHEETS[`${I.sprite}_run`] ? `${I.sprite}_run` : null, nx = Sg.nextLore(f), lo = Sg.lore(f.startsWith('house_') ? 'red_' + f.slice(6) : f);
+        return `<div class="card light"><div class="thumb">${key ? `<img src="${spriteThumb(key)}" alt="">` : ''}</div><div class="grow"><h3>${esc(I.name)} <span class="rel ${lo ? 'ally' : 'neutral'}">${Sg.loreWord(f)}</span></h3><p>${esc(Sg.loreText(f))}</p><p class="muted">Health ${d.hp || '?'}, ${d.dmg ? `damage ${d.dmg}` : d.heal ? `heals ${d.heal}` : 'damage ?'}${d.proj ? ', ranged' : ''}. Slain: ${b.kills}.${lo ? ` +${Math.round(lo * 100)}% damage against them.` : ''}${nx ? ` ${nx} more to learn more.` : ''}</p></div></div>`;
+      }).join('');
+      return html;
+    }
+    const P = Sg.progress();
+    let html = `<p class="section-title">The Codex: ${P.n} of ${P.of} known</p>`;
+    for (const c of Sg.chapters()) {
+      const n = c.items.filter(i => i.on).length;
+      html += `<details class="codex" ${this.codexOpen === c.key ? 'open' : ''}><summary data-act="codexopen:${c.key}">${c.name} <span class="muted">${n} of ${c.items.length}</span></summary>` + c.items.map(i => i.on ? `<div class="card light"><div class="thumb">${i.img ? `<img src="${SHEETS[i.img] && SHEETS[i.img].fw ? spriteThumb(i.img) : src(i.img)}" alt="">` : '<i class="ic ic-shield"></i>'}</div><div class="grow"><h3>${esc(i.name)}</h3><p>${esc(i.desc || '')}</p></div></div>` : `<div class="card light locked"><div class="thumb"><span class="qm">?</span></div><div class="grow"><h3>Not yet known</h3></div></div>`).join('') + `</details>`;
+    }
+    return html;
+  }
   panel_throne() {
     const R = this.R, S = R.state, Co = R.court;
     if (!['dynasty', 'council', 'nemesis'].includes(this.tab)) this.tab = 'dynasty';
@@ -976,7 +1016,7 @@ export class UI {
   togglePanel(name, arg) { if (this.panel === name && !arg) this.closePanel(); else this.openPanel(name, arg); }
   openPanel(name, arg) {
     clearTimeout(this.closeT); this.panelEl.classList.remove('closing');
-    if (this.R.exp && !['settings', 'army', 'chronicle', 'hero'].includes(name)) return;
+    if (this.R.exp && !['settings', 'army', 'chronicle', 'hero', 'codex'].includes(name)) return;
     if (name === 'nightmarket' && !this.R.events.market) return this.toast('The Night Market only opens after dark.');
     if (this.panel !== name) audio.play('open');
     this.panel = name; this.panelArg = arg; this.tab = null;
@@ -1006,7 +1046,7 @@ export class UI {
   renderPanel() {
     this.live = [];
     const p = this.panel;
-    const titles = { crew: 'Crew', voyage: 'Trade', hero: 'Hero', nightmarket: 'Night Market', build: 'Build', workers: 'Workers', army: 'Army', chronicle: 'Chronicle', settings: 'Settings', merchant: 'Merchant', building: '', court: 'Court', throne: 'Throne room' };
+    const titles = { crew: 'Crew', voyage: 'Trade', hero: 'Hero', nightmarket: 'Night Market', build: 'Build', workers: 'Workers', army: 'Army', chronicle: 'Chronicle', settings: 'Settings', merchant: 'Merchant', building: '', court: 'Court', throne: 'Throne room', codex: 'Codex' };
     $('#panelTitle').textContent = p === 'building' ? (this.panelArg.type === 'castle' && this.R.state.tier < 3 ? TIERS[this.R.state.tier].name + ' Hall' : this.panelArg.def.name) : p === 'hero' ? this.panelArg.name : titles[p];
     this.setTabs(null);
     const fn = this['panel_' + p];
@@ -1336,7 +1376,7 @@ export class UI {
 
   panel_chronicle() {
     const R = this.R, S = R.state;
-    this.setTabs([['quest', 'Goals'], ['season', 'Season'], ['realm', 'Realm'], ['courts', 'Courts'], ['feats', 'Feats'], ['log', 'Tales']]);
+    this.setTabs([['quest', 'Goals'], ['season', 'Season'], ['realm', 'Realm'], ['courts', 'Courts'], ['feats', 'Feats'], ['log', 'Saga']]);
     if (this.tab === 'season') return this.seasonHtml();
     if (this.tab === 'courts') return this.coursHtml();
     if (this.tab === 'feats') {
@@ -1356,10 +1396,7 @@ export class UI {
       const seedCard = `<p class="section-title">This world</p><div class="card light"><div class="grow"><h3 class="seedw">${esc(R.sea.words())}</h3><p class="muted">Your world's seed. Paste it when you start a new realm to sail these same seas again.</p></div><button class="btn small" data-act="copyseed:${esc(R.sea.words())}">Copy</button></div>`;
       return seedCard + `<button class="btn wide" data-act="throne">The throne room: dynasty, council and nemesis</button><div class="stat-grid">${rows.map(([a, b]) => `<span>${a}</span><span>${b}</span>`).join('')}</div><p class="section-title">The moon</p>${moonHtml}<p class="section-title">Holy days and festivals</p>${hols}<p class="section-title">Provinces</p>${provHtml}<p class="section-title">Rival houses</p>${rv}${this.legacyHtml(true)}`;
     }
-    if (this.tab === 'log') {
-      if (!S.log.length) return '<p class="section-title">Your tale has yet to be told.</p>';
-      return S.log.map(l => `<p class="log"><span class="when">${ago(l.t)}</span>${esc(l.text)}</p>`).join('');
-    }
+    if (this.tab === 'log') return this.sagaHtml();
     const q = R.currentQuest();
     const v = R.questValue(q.type);
     const pct = Math.min(100, v / q.n * 100);
@@ -1410,7 +1447,7 @@ export class UI {
     html += Legacy.canFound(R) ? `<button class="btn wide" data-act="found">Found a new realm</button><p class="muted" style="text-align:center;font-size:12px">Bank this realm's points, choose a hero to sail with you, and begin again on a new island.</p>`
       : `<p style="text-align:center;font-size:13px">Raise the Castle to found a new realm and bank your Legacy.</p>`;
     // (this world's seed card is shown at the top of the Realm tab)
-    if (full && L.realms.length) html += '<p class="section-title">Hall of Realms</p>' + L.realms.map((r, i) => `<div class="card light"><div class="grow"><h3>Realm ${L.realms.length - i}${r.seed ? ` <span class="seedw small">${esc(r.seed)}</span>` : ''}</h3><p>${r.days} days, ${(TIERS[r.tier] || TIERS[1]).name}${r.renown ? ` renown ${r.renown}` : ''}, ${r.cleared} islands, Abyss floor ${r.abyss}, ${r.chapters} story chapters. Worth ${r.points} points. Ended ${ago(r.ended)}.</p></div>${r.seed ? `<button class="btn small" data-act="copyseed:${esc(r.seed)}">Copy seed</button>` : ''}</div>`).join('');
+    if (full && L.realms.length) html += '<p class="section-title">Hall of Realms</p>' + L.realms.map((r, i) => `<div class="card light"><div class="grow"><h3>Realm ${L.realms.length - i}${r.seed ? ` <span class="seedw small">${esc(r.seed)}</span>` : ''}</h3><p>${r.days} days, ${(TIERS[r.tier] || TIERS[1]).name}${r.renown ? ` renown ${r.renown}` : ''}, ${r.cleared} islands, Abyss floor ${r.abyss}, ${r.chapters} story chapters. Worth ${r.points} points. Ended ${ago(r.ended)}.</p>${r.saga && r.saga.length ? `<details class="tales"><summary>${esc(r.house || 'Its saga')}</summary>${r.saga.map(e => `<p class="saga-line"><span class="sday">Day ${e.day}</span>${esc(e.text)}</p>`).join('')}</details>` : ''}</div>${r.seed ? `<button class="btn small" data-act="copyseed:${esc(r.seed)}">Copy seed</button>` : ''}</div>`).join('');
     return html;
   }
   decreeHtml() {
@@ -1621,6 +1658,8 @@ export class UI {
     if (k === 'tosea') { this.openSea(); if (x) { const is = R.sea.ocean.islandById(a.slice(6)); if (is) { this.seaSel = is; this.view.seaFocus(is.x, is.y); this.seaKey = null; this.renderSeaCard(); } } return; }
     if (k === 'court') { this.openPanel('court', a.slice(6)); return; }
     if (k === 'throne') { this.openPanel('throne'); return; }
+    if (k === 'codex') { this.openPanel('codex', x); this.tab = x; this.renderPanel(); return; }
+    if (k === 'codexopen') { this.codexOpen = this.codexOpen === x ? null : x; return; }
     if (k === 'marry') { const e = R.court.marry(a.slice(6)); if (e) this.toast(e, 'red'); else { this.toast('The wedding is held with great feasting.', 'gold'); R.sfx && R.sfx('victory'); } return this.refresh(); }
     if (k === 'hire') { const e = R.court.hire(+x, y); if (e) this.toast(e, 'red'); else this.toast('A new councillor takes their seat.', 'gold'); return this.refresh(); }
     if (k === 'cdis') { return this.confirm('Dismiss?', 'Send this councillor away? Their fee is not returned.', 'Dismiss', () => { R.court.dismiss(x); this.refresh(); }); }

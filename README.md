@@ -27,6 +27,11 @@ Import, and Wipe Realm to start over.
 
 ## How the game works
 
+**9.0, Saga, Bestiary and Codex.**
+- **Saga** (Chronicle, Saga): founding, growth, wars, conquests, marriages, successions, your nemesis, colonies, sea victories and notable deaths are written into a book for each ruler. A realm's saga is kept in the Hall of Realms when it ends.
+- **Bestiary:** every kind of foe you have met, with lore, stats and kill counts. Slaying 25, 100 and 300 of a kind teaches your soldiers to strike it 5% harder each time.
+- **Codex:** buildings, soldiers, relics, places, doctrines, ruler traits and decrees, unlocked as you meet them.
+
 **8.0, Dynasty, Court and Nemesis.**
 - **The throne room** (tap the castle): your ruling house, its council and your nemesis.
 - **Dynasty:** the ruler has two traits that help the whole realm and ages a year every four hours. Marry into a kingdom at peace with you (their regard rises, and the consort brings a trait of their own) and an heir is born. When the ruler dies the heir succeeds with a regnal number; with no heir, a cousin takes the throne in a succession crisis that costs renown and vassal loyalty.

@@ -32,6 +32,7 @@ export class Unit {
     this.buffs = {}; this.abT = 0; this.trampled = new Set();
     this.applyStats(opts);
     this.hp = opts.hp != null ? Math.min(opts.hp, this.maxHp) : this.maxHp;
+    if (team === 1 && scene.game && scene.game.saga && this.def) scene.game.saga.seen(type);
   }
   applyStats(opts = {}) {
     const d = this.def;
@@ -154,6 +155,7 @@ export class Unit {
     if (!this.alive || this.hidden) return;
     if (this.dodge && Math.random() < this.dodge) { this.scene.floatText('Dodge', this.x, this.bodyY - 20, '#ffffff'); return; }
     let a = amount * (1 - this.armor);
+    if (this.team === 1 && src && src.team === 0 && this.scene.game && this.scene.game.saga) a *= 1 + this.scene.game.saga.lore(this.type); // hunter's lore from the bestiary
     if (this.def.armorRanged && src && src.def && src.def.proj) a *= 1 - this.def.armorRanged;
     if (this.anim === 'warrior' && this.state === 'idle') a *= 0.85;
     if (this.buff('shield')) a *= 0.4;

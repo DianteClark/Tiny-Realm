@@ -23,6 +23,7 @@ import { Kingdoms } from './kingdoms.js';
 import { Colonies } from './colonies.js';
 import { Warfare } from './warfare.js';
 import { Court } from './court.js';
+import { Saga } from './saga.js';
 import { seedFromWords, randomSeedWords } from './ocean.js';
 import { SHEETS } from './assets.js';
 import { audio } from './audio.js';
@@ -83,6 +84,7 @@ export class Realm {
     this.colonies = new Colonies(this);
     this.war = new Warfare(this);
     this.court = new Court(this);
+    this.saga = new Saga(this);
   }
 
   // ------------------------------------------------------------ persistence
@@ -248,7 +250,7 @@ export class Realm {
     S.stats.promotions = (S.stats.promotions || 0) + 1;
     this.sfx('fanfare'); this.shake(3);
     this.ui.banner('A soldier is promoted', `${rec.name} is now ${path ? 'a ' + UNITS[to].name : 'an Elite ' + UNITS[rec.type].name}. +20% health and damage, and they can now grow to level 15.`, 'gold');
-    this.log(`${rec.name} was promoted to ${rec.title}.`);
+    this.log(`${rec.name} was promoted to ${rec.title}.`, 'minor');
     this.save();
     return null;
   }
@@ -273,7 +275,7 @@ export class Realm {
   addAll(obj, mult = 1) { for (const k in obj) if (k in this.state.res) this.addRes(k, Math.round(obj[k] * mult)); }
   canAfford(cost) { for (const k in cost) if ((this.state.res[k] || 0) < cost[k]) return false; return true; }
   pay(cost) { if (!this.canAfford(cost)) return false; for (const k in cost) this.state.res[k] -= cost[k]; return true; }
-  log(text) { this.state.log.unshift({ t: Date.now(), text }); this.state.log.length = Math.min(this.state.log.length, 60); }
+  log(text, saga) { if (saga && this.saga) this.saga.add(saga, text); this.state.log.unshift({ t: Date.now(), text }); this.state.log.length = Math.min(this.state.log.length, 60); }
 
   // ------------------------------------------------------------ home island
   buildHome() {
@@ -802,7 +804,7 @@ export class Realm {
     const f = this.newSoldier('warrior'), c = this.newSoldier('archer');
     for (const [r, t] of [[f, 'Founder'], [c, 'Companion']]) { r.hero = true; r.title = t; r.level = 3; r.xp = XP_LEVELS[3]; }
     f.traits = ['brave']; c.traits = ['keen'];
-    this.log(`${f.name} and ${c.name} raised a hall on an empty shore. The realm begins.`);
+    this.log(`${f.name} and ${c.name} raised a hall on an empty shore. The realm begins.`, 'found');
   }
   hamletHouse() {
     if (this.home.buildings.some(b => b.type === 'house')) return;
@@ -825,7 +827,7 @@ export class Realm {
     rec.hp = undefined;
     let at = null; if (old) { at = { x: old.x, y: old.y }; old.dead = true; old.hp = 0; this.home.selected.delete(old); }
     if (rec.status === 'home') { const u = this.spawnSoldier(rec, true, at || undefined); if (u) { this.home.fxAt('healFx', u.x, u.y, { scale: 2 }); this.home.floatText('Long live the King', u.x, u.y - 110, '#f2c14e', 18); } }
-    this.log(`${rec.name} was crowned. The realm is a Kingdom.`);
+    this.log(`${rec.name} was crowned. The realm is a Kingdom.`, 'crown');
     if (!quiet) { this.ui.banner('Long live the King', `${rec.name} is crowned in the great hall. Allies near the King fight harder, and the throne will pass to an heir one day.`, 'gold'); this.sfx('fanfare'); this.shake(5); }
   }
   // ---- 3.6 decorations: they never block paths, so they live in their own list
@@ -995,7 +997,7 @@ export class Realm {
     if (S.tier >= 5) {
       const cost = renownCost(S.renown);
       if (!this.pay(cost)) return 'Not enough resources.';
-      S.renown++; this.ui.toast(`Your Renown rises to rank ${S.renown}.`); this.log(`Renown rank ${S.renown} reached.`);
+      S.renown++; this.ui.toast(`Your Renown rises to rank ${S.renown}.`); this.log(`Renown rank ${S.renown} reached.`, 'renown');
       for (const u of this.home.units) if (u.rec) { const f = u.hp / u.maxHp; u.applyStats(); u.hp = u.maxHp * f; }
       this.save(); return null;
     }
@@ -1010,7 +1012,7 @@ export class Realm {
     const f = this.castle.hp / this.castle.maxHp;
     this.castle.maxHp = Math.round(TIERS[S.tier].castleHp * (1 + this.bonus().castleHp));
     this.castle.hp = Math.max(this.castle.maxHp * f, this.castle.maxHp * 0.5);
-    this.log(`The realm grew into a ${TIERS[S.tier].name}.`);
+    this.log(`The realm grew into a ${TIERS[S.tier].name}.`, 'tier');
     this.castle.pop = 1;
     if (S.tier === 3) { this.home.fxAt('explosion2', this.castle.x, this.castle.y - 40, { scale: 2.2 }); for (let i = 0; i < 6; i++) this.home.fxAt('dust2', this.castle.x + (i - 2.5) * 50, this.castle.y + 6, { scale: 1.4 }); this.shake(8); }
     if (S.tier === 5) this.crown(quiet);
@@ -1200,6 +1202,7 @@ export class Realm {
     this.colonies.update(dt);
     this.war.update(dt);
     this.court.update(dt);
+    this.saga.update(dt);
     this.envoyT = (this.envoyT ?? 240 + Math.random() * 240) - dt;
     if (this.envoyT <= 0) { this.envoyT = 360 + Math.random() * 360; if (!this.exp && !(this.raid && this.raid.active) && this.state.tier >= 2 && this.ui && this.ui.envoy) { const e = this.kingdoms.envoy(); if (e) this.ui.envoy(e); } }
     this.trade.visuals(Date.now());
@@ -1264,7 +1267,7 @@ export class Realm {
     else if (!opts.region && !opts.units && kind === 'raid' && rivals.length && Math.random() < 0.35) {
       const rv = rivals[Math.floor(Math.random() * rivals.length)];
       region = { key: 'rival', name: rv.name, rival: rv.key, enemies: rivalRoster(rv.key, this.rivalLevel(rv.key)) };
-      if (!S.rivals[rv.key].met) { S.rivals[rv.key].met = true; this.log(`${rv.name} declared war. "${rv.motto}"`); }
+      if (!S.rivals[rv.key].met) { S.rivals[rv.key].met = true; this.log(`${rv.name} declared war. "${rv.motto}"`, 'war'); }
       S.rivals[rv.key].raids++;
     } else if (!opts.region && !opts.units && kind === 'raid' && S.tier >= 2 && Math.random() < 0.3) {
       const ki = this.kingdoms.raider();
@@ -1333,7 +1336,7 @@ export class Realm {
       this.addRes('gold', reward);
       this.sfx('victory');
       this.ui.banner(R.kind === 'raid' ? 'Raid repelled' : R.title + ' survived', `The raiders are beaten. You recover ${reward} gold from the field.`, 'blue');
-      this.log(`Repelled a ${R.region ? R.region.name : ''} raid. +${reward} gold.`);
+      this.log(`Repelled a ${R.region ? R.region.name : ''} raid. +${reward} gold.`, S.stats.raidsSurvived === 1 ? 'raid' : R.title === 'Invasion' ? 'raid' : null);
       if (Math.random() < 0.15 + R.level * 0.005) this.dropGear(R.level, { from: 'a raider' });
       this.chal.note('raid', { downs: R.downs || 0 });
       this.war.victory(this.home);
@@ -1360,7 +1363,7 @@ export class Realm {
     for (const u of R.units) if (u.alive) { u.leaving = true; u.target = null; }
     this.sfx('defeat'); this.shake(10);
     this.ui.banner(`The ${this.seatName()} has fallen`, `Raiders plundered ${lost.gold} gold, ${lost.wood} wood and ${lost.meat} meat, then sailed off. The walls will mend.`, 'red');
-    this.log(`The ${this.seatName()} fell to raiders. Lost a quarter of stores.`);
+    this.log(`The ${this.seatName()} fell to raiders. Lost a quarter of stores.`, 'defeat');
     R.active = false;
     if (R.onEnd) R.onEnd(false);
     this.home.raidMark = null; for (const u of this.home.units) u.alerted = null;
@@ -1418,7 +1421,7 @@ export class Realm {
   onUnitKilled(scene, u, src) {
     const S = this.state;
     if (u.team === 1) {
-      S.stats.kills++;
+      S.stats.kills++; this.saga.killed(u.type);
       if (['skull', 'bat', 'imp', 'shaman'].includes(u.type) && this.env.isNight) S.stats.nightKills = (S.stats.nightKills || 0) + 1;
       if (src && src.tower) S.stats.towerKills = (S.stats.towerKills || 0) + 1;
       if (u.type === 'troll') S.stats.trollsSlain++;
@@ -1455,7 +1458,7 @@ export class Realm {
       S.fallen.length = Math.min(S.fallen.length, 100);
       const gearNote = Gear.onFall(this, rec, scene === this.home);
       this.ui.toast(`${rec.name} has fallen ${where}.${gearNote}`, 'red');
-      this.log(`${rec.name} (level ${rec.level}, ${rec.kills} kills) fell ${where}, slain by ${killer}.`);
+      this.log(`${rec.name} (level ${rec.level}, ${rec.kills} kills) fell ${where}, slain by ${killer}.`, rec.hero || rec.general || rec.level >= 8 ? 'fallen' : null);
     }
   }
   grantXp(scene, u, xp) {
@@ -1716,7 +1719,7 @@ export class Realm {
       if (sc.isle && sc.isle.kind === 'kingdom') { // a kingdom of the open sea bends the knee
         const W = S.world; W.conquered[sc.isle.id] = Date.now(); summary.conquered = sc.isle.kingdom.name;
         S.stats.kingdoms = (S.stats.kingdoms || 0) + 1; S.cleared++; this.kingdoms.onConquered(sc.isle);
-        this.log(`${sc.isle.kingdom.name} of ${sc.isle.name} bent the knee.`);
+        this.log(`${sc.isle.kingdom.name} of ${sc.isle.name} bent the knee.`, 'conquest');
       } else if (sc.isle) {
         S.world.cleared[sc.isle.id] = Date.now(); S.cleared++; S.frontier = Math.max(S.frontier, S.cleared + 1);
         if (sc.isle.kind === 'ruins') { S.fragments = (S.fragments || 0) + 1; summary.gear.push(this.dropGear(lv + 3, { quiet: true, min: 1, from: sc.islandName })); summary.fragment = true; }
@@ -1724,7 +1727,7 @@ export class Realm {
         const st = S.rivals[sc.rival], rv = rivalDef(sc.rival);
         st.subjugated = true; st.defeats++; st.tributeAt = Date.now();
         summary.rival = sc.rival;
-        this.log(`${rv.name} bent the knee. ${rv.ruler} will pay tribute.`);
+        this.log(`${rv.name} bent the knee. ${rv.ruler} will pay tribute.`, 'conquest');
       } else if (sc.bounty) {
         S.daily.bounty = todayStr();
         const unowned = Object.keys(RELICS).filter(k => !S.relics[k] && !['trolltusk', 'minotaurhorn', 'bearpelt', 'pandabelt', 'turtleshell', 'rubberduck', ...['seacrown', 'harvestsickle', 'frostheart', 'springbloom', 'sunstone', 'moonstone']].includes(k));
@@ -1747,7 +1750,7 @@ export class Realm {
           if (!S.relics.seacrown) { S.relics.seacrown = true; summary.relic = 'seacrown'; }
           summary.gear.push(this.dropGear(lv + 6, { quiet: true, rarity: 3, from: ch.name }));
         }
-        this.log(`The Drowned Crown, chapter ${sc.story + 1}: ${ch.name} is won.`);
+        this.log(`The Drowned Crown, chapter ${sc.story + 1}: ${ch.name} is won.`, 'story');
       } else if (!sc.rival && sc.n === S.frontier) { S.frontier++; S.cleared = Math.max(S.cleared, sc.n); }
       S.stats.voyagesWon = (S.stats.voyagesWon || 0) + 1;
       const squadTypes = sc.squadTypes || [];
@@ -1765,7 +1768,7 @@ export class Realm {
         if (rec) summary.province = provinceOf(sc.rival ? 'rival' : sc.region.key);
         if (rec) summary.annexed = true;
       }
-      this.log(`Cleared ${sc.islandName}${summary.relic ? ' and claimed the ' + RELICS[summary.relic].name : ''}.`);
+      this.log(`Cleared ${sc.islandName}${summary.relic ? ' and claimed the ' + RELICS[summary.relic].name : ''}.`, summary.relic || sc.boss ? 'voyage' : null);
     } else if (result === 'lost') {
       if (sc.abyss) { S.abyss.depth = 1; S.abyss.runs = (S.abyss.runs || 0) + 1; }
       this.log(`The squad sent to ${sc.islandName} was lost.`);
