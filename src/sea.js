@@ -29,6 +29,7 @@ export class Sea {
     if (is.kind === 'story' && CHAPTERS[is.chapter - 1]) { const ch = CHAPTERS[is.chapter - 1]; is.name = ch.name; is.level = ch.level; }
     if (is.kind === 'abyss') is.name = 'The Abyss';
     const key = this.W && this.W.houses && Object.keys(this.W.houses).find(k => this.W.houses[k] === is.id);
+    if (this.R.kingdoms && is.kingdom && !key) this.R.kingdoms.dress(is);
     if (key && is.kingdom) { const rv = RIVALS.find(r => r.key === key); is.kingdom.name = rv.name; is.kingdom.color = key; is.kingdom.ruler = rv.ruler; is.kingdom.motto = rv.motto; is.house = key; }
   }
   // the four great houses sit on real islands: the nearest kingdom of their colour (stable once chosen)
@@ -50,8 +51,7 @@ export class Sea {
   relation(is) {
     if (!is || !is.kingdom) return 'neutral';
     const S = this.R.state, h = this.houseOf(is);
-    if (h) return S.rivals[h.key].subjugated ? 'ally' : this.R.rivalUnlocked(h) ? 'enemy' : 'neutral';
-    return this.W.conquered[is.id] ? 'ally' : 'enemy';
+    return this.R.kingdoms.relation(is);
   }
   // where the fleet is
   fleetIsland() { const f = this.W.fleet; return this.ocean.islandAt(f.x, f.y, 70); }
@@ -119,12 +119,15 @@ export class Sea {
     if (is.kind === 'wild') return { act: 'none', note: 'Nothing to fight and nothing to take. Settling new land comes in a later update.' };
     if (is.kind === 'kingdom') {
       const h = this.houseOf(is);
+      const st = this.R.kingdoms.stance(is);
       if (h) {
         if (S.rivals[h.key].subjugated) return { act: 'none', note: `${h.name} is your vassal. Their tribute arrives every hour.` };
         if (!this.R.rivalUnlocked(h)) return { act: 'none', note: `${h.name} keeps to itself for now. Grow your realm before you challenge them.` };
+        if (st === 'truce') return { act: 'none', note: `A truce holds with ${h.name}. Break it from Diplomacy if you mean to fight.` };
         return { act: 'land', mode: 'rival:' + h.key, label: 'Lay siege' };
       }
       if (W.conquered[is.id]) return { act: 'none', note: `${is.kingdom.name} bends the knee to you.` };
+      if (st !== 'war') return { act: 'none', note: `You are ${st === 'ally' ? 'allied' : st === 'truce' ? 'in a truce' : 'at peace'} with ${is.kingdom.name}. Declare war from Diplomacy before you lay siege.` };
       return { act: 'land', mode: 'isle:' + is.id, label: 'Lay siege' };
     }
     if (W.cleared[is.id]) return { act: 'none', note: is.kind === 'ruins' ? 'The ruins are picked clean.' : 'Cleared. The monsters have not come back yet.' };

@@ -596,6 +596,11 @@ export class WorldMapRenderer {
     const x = SX(m.x), y = SY(m.y);
     if (m.kind === 'ship') {
       this.sprite(ctx, 'boat', x, y + Math.round(Math.sin(t * 2) * dpr), Math.max(0.12 * dpr, z * 0.35), Math.floor(t * 8));
+    } else if (m.kind === 'fleet') { // a kingdom's war fleet: a smaller boat flying its sigil, ringed by its stance toward you
+      const sc = Math.max(0.1 * dpr, z * 0.26), bob = Math.round(Math.sin(t * 2 + (m.x % 7)) * dpr);
+      drawAllegiance(ctx, x, y + 8 * dpr, Math.max(26 * dpr, z * 70), m.relation || 'enemy', t);
+      this.sprite(ctx, 'boat', x, y + bob, sc, Math.floor(t * 8));
+      if (m.sigil) drawSigil(ctx, m.sigil, Math.round(x), Math.round(y - Math.max(14 * dpr, z * 52)), Math.max(10 * dpr, Math.round(z * 30)));
     } else if (m.kind === 'target') {
       this.sprite(ctx, 'cursorRing', x, y, Math.max(0.3 * dpr, z * 0.5), Math.floor(t * 10));
     } else {

@@ -19,6 +19,7 @@ import { Seasonal } from './seasonal.js';
 import * as Legacy from './legacy.js';
 import { Squads, districtAt, DISTRICTS } from './squads.js';
 import { Sea } from './sea.js';
+import { Kingdoms } from './kingdoms.js';
 import { seedFromWords, randomSeedWords } from './ocean.js';
 import { SHEETS } from './assets.js';
 import { audio } from './audio.js';
@@ -75,6 +76,7 @@ export class Realm {
     this.seasonal = new Seasonal(this);
     this.squads = new Squads(this);
     this.sea = new Sea(this);
+    this.kingdoms = new Kingdoms(this);
   }
 
   // ------------------------------------------------------------ persistence
@@ -1026,6 +1028,7 @@ export class Realm {
     for (const b of this.home.buildings) if (b.buildEnd && now >= b.buildEnd) report.done.push(BUILDINGS[b.type].name + ' completed');
     for (const b of this.home.buildings) for (const q of b.queue) if (now >= q.end) report.done.push(UNITS[q.unit].name + ' trained');
     if (S.upgradeEnd && now >= S.upgradeEnd) report.done.push(`Grew into a ${TIERS[Math.min(5, S.tier + 1)].name}`);
+    { const n = this.kingdoms.catchUp(secs); if (n > 0) report.done.push(n === 1 ? 'News came from across the sea' : `${n} tidings came from across the sea`); }
     { const tg = this.trade.catchUp(); for (const k in tg) report.got[k] += tg[k]; if (tg.gold + tg.wood + tg.meat > 0) report.done.push('Trade boats came and went'); }
     this.tickTimers(true);
     // buildings mend and sheep wander back
@@ -1082,7 +1085,7 @@ export class Realm {
     const r = rivalDef(key), days = (Date.now() - this.state.created) / 86400000;
     return r.base + Math.floor(days / 1.5) + (this.state.tier - 1) + this.state.renown;
   }
-  activeRivals() { return RIVALS.filter(r => this.rivalUnlocked(r) && !this.state.rivals[r.key].subjugated); }
+  activeRivals() { return RIVALS.filter(r => this.rivalUnlocked(r) && !this.state.rivals[r.key].subjugated && !((this.state.rivals[r.key].truceUntil || 0) > Date.now())); }
   tributeRate(key) { return { gold: 30 + this.rivalLevel(key) * 6, wood: 20 + this.rivalLevel(key) * 4 }; } // per hour
   tickTribute() {
     const now = Date.now();
@@ -1094,6 +1097,15 @@ export class Realm {
       const g = this.addRes('gold', (20 + lv * 4) * h), w = this.addRes('wood', (15 + lv * 3) * h);
       W.conquered[id] = at + hours * 3600000;
       if (g || w) this.ui.toast(`${is && is.kingdom ? is.kingdom.name : 'A vassal'} pays tribute: ${g} gold, ${w} wood.`, 'gold');
+    }
+    // trade pacts and allies share their harbour dues
+    if (W && W.k && this.sea.ocean) for (const [id, k] of Object.entries(W.k)) {
+      if (!k.pact && k.stance !== 'ally') continue;
+      k.duesAt = k.duesAt || now; const hours = Math.floor((now - k.duesAt) / 3600000); if (hours < 1) continue;
+      const is = this.sea.ocean.islandById(id); if (!is || !is.kingdom || this.kingdoms.stance(is) === 'war') { k.duesAt = now; continue; }
+      const g = this.addRes('gold', (k.stance === 'ally' ? 12 : 8) * Math.min(hours, 24) * (1 + is.level * 0.25));
+      k.duesAt += hours * 3600000;
+      if (g) this.ui.toast(`Harbour dues from ${is.kingdom.name}: ${g} gold.`, 'gold');
     }
     for (const r of RIVALS) {
       const st = this.state.rivals[r.key];
@@ -1174,6 +1186,9 @@ export class Realm {
     this.updateRaid(dt);
     this.needs.update(dt);
     this.sea.update(dt);
+    this.kingdoms.update(dt);
+    this.envoyT = (this.envoyT ?? 240 + Math.random() * 240) - dt;
+    if (this.envoyT <= 0) { this.envoyT = 360 + Math.random() * 360; if (!this.exp && !(this.raid && this.raid.active) && this.state.tier >= 2 && this.ui && this.ui.envoy) { const e = this.kingdoms.envoy(); if (e) this.ui.envoy(e); } }
     this.trade.visuals(Date.now());
     if (!this.exp) this.events.update(dt);
     this.questT -= dt;
@@ -1236,6 +1251,9 @@ export class Realm {
       region = { key: 'rival', name: rv.name, rival: rv.key, enemies: rivalRoster(rv.key, this.rivalLevel(rv.key)) };
       if (!S.rivals[rv.key].met) { S.rivals[rv.key].met = true; this.log(`${rv.name} declared war. "${rv.motto}"`); }
       S.rivals[rv.key].raids++;
+    } else if (!opts.region && !opts.units && kind === 'raid' && S.tier >= 2 && Math.random() < 0.3) {
+      const ki = this.kingdoms.raider();
+      if (ki) { const c = ki.kingdom.color; region = { key: 'rival', name: ki.kingdom.name, kingdomIsle: ki.id, enemies: rivalRoster(c, Math.max(1, Math.round(ki.level * 0.8))) }; }
     }
     const days = (Date.now() - S.created) / 86400000;
     const budget = (opts.budget ?? (3 + S.tier * 2.5 + S.stats.raidsSurvived * 0.7 + Math.min(days, 60) * 0.25 + S.renown * 2)) * (1 + this.decrees.fx('raidSize')) * (S.stats.raidsSurvived + S.stats.raidsLost < 3 && !opts.units ? 0.7 : 1);
@@ -1301,6 +1319,7 @@ export class Realm {
       this.log(`Repelled a ${R.region ? R.region.name : ''} raid. +${reward} gold.`);
       if (Math.random() < 0.15 + R.level * 0.005) this.dropGear(R.level, { from: 'a raider' });
       this.chal.note('raid', { downs: R.downs || 0 });
+      if (R.region && R.region.kingdomIsle) this.kingdoms.onRaidBeaten(this.sea.ocean.islandById(R.region.kingdomIsle));
     }
     if (R.onEnd) R.onEnd(won);
     this.home.raidMark = null;
@@ -1674,7 +1693,7 @@ export class Realm {
       if (sc.info.boss && !sc.bounty && sc.region.bossRelic && !S.relics[sc.region.bossRelic]) { S.relics[sc.region.bossRelic] = true; summary.relic = sc.region.bossRelic; }
       if (sc.isle && sc.isle.kind === 'kingdom') { // a kingdom of the open sea bends the knee
         const W = S.world; W.conquered[sc.isle.id] = Date.now(); summary.conquered = sc.isle.kingdom.name;
-        S.stats.kingdoms = (S.stats.kingdoms || 0) + 1; S.cleared++;
+        S.stats.kingdoms = (S.stats.kingdoms || 0) + 1; S.cleared++; this.kingdoms.onConquered(sc.isle);
         this.log(`${sc.isle.kingdom.name} of ${sc.isle.name} bent the knee.`);
       } else if (sc.isle) {
         S.world.cleared[sc.isle.id] = Date.now(); S.cleared++; S.frontier = Math.max(S.frontier, S.cleared + 1);

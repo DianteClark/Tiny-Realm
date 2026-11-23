@@ -418,3 +418,18 @@ body.sea #tut, body.sea #tutHand { display: none !important; }
 html.standalone, html.standalone body { height: var(--app-h); min-height: var(--app-h); }
 html.standalone #app { bottom: auto; height: var(--app-h); }
 html.standalone #game { height: var(--app-h); }
+/* 5.0 courts and diplomacy */
+.court-head { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
+.court-head h3 { margin: 0; font-size: 18px; }
+.court-head p { margin: 2px 0 0; font-size: 13px; }
+.sig { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
+.sig canvas { max-width: 44px; max-height: 44px; image-rendering: pixelated; }
+.court-rows { display: grid; gap: 4px; margin: 6px 0; font-size: 14px; }
+.court-rows > div { display: flex; justify-content: space-between; }
+.court-rows span { opacity: .75; }
+.court-rows .regard { position: relative; height: 8px; border-radius: 4px; margin: 4px 2px 2px; background: linear-gradient(90deg, #c8372d, #c9962a 50%, #4f8f3a); }
+.court-rows .regard i { position: absolute; top: -3px; width: 6px; height: 14px; margin-left: -3px; background: #fff7df; border: 1px solid #1b1720; border-radius: 2px; }
+.court-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.court-acts .btn { font-size: 13px; padding-left: 4px; padding-right: 4px; }
+.court-card { width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.court-card .sig { width: 40px; height: 40px; }

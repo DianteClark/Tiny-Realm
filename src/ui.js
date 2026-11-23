@@ -19,6 +19,7 @@ import * as Legacy from './legacy.js';
 import { COLORS, STANCES, DISTRICTS, districtAt } from './squads.js';
 import { minimapOn, setMinimap } from './minimap.js';
 import { sigilCanvas } from './heraldry.js';
+import { temperWord } from './kingdoms.js';
 import { SPEED } from './sea.js';
 import { parseSeedWords, normalizeSeedWords } from './ocean.js';
 
@@ -704,7 +705,8 @@ export class UI {
         else if (L.act === 'port') acts = `<button class="btn" data-sea="rest" ${crew.length ? '' : 'disabled'}>Rest the crew</button><button class="btn" data-sea="trade">Trade routes</button>`;
         else acts = `<p class="note">${esc(L.note)}</p>`;
       } else if ((is.kind !== 'home' || !Z.atHome()) && !(sail && sail.id === is.id)) acts = `<button class="btn" data-sea="go">${is.kind === 'home' ? 'Sail home' : 'Sail here'} (${eta})</button>`;
-      const relHtml = rel ? `<span class="rel ${rel}">${{ enemy: 'Enemy', neutral: 'Neutral', ally: 'Vassal' }[rel]}</span>` : '';
+      const relHtml = rel ? this.stanceTag(is) : '';
+      if (is.kind === 'kingdom') acts += `<button class="btn" data-sea="court">Diplomacy</button>`;
       html += `<div class="isle"><div class="isle-head"><div class="sig" data-sig></div><div class="grow"><h3>${esc(is.name)} ${relHtml}</h3><p>${sub}</p>${is.kind !== 'home' ? `<p class="muted">${this.kindLabel(is)} - ${is.kind === 'abyss' ? `floor ${(S.abyss && S.abyss.depth) || 1} awaits` : `level ${is.level}`} - ${esc(Z.ocean.ringOf(is.x, is.y).name)}${W.cleared[is.id] ? ' - cleared' : ''}</p>` : ''}</div><button class="tiny-btn red" data-sea="close" aria-label="Close"><i class="ic ic-x"></i></button></div>
         <div class="isle-acts">${acts}</div></div>`;
     }
@@ -727,6 +729,7 @@ export class UI {
     else if (a === 'fleet') this.view.seaFocus(Z.W.fleet.x, Z.W.fleet.y);
     else if (a === 'homeview') { this.closeSea(); return; }
     else if (a === 'trade') { this.closeSea(true); this.openPanel('voyage'); this.tab = 'trade'; this.renderPanel(); return; }
+    else if (a === 'court' && is) { const id = is.id; this.closeSea(true); this.openPanel('court', id); return; }
     else if (a === 'crew' || a === 'crewview') { this.closeSea(true); this.openPanel('crew'); return; }
     else if (a === 'disembark') { Z.disembark(); this.toast('The crew comes ashore.'); }
     else if (a === 'rest') {
@@ -743,6 +746,57 @@ export class UI {
       return;
     }
     this.seaKey = null; this.renderSeaCard();
+  }
+  stanceTag(is) {
+    const s = this.R.kingdoms.stance(is), cls = { war: 'enemy', truce: 'neutral', peace: 'neutral', ally: 'ally', vassal: 'ally' }[s];
+    return `<span class="rel ${cls}">${{ war: 'At war', truce: 'Truce', peace: 'At peace', ally: 'Ally', vassal: 'Vassal' }[s]}</span>`;
+  }
+  // a kingdom's court: who they are, how they see you, and what you can do about it
+  panel_court() {
+    const R = this.R, Kd = R.kingdoms, is0 = R.sea.ocean.islandById(this.panelArg);
+    if (!is0 || !is0.kingdom) return '<p>That court is gone.</p>';
+    const is = Kd.lord(is0), k = Kd.st(is), s = Kd.stance(is0), kg = is.kingdom, house = Kd.houseKey(is);
+    const held = is !== is0 ? `<p class="note">${esc(is0.name)} is held by ${esc(kg.name)}. Their lords answer for it.</p>` : '';
+    const reg = Math.max(-100, Math.min(100, Math.round(k.rel)));
+    const truce = s === 'truce' && k.until ? `<p class="muted">The truce ends in ${time((k.until - Date.now()) / 1000)}.</p>` : '';
+    const vassal = s === 'vassal' ? `<p class="muted">Loyalty: ${k.loyalty >= 40 ? 'steadfast' : k.loyalty >= 0 ? 'uneasy' : 'restless, near rebellion'}.</p>` : '';
+    const gift = Kd.giftCost().gold;
+    const B = (what, label, on, cls = '') => `<button class="btn ${cls}" data-act="dip:${what}:${is0.id}" ${on ? '' : 'disabled'}>${label}</button>`;
+    let html = `<div class="court-head"><div class="sig" data-sigil="${esc(is.id)}"></div><div class="grow"><h3>${esc(kg.name)} ${this.stanceTag(is0)}</h3><p>${esc(kg.ruler || '')}${kg.motto ? ` - "${esc(kg.motto)}"` : ''}</p></div></div>${held}
+      <div class="court-rows">
+        <div><span>Temper</span><b>${temperWord(kg.temper)}</b></div>
+        <div><span>Strength</span><b>${Kd.strengthWord(is)}</b></div>
+        <div><span>Regard for you</span><b>${Kd.regardWord(is0)}</b></div>
+        <div class="regard"><i style="left:${50 + reg / 2}%"></i></div>
+      </div>${truce}${vassal}`;
+    if (s === 'vassal') html += `<p style="text-align:center;font-size:13px">They pay you tribute every hour. Keep your army strong, or pay their lords when they grumble, and they stay loyal.</p>`;
+    else {
+      html += `<p class="section-title">Diplomacy</p><div class="court-acts">
+        ${B('gift', `Send a gift (${gift} gold)`, true)}
+        ${B('truce', 'Offer a truce', s === 'war')}
+        ${house ? '' : B('peace', 'Make peace', s === 'war' || s === 'truce')}
+        ${house ? '' : B('alliance', 'Propose an alliance', s === 'peace')}
+        ${B('demand', 'Demand tribute', s !== 'ally')}
+        ${B('war', s === 'truce' || s === 'ally' ? 'Break faith: declare war' : 'Declare war', s !== 'war', 'red')}
+      </div><p class="muted" style="font-size:12px;text-align:center">${house ? 'A great house never makes a lasting peace. Truces buy time; only a siege ends the feud.' : 'Gifts raise their regard. Peace needs a friendly court, an alliance a warm one. Tribute is only paid to a far stronger realm.'}</p>`;
+    }
+    html += `<button class="btn wide" data-act="tosea:${is0.id}">Back to the sea</button>`;
+    return html;
+  }
+  coursHtml() {
+    const R = this.R, Kd = R.kingdoms, W = R.state.world, list = Kd.known();
+    let html = `<p class="section-title">Courts of the sea</p>`;
+    html += list.length ? list.map(is => `<button class="card light court-card" data-act="court:${is.id}"><div class="sig" data-sigil="${esc(Kd.lord(is).id)}"></div><div class="grow"><h3>${esc(is.kingdom.name)} ${this.stanceTag(is)}</h3><p>${esc(is.name)}. ${temperWord(Kd.lord(is).kingdom.temper)}, ${Kd.strengthWord(Kd.lord(is)).toLowerCase()}. Regard: ${Kd.regardWord(is).toLowerCase()}.</p></div></button>`).join('') : '<p style="text-align:center;font-size:13px">No court knows of you yet. Sail out and be seen.</p>';
+    html += `<p class="section-title">News from across the sea</p>`;
+    html += (W.news || []).length ? W.news.slice(0, 15).map(n => `<div class="card light"><div class="grow"><p>${esc(n.text)}</p><p class="muted">${ago(n.t)}</p></div></div>`).join('') : '<p style="text-align:center;font-size:13px">All is quiet on the sea.</p>';
+    return html;
+  }
+  envoy(e) {
+    const R = this.R, opts = [];
+    const fin = msg => { this.toast(msg, 'gold'); R.kingdoms.news(msg); R.save(); };
+    opts.push({ label: e.yes, fn: () => { if (e.cost && !R.pay(e.cost)) { this.toast('Not enough gold.', 'red'); if (e.onNo) fin(e.onNo()); return; } fin(e.onYes()); } });
+    if (e.no) opts.push({ label: e.no, cls: e.onNo ? 'red' : '', fn: () => { if (e.onNo) fin(e.onNo()); } });
+    this.choice(e.title, e.text, opts);
   }
   panel_crew() {
     const R = this.R, S = R.state, Z = R.sea, cap = TIERS[S.tier].squad;
@@ -799,11 +853,12 @@ export class UI {
   renderPanel() {
     this.live = [];
     const p = this.panel;
-    const titles = { crew: 'Crew', voyage: 'Trade', hero: 'Hero', nightmarket: 'Night Market', build: 'Build', workers: 'Workers', army: 'Army', chronicle: 'Chronicle', settings: 'Settings', merchant: 'Merchant', building: '' };
+    const titles = { crew: 'Crew', voyage: 'Trade', hero: 'Hero', nightmarket: 'Night Market', build: 'Build', workers: 'Workers', army: 'Army', chronicle: 'Chronicle', settings: 'Settings', merchant: 'Merchant', building: '', court: 'Court' };
     $('#panelTitle').textContent = p === 'building' ? (this.panelArg.type === 'castle' && this.R.state.tier < 3 ? TIERS[this.R.state.tier].name + ' Hall' : this.panelArg.def.name) : p === 'hero' ? this.panelArg.name : titles[p];
     this.setTabs(null);
     const fn = this['panel_' + p];
     this.body.innerHTML = fn ? fixText(fn.call(this)) : '';
+    for (const el of this.body.querySelectorAll('[data-sigil]')) { const is = this.R.sea.ocean.islandById(el.dataset.sigil); if (!is || !is.kingdom) continue; const sc = sigilCanvas(is.kingdom.sigil, 40), cv = document.createElement('canvas'); cv.width = sc.width; cv.height = sc.height; cv.getContext('2d').drawImage(sc, 0, 0); el.appendChild(cv); }
     if (this.afterRender) { this.afterRender(); this.afterRender = null; }
   }
 
@@ -1126,8 +1181,9 @@ export class UI {
 
   panel_chronicle() {
     const R = this.R, S = R.state;
-    this.setTabs([['quest', 'Goals'], ['season', 'Season'], ['realm', 'Realm'], ['feats', 'Feats'], ['log', 'Tales']]);
+    this.setTabs([['quest', 'Goals'], ['season', 'Season'], ['realm', 'Realm'], ['courts', 'Courts'], ['feats', 'Feats'], ['log', 'Tales']]);
     if (this.tab === 'season') return this.seasonHtml();
+    if (this.tab === 'courts') return this.coursHtml();
     if (this.tab === 'feats') {
       const F = S.feats || {}, n = FEATS.filter(f => F[f.id]).length;
       return `<p class="section-title">${n} of ${FEATS.length} feats</p>` + FEATS.map(f => `<div class="card ${F[f.id] ? '' : 'light'}"><i class="ic ic-shield" style="${F[f.id] ? '' : 'filter:grayscale(1);opacity:.45'}"></i><div class="grow"><h3>${f.name}</h3><p>${f.desc}${F[f.id] ? ' Earned ' + ago(F[f.id]) + '.' : ''}</p></div></div>`).join('');
@@ -1136,7 +1192,7 @@ export class UI {
       const days = Math.floor((Date.now() - S.created) / 86400000) + 1;
       const rows = [['Realm day', days], ['Realm', TIERS[S.tier].name], ['Renown', S.renown], ['Daily streak', S.daily.streak], ['Islands cleared', S.cleared], ['Raids repelled', S.stats.raidsSurvived], ['Raids lost', S.stats.raidsLost], ['Great events survived', S.stats.eventsSurvived], ['Monsters slain', S.stats.kills], ['Trolls slain', S.stats.trollsSlain], ['Soldiers fallen', S.fallen.length], ['Gold gathered', fmt(S.stats.gold || 0)], ['Wood gathered', fmt(S.stats.wood || 0)], ['Meat gathered', fmt(S.stats.meat || 0)], ['Storage cap', fmt(R.storage())]];
       const rv = RIVALS.map(r => { const st = S.rivals[r.key], open = R.rivalUnlocked(r);
-        return `<div class="card light"><div class="thumb"><img src="${src('b' + r.key + '_Castle')}" alt=""></div><div class="grow"><h3>${r.name}</h3><p>${!open ? 'Unknown waters. Grow your realm to meet them.' : st.subjugated ? `Your vassal. Pays ${R.tributeRate(r.key).gold} gold and ${R.tributeRate(r.key).wood} wood per hour.` : `At war. Level ${R.rivalLevel(r.key)}, ${st.raids} raids so far. Conquer their capital from Voyage.`}</p></div></div>`; }).join('');
+        return `<div class="card light"><div class="thumb"><img src="${src('b' + r.key + '_Castle')}" alt=""></div><div class="grow"><h3>${r.name}</h3><p>${!open ? 'Unknown waters. Grow your realm to meet them.' : st.subjugated ? `Your vassal. Pays ${R.tributeRate(r.key).gold} gold and ${R.tributeRate(r.key).wood} wood per hour.` : `At war. Level ${R.rivalLevel(r.key)}, ${st.raids} raids so far. Lay siege to their capital from the sea.`}</p></div></div>`; }).join('');
       const prov = (S.annexed || []).map(a => provinceOf(a.region));
       const provHtml = prov.length ? prov.map(p => `<div class="card light"><div class="grow"><h3>${p.name}</h3><p>${p.desc}</p></div></div>`).join('') : '<p style="text-align:center;font-size:13px">Conquer boss islands and rival capitals to annex their land. Each province adds a lasting bonus.</p>';
       const moon = R.moon();
@@ -1406,7 +1462,14 @@ export class UI {
       return;
     }
     if (k === 'embark') { R.sea.embark([...this.squadPick]); this.crewInit = false; this.squadPick.clear(); this.openSea(); return; }
-    if (k === 'tosea') { this.openSea(); return; }
+    if (k === 'tosea') { this.openSea(); if (x) { const is = R.sea.ocean.islandById(a.slice(6)); if (is) { this.seaSel = is; this.view.seaFocus(is.x, is.y); this.seaKey = null; this.renderSeaCard(); } } return; }
+    if (k === 'court') { this.openPanel('court', a.slice(6)); return; }
+    if (k === 'dip') {
+      const id = a.slice(5 + x.length), is = R.sea.ocean.islandById(id); if (!is) return;
+      const go = () => { const r = R.kingdoms.act(is, x); if (typeof r === 'string') this.toast(r, 'red'); else { this.toast(r.ok, 'gold'); R.sfx && R.sfx('coin'); R.save(); } this.refresh(); };
+      if (x === 'war') return this.confirm('Declare war?', `Declare war on ${is.kingdom.name}? Their raiders may come for your island${['truce', 'ally'].includes(R.kingdoms.stance(is)) ? ', and breaking your word will cost you the trust of every court on the sea' : ''}.`, 'Declare war', go);
+      return go();
+    }
     if (k === 'tsend') { err(R.trade.send(a.slice(6))); return this.refresh(); }
     if (k === 'tstop') { R.trade.stop(+x); return this.refresh(); }
     if (k === 'hire') { err(R.hireHero()); return this.refresh(); }
