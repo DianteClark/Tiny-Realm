@@ -1,6 +1,6 @@
 // HUD, panels and dialogs. Plain DOM styled with the pack's UI art.
 import { SHEETS } from './assets.js';
-import { levelCap, PROMOTIONS, PROMO_COST, UNITS, ENEMIES, BUILDINGS, TIERS, TRAITS, RELICS, XP_LEVELS, MAX_LEVEL, islandInfo, renownCost, STORY, upgradeCost, upgradeTime, describeLevel, levelEffects, ABILITIES, RIVALS, rivalDef, provinceOf } from './data.js';
+import { REGIONS, levelCap, PROMOTIONS, PROMO_COST, UNITS, ENEMIES, BUILDINGS, TIERS, TRAITS, RELICS, XP_LEVELS, MAX_LEVEL, islandInfo, renownCost, STORY, upgradeCost, upgradeTime, describeLevel, levelEffects, ABILITIES, RIVALS, rivalDef, provinceOf } from './data.js';
 const FORMATIONS = ['Loose', 'Line', 'Wedge', 'Column'];
 import { Unit, Building, Struct, cellOf } from './world.js';
 import { reachable } from './terrain.js';
@@ -18,6 +18,7 @@ import { SHOP, SEASON_EVENTS } from './seasonal.js';
 import * as Legacy from './legacy.js';
 import { COLORS, STANCES, DISTRICTS, districtAt } from './squads.js';
 import { minimapOn, setMinimap } from './minimap.js';
+import { sigilCanvas } from './heraldry.js';
 
 export const VERSION = '3.6';
 
@@ -31,6 +32,7 @@ const fmt = n => n >= 10000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1) + 'k' : St
 const time = s => { s = Math.max(0, Math.ceil(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return h ? `${h}h ${m}m` : `${m}:${String(x).padStart(2, '0')}`; };
 const ago = t => { const s = (Date.now() - t) / 1000; return s < 60 ? 'just now' : s < 3600 ? Math.floor(s / 60) + 'm ago' : s < 86400 ? Math.floor(s / 3600) + 'h ago' : Math.floor(s / 86400) + 'd ago'; };
 const UNIT_AV = { pawn: 'av_h5', warrior: 'av_h1', archer: 'av_h3', lancer: 'av_h2', monk: 'av_h4', swordsman: 'av_swordsman1', berserker: 'av_berserker1', horseman: 'av_horseman1', catapult: 'av_catapult1', king: 'av_king1' };
+const REGION_NAMES = Object.fromEntries(REGIONS.map(r => [r.key, r.name]));
 const BLD_IMG = { lantern: 'fire1', wall: 'fence', gate: 'fence', castle: 'b_Castle', house: 'b_House1', barracks: 'b_Barracks', archery: 'b_Archery', monastery: 'b_Monastery', tower: 'b_Tower', tavern: 'b_Tavern', market: 'b_Market', chapel: 'b_Chapel', bush: 'bush1', rock: 'rock1', stump: 'stump1' };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -44,7 +46,12 @@ export class UI {
   }
   bind(realm, view) {
     this.R = realm; this.view = view;
-    document.querySelectorAll('.navbtn').forEach(b => b.onclick = () => this.togglePanel(b.dataset.panel));
+    document.querySelectorAll('.navbtn').forEach(b => b.onclick = () => {
+      if (b.dataset.panel === 'voyage') { if (this.R.exp) return this.toast('Finish the battle first, or Retreat.'); return this.seaOpen && !this.panel ? this.closeSea() : this.openSea(); }
+      if (this.seaOpen) this.closeSea(true);
+      this.togglePanel(b.dataset.panel);
+    });
+    $('#seaCard').addEventListener('click', e => { const el = e.target.closest('[data-sea]'); if (el && !el.disabled) this.seaAct(el.dataset.sea); });
     $('#panelClose').onclick = () => this.closePanel();
     this.panelEl.onclick = e => { if (e.target === this.panelEl) this.closePanel(); };
     $('#btnSettings').onclick = () => this.togglePanel('settings');
@@ -391,6 +398,7 @@ export class UI {
   // ------------------------------------------------------------ world taps
   onTap(wx, wy) {
     const R = this.R, sc = R.scene;
+    if (this.seaOpen) return this.seaTap(wx, wy);
     if (this.place) { this.movePlace(wx, wy); return; }
     if (this.bannerFor) {
       const e = R.squads.setBanner(this.bannerFor, cellOf(wx), cellOf(wy));
@@ -581,6 +589,115 @@ export class UI {
     if (!this.R.exp) $('#bottombar').classList.remove('hidden');
   }
 
+  // ------------------------------------------------------------ the sea (4.0)
+  openSea() {
+    const R = this.R; if (R.exp) return;
+    this.closePanel(); if (this.place) this.cancelPlace();
+    R.scene.selected.clear(); this.refreshSel();
+    this.seaOpen = true; R.seaOpen = true; document.body.classList.add('sea');
+    this.view.enterSea(R.sea.W.fleet);
+    this.seaSel = R.sea.fleetIsland() || null; this.seaKey = null; this.renderSeaCard();
+    document.querySelectorAll('.navbtn').forEach(b => b.classList.toggle('on', b.dataset.panel === 'voyage'));
+    audio.play('open');
+  }
+  closeSea(quiet) {
+    if (!this.seaOpen) return;
+    this.seaOpen = false; this.R.seaOpen = false; document.body.classList.remove('sea');
+    this.view.exitSea(); this.seaSel = null;
+    $('#seaCard').classList.add('hidden'); $('#seaTop').classList.add('hidden');
+    document.querySelectorAll('.navbtn').forEach(b => b.classList.remove('on'));
+    if (!quiet) audio.play('close');
+  }
+  seaTap(wx, wy) {
+    const Z = this.R.sea, is = Z.ocean.islandAt(wx, wy, 26);
+    this.seaSel = is && (Z.fog.isRevealed(is.x, is.y) || is.kind === 'home') ? is : null;
+    if (this.seaSel) audio.play('click');
+    this.seaKey = null; this.renderSeaCard();
+  }
+  onFleetArrive(is) {
+    this.toast(`The fleet reaches ${is.name}.`, 'gold');
+    if (this.seaOpen) { this.seaSel = is; this.seaKey = null; this.renderSeaCard(); }
+  }
+  kindLabel(is) { return { home: 'Your island', kingdom: 'Kingdom', lair: 'Monster lair', ruins: 'Ruins', port: 'Free port', wild: 'Wild land', abyss: 'The Abyss', story: 'Story isle' }[is.kind] || ''; }
+  renderSeaCard() {
+    const R = this.R, Z = R.sea, W = Z.W, el = $('#seaCard'), top = $('#seaTop');
+    if (!this.seaOpen) return;
+    // the waters at the centre of the view
+    const c = this.view.seaCenter(), ring = Z.ocean.ringOf(c[0], c[1]);
+    const tt = `${ring.name} - danger ${ring.level}`;
+    if (top.textContent !== tt) top.textContent = tt; top.classList.remove('hidden');
+    const is = this.seaSel, sail = W.dest, docked = Z.fleetIsland(), crew = Z.crewRecs();
+    let html = '';
+    if (sail) { const to = Z.ocean.islandById(sail.id); html += `<div class="sea-status"><span>Sailing to <b>${esc(to ? to.name : 'open sea')}</b>, ${time(Z.eta())}</span><button class="btn small red" data-sea="stop">Stop</button></div>`; }
+    if (is) {
+      const rel = is.kingdom ? Z.relation(is) : null, here = !sail && docked && docked.id === is.id;
+      const d = Math.round(Math.hypot(is.x - W.fleet.x, is.y - W.fleet.y)), eta = time(d / 150);
+      const sub = is.kind === 'kingdom' ? `${esc(is.kingdom.name)}, ${esc(is.kingdom.realm || '')}` : is.kind === 'lair' ? `${(REGION_NAMES[is.region] || 'Monsters')}${is.boss ? ', with a boss' : ''}` : is.kind === 'story' ? `The Drowned Crown, chapter ${is.chapter}` : this.kindLabel(is);
+      const L = Z.landing(is);
+      let acts = '';
+      if (here) {
+        if (L.act === 'land') acts = crew.length ? `<button class="btn" data-sea="land">${esc(L.label)} (${crew.length})</button>` : `<button class="btn" disabled>${esc(L.label)}</button><p class="note">No crew aboard. Sail home and choose a crew.</p>`;
+        else if (L.act === 'home') acts = `<button class="btn" data-sea="crew">Choose crew</button>${crew.length ? `<button class="btn red" data-sea="disembark">Disembark (${crew.length})</button>` : ''}`;
+        else if (L.act === 'port') acts = `<button class="btn" data-sea="rest" ${crew.length ? '' : 'disabled'}>Rest the crew</button><button class="btn" data-sea="trade">Trade routes</button>`;
+        else acts = `<p class="note">${esc(L.note)}</p>`;
+      } else if (is.kind !== 'home' || !Z.atHome()) acts = `<button class="btn" data-sea="go">${is.kind === 'home' ? 'Sail home' : 'Sail here'} (${eta})</button>`;
+      const relHtml = rel ? `<span class="rel ${rel}">${{ enemy: 'Enemy', neutral: 'Neutral', ally: 'Vassal' }[rel]}</span>` : '';
+      html += `<div class="isle"><div class="isle-head"><div class="sig" data-sig></div><div class="grow"><h3>${esc(is.name)} ${relHtml}</h3><p>${sub}</p><p class="muted">${this.kindLabel(is)}${is.kind !== 'home' ? ` - level ${is.level} - ${esc(Z.ocean.ringOf(is.x, is.y).name)}` : ''}${W.cleared[is.id] ? ' - cleared' : ''}</p></div><button class="tiny-btn" data-sea="close" aria-label="Close"><i class="ic ic-x"></i></button></div>
+        <div class="isle-acts">${acts}</div></div>`;
+    }
+    html += `<div class="sea-bar"><button class="btn small" data-sea="fleet">Fleet${crew.length ? ` (${crew.length} aboard)` : ''}</button><button class="btn small" data-sea="crewview">Crew</button><button class="btn small" data-sea="trade">Trade</button><button class="btn small" data-sea="homeview">Home</button></div>`;
+    const key = html + (is ? is.id : '');
+    if (key === this.seaKey) return; this.seaKey = key;
+    el.innerHTML = html; el.classList.remove('hidden');
+    const sig = el.querySelector('[data-sig]');
+    if (sig) { if (is && is.kingdom) sig.appendChild(sigilCanvas(is.kingdom.sigil, 44)); else sig.remove(); }
+  }
+  seaAct(a) {
+    const R = this.R, Z = R.sea, is = this.seaSel, S = R.state;
+    if (a === 'close') { this.seaSel = null; }
+    else if (a === 'go' && is) { Z.sail(is); if (!Z.crewRecs().length && is.kind !== 'home' && Z.atHome()) this.toast('Sailing without a crew: you can scout, but not land. Choose a crew at home first.'); }
+    else if (a === 'stop') Z.stop();
+    else if (a === 'fleet') this.view.seaFocus(Z.W.fleet.x, Z.W.fleet.y);
+    else if (a === 'homeview') { this.closeSea(); return; }
+    else if (a === 'trade') { this.closeSea(true); this.openPanel('voyage'); this.tab = 'trade'; this.renderPanel(); return; }
+    else if (a === 'crew' || a === 'crewview') { this.closeSea(true); this.openPanel('crew'); return; }
+    else if (a === 'disembark') { Z.disembark(); this.toast('The crew comes ashore.'); }
+    else if (a === 'rest') {
+      const k = 'rest:' + (is && is.id); if (this.restedAt === k) return this.toast('They have rested here already.');
+      this.restedAt = k; for (const r of Z.crewRecs()) { const U = UNITS[r.type]; r.hp = Math.min(Math.round((r.hp ?? U.hp) + U.hp * 0.4), Math.round(U.hp * 3)); }
+      this.toast('The crew eats well and patches their wounds.', 'gold');
+    }
+    else if (a === 'land' && is) {
+      const L = Z.landing(is); if (L.act !== 'land') return;
+      const ids = Z.crewRecs().map(r => r.id);
+      this.closeSea(true);
+      R.startExpedition(S.frontier, ids, L.mode);
+      this.banner(R.exp.islandName, `${R.exp.region.name}, level ${R.exp.level}. ${is.kind === 'kingdom' ? 'Break the walls and take the castle.' : 'Destroy every camp.'} Tap a soldier or All, then tap the ground or a foe.`, 'blue');
+      return;
+    }
+    this.seaKey = null; this.renderSeaCard();
+  }
+  panel_crew() {
+    const R = this.R, S = R.state, Z = R.sea, cap = TIERS[S.tier].squad;
+    if (!Z.atHome()) {
+      const crew = Z.crewRecs();
+      return `<p class="section-title">The fleet is at sea</p><p style="text-align:center;font-size:13px">A crew can only be changed at home. Aboard now:</p>` + (crew.length ? crew.map(r => this.soldierCard(r)).join('') : '<p style="text-align:center">Nobody.</p>') + `<button class="btn wide" data-act="tosea">Back to the sea</button>`;
+    }
+    const home = S.soldiers.filter(s => s.status === 'home' || Z.W.crew.includes(s.id));
+    if (!this.crewInit) { this.squadPick = new Set(Z.W.crew); this.crewInit = true; }
+    for (const id of [...this.squadPick]) if (!home.some(s => s.id === id)) this.squadPick.delete(id);
+    const SQ = R.squads.list.filter(q => q.members.length);
+    let html = `<p style="text-align:center;font-size:13px">Choose who sails. Soldiers aboard leave the island's defence until the fleet comes home. Those who fall on an island are gone forever.</p>`;
+    if (SQ.length) html += `<p class="section-title">Send a squad</p><div class="sqpicks">` + SQ.map(q => {
+      const col = COLORS.find(c => c.key === q.color).hex, at = q.members.filter(id => home.some(h => h.id === id)).length;
+      const on = q.members.some(id => this.squadPick.has(id)) && q.members.every(id => !home.some(h => h.id === id) || this.squadPick.has(id));
+      return `<button class="sqpick ${on ? 'on' : ''}" data-act="sqpick:${q.id}" style="--c:${col}" ${at ? '' : 'disabled'}><b>${esc(q.name)}</b><span>${at} of ${q.members.length} at home</span></button>`;
+    }).join('') + `</div>`;
+    html += `<details class="pickone" ${!SQ.length || this.pickOpen ? 'open' : ''}><summary>${SQ.length ? 'Or pick soldiers one by one' : 'Pick your soldiers'} (${this.squadPick.size}/${cap})</summary>` + (home.length ? home.sort((a, b) => b.level - a.level).map(r => this.soldierCard(r, { pick: true })).join('') : '<p style="text-align:center">No soldiers at home.</p>') + '</details>';
+    html += `<p class="section-title">Aboard: ${this.squadPick.size} of ${cap}</p><div class="sqfaces big">${[...this.squadPick].map(id => S.soldiers.find(s => s.id === id)).filter(Boolean).map(r => `<img src="${src(r.avatar)}" alt="" title="${esc(r.name)}">`).join('') || '<span class="muted">Nobody yet</span>'}</div>`;
+    html += `<button class="btn wide" data-act="embark">${this.squadPick.size ? 'Embark and open the sea' : 'Sail with no crew'}</button>`;
+    return html;
+  }
   // ------------------------------------------------------------ panels
   togglePanel(name, arg) { if (this.panel === name && !arg) this.closePanel(); else this.openPanel(name, arg); }
   openPanel(name, arg) {
@@ -613,7 +730,7 @@ export class UI {
   renderPanel() {
     this.live = [];
     const p = this.panel;
-    const titles = { hero: 'Hero', nightmarket: 'Night Market', build: 'Build', workers: 'Workers', army: 'Army', voyage: 'Voyage', chronicle: 'Chronicle', settings: 'Settings', merchant: 'Merchant', building: '' };
+    const titles = { crew: 'Crew', voyage: 'Trade', hero: 'Hero', nightmarket: 'Night Market', build: 'Build', workers: 'Workers', army: 'Army', chronicle: 'Chronicle', settings: 'Settings', merchant: 'Merchant', building: '' };
     $('#panelTitle').textContent = p === 'building' ? (this.panelArg.type === 'castle' && this.R.state.tier < 3 ? TIERS[this.R.state.tier].name + ' Hall' : this.panelArg.def.name) : p === 'hero' ? this.panelArg.name : titles[p];
     this.setTabs(null);
     const fn = this['panel_' + p];
@@ -784,8 +901,8 @@ export class UI {
 
   panel_voyage() {
     const R = this.R, S = R.state;
-    this.setTabs([['sail', 'Sail'], ['trade', 'Trade']]);
-    if (this.tab === 'trade') return this.tradeHtml();
+    this.setTabs(null); this.tab = 'trade';
+    return this.tradeHtml() + `<button class="btn wide" data-act="tosea">Back to the sea</button>`;
     if (R.raid && R.raid.active) return '<p class="section-title">You cannot sail while the realm is under attack.</p>';
     if (R.events.pending) return '<p class="section-title">A great threat approaches. Stay and defend.</p>';
     const home = S.soldiers.filter(s => s.status === 'home');
@@ -1200,6 +1317,8 @@ export class UI {
       for (const id of q.members) { const r = R.state.soldiers.find(s => s.id === id); if (r && r.status === 'home' && this.squadPick.size < cap) this.squadPick.add(id); }
       this.pickedSquad = q.id; return this.refresh();
     }
+    if (k === 'embark') { R.sea.embark([...this.squadPick]); this.crewInit = false; this.squadPick.clear(); this.openSea(); return; }
+    if (k === 'tosea') { this.openSea(); return; }
     if (k === 'tsend') { err(R.trade.send(a.slice(6))); return this.refresh(); }
     if (k === 'tstop') { R.trade.stop(+x); return this.refresh(); }
     if (k === 'hire') { err(R.hireHero()); return this.refresh(); }
@@ -1284,7 +1403,7 @@ export class UI {
         div.innerHTML += `<p>Floor ${next}${next % 5 === 0 ? ' holds a boss' : ' waits below'}. Your squad has rested a little. Press on, or come home and end the run.</p>`;
         this.choice(`Floor ${s.abyss} cleared`, div, [
           { label: `Descend to floor ${next}`, fn: () => { if (!ids.length) return; R.startExpedition(R.state.frontier, ids, 'abyss'); this.banner(R.exp.islandName, next % 5 === 0 ? 'Something large stirs on this floor.' : 'Clear every monster to go deeper.', 'red'); } },
-          { label: 'Return home', cls: 'red', fn: () => { R.abyssHome(); this.toast(`The run ends on floor ${s.abyss}.`); } },
+          { label: 'Back to the ship', cls: 'red', fn: () => { R.abyssHome(); this.toast(`The run ends on floor ${s.abyss}.`); this.openSea(); } },
         ]);
         return;
       }
@@ -1292,13 +1411,13 @@ export class UI {
         const ch = CHAPTERS[s.story], nx = CHAPTERS[s.story + 1];
         div.innerHTML = `<p style="font-style:italic">${esc(ch.outro)}</p>` + div.innerHTML + (nx ? `<p class="muted">Next: Chapter ${s.story + 2}, ${esc(nx.name)}.</p>` : '<p><b>The Drowned Crown is complete.</b></p>');
         this.choice(ch.final ? 'The crown is yours' : `Chapter ${s.story + 1} won`, div, [{ label: 'Home' }]);
-      } else this.choice('Victory', div, [{ label: 'Home' }]);
+      } else this.choice(s.conquered ? 'The kingdom kneels' : 'Victory', div, [{ label: s.fromSea ? 'Back to the ship' : 'Home', fn: () => { if (s.fromSea) this.openSea(); } }]);
     } else if (s.result === 'lost') {
-      div.innerHTML = `<p>No one returned from ${esc(s.name)}. Their names are kept in the Hall of the Fallen.</p>`;
+      div.innerHTML = `<p>No one returned from ${esc(s.name)}. Their names are kept in the Hall of the Fallen.</p>${s.shipHome ? '<p class="muted">With no one left aboard, the ship drifts home on the tide.</p>' : ''}`;
       this.choice('The squad is lost', div, [{ label: 'Home' }]);
     } else {
-      div.innerHTML = `<p>The squad sails home from ${esc(s.name)}.</p><p class="muted">Returning: ${s.survivors.map(esc).join(', ')}</p>`;
-      this.choice('Retreat', div, [{ label: 'Home' }]);
+      div.innerHTML = `<p>The squad pulls back to the ship from ${esc(s.name)}.</p><p class="muted">Aboard: ${s.survivors.map(esc).join(', ')}</p>`;
+      this.choice('Retreat', div, [{ label: s.fromSea ? 'Back to the ship' : 'Home', fn: () => { if (s.fromSea) this.openSea(); } }]);
     }
   }
 }

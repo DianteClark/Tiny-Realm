@@ -7,6 +7,7 @@ import { cellOf } from './world.js';
 import { audio } from './audio.js';
 import { Tutorial, checkFeats } from './tutorial.js';
 import { Minimap } from './minimap.js';
+import { WorldMapRenderer } from './worldmap.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -27,6 +28,11 @@ const ui = new UI();
 const realm = new Realm(ui);
 
 const view = {
+  // the sea uses the same camera in world-map units; the island view is put aside and restored
+  enterSea(f) { this.homeCam = { x: cam.x, y: cam.y, z: cam.z }; cam.z = this.seaZ || 0.55; this.centerOn(f.x, f.y); glide = null; },
+  exitSea() { this.seaZ = cam.z; if (this.homeCam) { cam.x = this.homeCam.x; cam.y = this.homeCam.y; cam.z = this.homeCam.z; } glide = null; clampCam(); },
+  seaCenter() { return [cam.x + vw / cam.z / 2, cam.y + vh / cam.z / 2]; },
+  seaFocus(x, y) { realm.cameraTarget = { x, y, t: 0.8 }; },
   centerOn(x, y) { cam.x = x - vw / cam.z / 2; cam.y = y - vh / cam.z / 2; clampCam(); },
   toScreen(x, y) { return { x: (x - cam.x) * cam.z, y: (y - cam.y) * cam.z }; },
   centerCell() { return [cellOf(cam.x + vw / cam.z / 2), cellOf(cam.y + vh / cam.z / 2)]; },
@@ -38,6 +44,7 @@ const view = {
 };
 
 function clampCam() {
+  if (realm.seaOpen) { cam.z = Math.max(0.1, Math.min(1.8, cam.z)); return; } // the sea has no edges
   const sc = realm.scene; if (!sc) return;
   const W = sc.map.w * T, H = sc.map.h * T;
   const minZ = Math.max(0.3, Math.min(vw / W, vh / H) * 0.9);
@@ -66,6 +73,7 @@ canvas.addEventListener('pointerdown', e => {
   canvas.setPointerCapture(e.pointerId);
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (ptrs.size === 1) drag = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y, moved: false, t: performance.now() };
+  if (realm.cameraTarget && realm.cameraTarget.t != null) realm.cameraTarget = null;
   // placing: press on the ghost to carry it, or press anywhere to drag out a wall line
   const pl = ui.place;
   if (ptrs.size === 1 && pl) {
@@ -226,6 +234,21 @@ function drawGhost() {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
 }
 
+// ---------------- the sea (4.0)
+let seaRenderer = null, seaT = 0;
+function drawSea(t) {
+  const Z = realm.sea; if (!Z.ocean) return;
+  if (!seaRenderer || seaRenderer.ocean !== Z.ocean) seaRenderer = new WorldMapRenderer(Z.ocean, SHEETS);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const f = Z.W.fleet, marks = [{ x: f.x, y: f.y, kind: 'ship', flip: f.flip }];
+  if (Z.W.dest) marks.push({ x: Z.W.dest.x, y: Z.W.dest.y, kind: 'target' });
+  seaRenderer.draw(ctx, { x: cam.x, y: cam.y, z: cam.z * dpr }, Z.fog, {
+    t, dpr, marks, selectedId: ui.seaSel ? ui.seaSel.id : null,
+    relations: kid => { const is = Z.ocean.islandById(String(kid).replace(/^k/, '')); return Z.relation(is); },
+  });
+  seaT -= 1 / 60; if (seaT <= 0) { seaT = 0.5; ui.renderSeaCard(); }
+}
+
 // ---------------- loop
 let last = performance.now(), tutorial = null, featT = 3, minimap = null;
 function frame(now) {
@@ -248,6 +271,7 @@ function frame(now) {
   }
   // camera hook for annexed land (src/annex.js): glide toward realm.cameraTarget {x, y, z?}
   const ct = realm.cameraTarget;
+  if (ct && ct.t != null) { ct.t -= dt; if (ct.t <= 0) realm.cameraTarget = null; }
   if (ct) { const k = 1 - Math.pow(0.03, dt), c = [cam.x + vw / cam.z / 2, cam.y + vh / cam.z / 2]; if (ct.z) cam.z += (ct.z - cam.z) * k; view.centerOn(c[0] + (ct.x - c[0]) * k, c[1] + (ct.y - c[1]) * k); glide = null; }
   const raidOn = (realm.raid && realm.raid.active) || realm.events.pending || realm.events.active;
   audio.setMood(realm.exp ? 'voyage' : raidOn ? 'battle' : 'home');
@@ -255,6 +279,7 @@ function frame(now) {
   if (realm.shakeAmt > 0.2) { sx = (Math.random() - 0.5) * realm.shakeAmt; sy = (Math.random() - 0.5) * realm.shakeAmt; realm.shakeAmt *= Math.pow(0.002, dt); } else realm.shakeAmt = 0;
   const zc = { x: cam.x + sx / cam.z, y: cam.y + sy / cam.z, z: cam.z * dpr };
   ctx.imageSmoothingEnabled = false;
+  if (realm.seaOpen) { drawSea(now / 1000); requestAnimationFrame(frame); return; }
   realm.scene.draw(ctx, zc, canvas.width, canvas.height);
   drawGhost();
   requestAnimationFrame(frame);

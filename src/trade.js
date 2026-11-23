@@ -19,6 +19,13 @@ export function ports(R) {
     const cargo = {}; for (const k in mix) cargo[k] = Math.round(base * mix[k]);
     out.push({ key: 'prov:' + a.region, name: `${p.name} docks`, sub: 'Your own province', mins: 10, risk: 0.12, cargo });
   }
+  // free ports your fleet has visited on the open sea (4.0)
+  const Z = R.sea, W = S.world;
+  if (Z && Z.ocean && W) for (const id of Object.keys(W.seen || {})) {
+    const is = Z.ocean.islandById(id); if (!is || is.kind !== 'port') continue;
+    const d = Math.hypot(is.x, is.y), base = 60 + is.level * 22;
+    out.push({ key: 'wport:' + id, name: `${is.name} port`, sub: `A free port out at sea, ${Math.round(d)} leagues away`, mins: Math.max(5, Math.round(4 + d / 400)), risk: Math.min(0.3, 0.06 + is.level * 0.012), cargo: { gold: base + t * 25, wood: Math.round(base * 0.7), meat: Math.round(base * 0.5) } });
+  }
   for (const r of RIVALS) {
     const st = S.rivals[r.key]; if (!st || !st.subjugated) continue;
     const rate = R.tributeRate(r.key);

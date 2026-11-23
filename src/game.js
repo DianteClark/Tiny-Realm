@@ -18,6 +18,8 @@ import { Decrees, DECREES } from './decrees.js';
 import { Seasonal } from './seasonal.js';
 import * as Legacy from './legacy.js';
 import { Squads, districtAt, DISTRICTS } from './squads.js';
+import { Sea } from './sea.js';
+import { seedFromWords, randomSeedWords } from './ocean.js';
 import { SHEETS } from './assets.js';
 import { audio } from './audio.js';
 import { Environment } from './env.js';
@@ -72,6 +74,7 @@ export class Realm {
     this.decrees = new Decrees(this);
     this.seasonal = new Seasonal(this);
     this.squads = new Squads(this);
+    this.sea = new Sea(this);
   }
 
   // ------------------------------------------------------------ persistence
@@ -91,11 +94,17 @@ export class Realm {
     this.state.rivals = this.state.rivals || {};
     for (const r of RIVALS) this.state.rivals[r.key] = Object.assign({ subjugated: false, defeats: 0, raids: 0, tributeAt: 0, met: false }, this.state.rivals[r.key] || {});
     // a voyage interrupted by closing the app counts as a retreat
-    for (const rec of this.state.soldiers) if (rec.status === 'away') { rec.status = 'home'; rec.post = null; }
+    const aboard = (this.state.world && this.state.world.crew) || [];
+    for (const rec of this.state.soldiers) if (rec.status === 'away' && !aboard.includes(rec.id)) { rec.status = 'home'; rec.post = null; }
     if (this.state.timers.raid < 60) this.state.timers.raid = 60;
+    if (fresh) { // a world of your own: the seed is a pair of words and a number, or one you chose
+      let words = null; try { words = localStorage.getItem('tinyrealm.nextSeed'); localStorage.removeItem('tinyrealm.nextSeed'); } catch (e) { /* ignore */ }
+      this.state.seed = seedFromWords(words || randomSeedWords());
+    }
     const inherit = fresh ? Legacy.applyToFresh(this.state) : null;
     if (fresh) this.foundHamlet();
     this.buildHome();
+    this.sea.init();
     if (fresh) this.hamletHouse();
     const away = fresh ? 0 : this.applyOffline();
     this.scene = this.home;
@@ -1066,6 +1075,15 @@ export class Realm {
   tributeRate(key) { return { gold: 30 + this.rivalLevel(key) * 6, wood: 20 + this.rivalLevel(key) * 4 }; } // per hour
   tickTribute() {
     const now = Date.now();
+    // kingdoms of the open sea that bent the knee pay a little every hour
+    const W = this.state.world;
+    if (W && this.sea.ocean) for (const [id, at] of Object.entries(W.conquered || {})) {
+      const hours = Math.floor((now - at) / 3600000); if (hours < 1) continue;
+      const is = this.sea.ocean.islandById(id), lv = is ? is.level : 3, h = Math.min(hours, 24);
+      const g = this.addRes('gold', (20 + lv * 4) * h), w = this.addRes('wood', (15 + lv * 3) * h);
+      W.conquered[id] = at + hours * 3600000;
+      if (g || w) this.ui.toast(`${is && is.kingdom ? is.kingdom.name : 'A vassal'} pays tribute: ${g} gold, ${w} wood.`, 'gold');
+    }
     for (const r of RIVALS) {
       const st = this.state.rivals[r.key];
       if (!st.subjugated) continue;
@@ -1144,6 +1162,7 @@ export class Realm {
     }
     this.updateRaid(dt);
     this.needs.update(dt);
+    this.sea.update(dt);
     this.trade.visuals(Date.now());
     if (!this.exp) this.events.update(dt);
     this.questT -= dt;
@@ -1448,21 +1467,31 @@ export class Realm {
   // ------------------------------------------------------------ expeditions
   startExpedition(n, ids, bounty) {
     const S = this.state;
-    const rivalKey = typeof bounty === 'string' && bounty.startsWith('rival:') ? bounty.slice(6) : null;
+    let rivalKey = typeof bounty === 'string' && bounty.startsWith('rival:') ? bounty.slice(6) : null;
     if (rivalKey) bounty = false;
     const storyIdx = typeof bounty === 'string' && bounty.startsWith('story:') ? +bounty.slice(6) : -1;
     if (storyIdx >= 0) bounty = false;
+    const isle = typeof bounty === 'string' && bounty.startsWith('isle:') ? this.sea.ocean.islandById(bounty.slice(5)) : null;
+    if (isle) bounty = false;
+    const kingdomIsle = isle && isle.kind === 'kingdom' ? isle : null;
     const abyss = bounty === 'abyss' ? ((S.abyss || (S.abyss = { depth: 1, best: 0, runs: 0 })).depth || 1) : 0;
     if (abyss) bounty = false;
+    if (kingdomIsle) rivalKey = kingdomIsle.kingdom.color;
     let info = islandInfo(n);
-    const seed = abyss ? hashStr('abyss' + abyss + 'x' + S.seed + 'r' + (S.abyss.runs || 0)) : storyIdx >= 0 ? hashStr('story' + storyIdx + 'x' + S.seed) : rivalKey ? hashStr('rival' + rivalKey + S.seed) : bounty ? hashStr('bounty' + todayStr()) : hashStr('isle' + n + 'x' + S.seed);
+    const seed = isle ? isle.seed : abyss ? hashStr('abyss' + abyss + 'x' + S.seed + 'r' + (S.abyss.runs || 0)) : storyIdx >= 0 ? hashStr('story' + storyIdx + 'x' + S.seed) : rivalKey ? hashStr('rival' + rivalKey + S.seed) : bounty ? hashStr('bounty' + todayStr()) : hashStr('isle' + n + 'x' + S.seed);
     let region = bounty ? REGIONS[seed % REGIONS.length] : info.region;
     let level = bounty ? Math.max(2, info.level + 1) : info.level;
     if (rivalKey) {
-      const rv = rivalDef(rivalKey);
-      level = this.rivalLevel(rivalKey);
+      const rv = kingdomIsle ? { name: kingdomIsle.kingdom.name, colors: [4, 1, 2] } : rivalDef(rivalKey);
+      level = kingdomIsle ? kingdomIsle.level : this.rivalLevel(rivalKey);
       region = { key: 'rival', name: rv.name, colors: rv.colors, rival: rivalKey, enemies: rivalRoster(rivalKey, level), camp: `${rivalKey}Tower`, camp2: `${rivalKey}Barracks`, camp3: `${rivalKey}House`, boss: `${rivalKey}_king` };
-      info = { ...info, boss: true, name: `the ${rv.name.split(' ')[1]} Capital`, rival: rivalKey };
+      info = { ...info, boss: true, name: kingdomIsle ? kingdomIsle.name : `the ${rv.name.split(' ')[1]} Capital`, rival: rivalKey };
+    }
+    if (isle && !kingdomIsle) { // a lair or ruins out on the sea
+      const P = this.sea.isleParams(isle);
+      region = P.region; level = P.level;
+      info = { ...info, boss: P.boss && isle.kind === 'lair', name: P.name };
+      if (!info.boss) region = { ...region, bossRelic: null };
     }
     if (abyss) {
       const BOSSES = ['bear', 'panda', 'minotaur', 'turtle', 'troll', 'moonbear'];
@@ -1482,7 +1511,7 @@ export class Realm {
     const map = generateIsland({ w: 40, h: 30, seed, plateaus: 5, highs: 2, colors: region.colors, landFrac: 0.55 });
     const sc = new Scene(this, 'expedition', map, seed);
     sc.islandName = bounty ? 'the Bounty Isle' : info.name; sc.info = info; sc.region = region; sc.level = level; sc.bounty = !!bounty; sc.n = n; sc.rival = rivalKey;
-    sc.expLoot = 0; sc.story = storyIdx; sc.abyss = abyss;
+    sc.expLoot = 0; sc.story = storyIdx; sc.abyss = abyss; sc.isle = isle; sc.fromSea = true;
     const r = rng(seed + 5);
     // landing on the west shore, boat floating clear of the coast
     const reach0 = [];
@@ -1498,7 +1527,7 @@ export class Realm {
     if (spot) sc.boats.push({ key: 'boat', x: center(spot.wx), y: center(spot.wy) + 46, t: 0, flip: spot.dx < 0 });
     const re = reachable(map, land[0], land[1]);
     // camps
-    const nCamps = abyss ? 0 : rivalKey ? 4 : storyIdx >= 0 && CHAPTERS[storyIdx].final ? 5 : Math.min(5, 2 + Math.floor(level / 4));
+    const nCamps = abyss ? 0 : isle && isle.kind === 'ruins' ? 2 : rivalKey ? 4 : storyIdx >= 0 && CHAPTERS[storyIdx].final ? 5 : Math.min(5, 2 + Math.floor(level / 4));
     const camps = [];
     const campSpots = reach0.filter(([x, y]) => re[map.i(x, y)] && dist(x, y, land[0], land[1]) > 9);
     for (let k = 0; k < 400 && camps.length < nCamps; k++) {
@@ -1630,7 +1659,14 @@ export class Realm {
       if (sc.abyss) { for (const k in loot) loot[k] = Math.round(loot[k] * (1 + sc.abyss * 0.06)); }
       this.addAll(loot); summary.loot = loot;
       if (sc.info.boss && !sc.bounty && sc.region.bossRelic && !S.relics[sc.region.bossRelic]) { S.relics[sc.region.bossRelic] = true; summary.relic = sc.region.bossRelic; }
-      if (sc.rival) {
+      if (sc.isle && sc.isle.kind === 'kingdom') { // a kingdom of the open sea bends the knee
+        const W = S.world; W.conquered[sc.isle.id] = Date.now(); summary.conquered = sc.isle.kingdom.name;
+        S.stats.kingdoms = (S.stats.kingdoms || 0) + 1; S.cleared++;
+        this.log(`${sc.isle.kingdom.name} of ${sc.isle.name} bent the knee.`);
+      } else if (sc.isle) {
+        S.world.cleared[sc.isle.id] = Date.now(); S.cleared++; S.frontier = Math.max(S.frontier, S.cleared + 1);
+        if (sc.isle.kind === 'ruins') { S.fragments = (S.fragments || 0) + 1; summary.gear.push(this.dropGear(lv + 3, { quiet: true, min: 1, from: sc.islandName })); summary.fragment = true; }
+      } else if (sc.rival) {
         const st = S.rivals[sc.rival], rv = rivalDef(sc.rival);
         st.subjugated = true; st.defeats++; st.tributeAt = Date.now();
         summary.rival = sc.rival;
@@ -1670,7 +1706,7 @@ export class Realm {
       if (sc.bounty && Math.random() < 0.5) summary.gear.push(this.dropGear(lv + 1, { quiet: true, from: sc.islandName }));
       for (const u of survivors) this.grantXp(sc, u, 15 + lv * 2);
       // conquered land joins the realm: rival capitals and boss islands slam into your coast
-      if (!sc.abyss && (sc.rival || (sc.info.boss && !sc.bounty)) && this.canAnnex()) {
+      if (!sc.abyss && !(sc.isle && sc.isle.kind === 'ruins') && (sc.rival || (sc.info.boss && !sc.bounty)) && this.canAnnex()) {
         const rec = this.annex({ region: sc.rival ? 'rival' : sc.region.key, size: sc.rival ? 3 : 2 });
         if (rec) summary.province = provinceOf(sc.rival ? 'rival' : sc.region.key);
         if (rec) summary.annexed = true;
@@ -1680,9 +1716,16 @@ export class Realm {
       if (sc.abyss) { S.abyss.depth = 1; S.abyss.runs = (S.abyss.runs || 0) + 1; }
       this.log(`The squad sent to ${sc.islandName} was lost.`);
     } else { if (sc.abyss) { S.abyss.depth = 1; S.abyss.runs = (S.abyss.runs || 0) + 1; } this.log(`Retreated from ${sc.islandName}.`); }
-    // bring survivors home
-    for (const u of survivors) { u.rec.status = 'home'; u.rec.hp = Math.round(u.hp); u.rec.post = null; }
-    for (const rec of S.soldiers) if (rec.status === 'away') { rec.status = 'home'; }
+    // survivors climb back aboard the ship (4.0); with nobody left the ship drifts home on its own
+    if (sc.fromSea && S.world) {
+      for (const u of survivors) { u.rec.status = 'away'; u.rec.hp = Math.round(u.hp); u.rec.post = null; }
+      S.world.crew = survivors.map(u => u.rec.id);
+      summary.fromSea = true;
+      if (!survivors.length) { S.world.fleet = { x: 0, y: 0 }; S.world.dest = null; summary.shipHome = true; }
+    } else {
+      for (const u of survivors) { u.rec.status = 'home'; u.rec.hp = Math.round(u.hp); u.rec.post = null; }
+    }
+    for (const rec of S.soldiers) if (rec.status === 'away' && !(S.world && S.world.crew.includes(rec.id))) { rec.status = 'home'; }
     for (const rec of S.soldiers) if (rec.status === 'home' && !this.home.units.some(u => u.rec === rec)) this.spawnSoldier(rec, true);
     this.exp = null; this.scene = this.home;
     this.sfx(result === 'won' ? 'victory' : result === 'lost' ? 'defeat' : 'sail');

@@ -37,7 +37,7 @@ export class Minimap {
     return c;
   }
   update(dt) {
-    const on = minimapOn() && !this.R.ui.panel && !this.R.ui.place;
+    const on = minimapOn() && !this.R.ui.panel && !this.R.ui.place && !this.R.seaOpen;
     this.el.classList.toggle('hidden', !on); if (!on) return;
     this.t -= dt; if (this.t > 0) return; this.t = 0.2;
     const sc = this.R.scene, m = sc.map, key = m.w + 'x' + m.h + ':' + (this.R.state.annexed || []).length + ':' + (sc === this.R.home ? 'h' : 'e');

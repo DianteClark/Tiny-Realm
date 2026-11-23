@@ -349,3 +349,26 @@ details.pickone > summary { text-align: center; margin: 6px 0; font-size: 13px; 
 .good { color: #4f8f3a; font-weight: normal; } .card:not(.light) .good { color: #9be37b; }
 #minimap { position: absolute; right: 8px; top: calc(var(--safe-top) + 104px); width: 112px; height: 84px; border: 3px solid #2b2b3a; border-radius: 6px; box-shadow: 0 2px 0 rgba(0,0,0,.25), inset 0 0 0 1px rgba(255,255,255,.2); image-rendering: pixelated; cursor: pointer; }
 #hud:has(#minimap:not(.hidden)) #squadBtns { top: calc(var(--safe-top) + 198px); }
+
+/* the sea (4.0) */
+body.sea #pills, body.sea #squadBtns, body.sea #abilitybar, body.sea #selbar, body.sea #undoBtn { display: none !important; }
+#seaTop { position: absolute; left: 50%; transform: translateX(-50%); top: calc(var(--safe-top) + 104px); padding: 3px 12px; font-size: 13px; color: #fff6d8; background: rgba(43,43,58,.72); border-radius: 12px; white-space: nowrap; pointer-events: none; text-shadow: 0 1px 0 rgba(0,0,0,.4); }
+#seaCard { position: absolute; left: 8px; right: 8px; bottom: calc(var(--safe-bot) + 84px); display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+#seaCard > * { pointer-events: auto; }
+@media (min-width: 700px) { #seaCard { left: 50%; right: auto; transform: translateX(-50%); width: 520px; } }
+.sea-status { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px 6px 12px; background: rgba(43,43,58,.88); color: var(--cream); border-radius: 8px; font-size: 13px; }
+.sea-status b { font-weight: normal; color: #ffe9a8; }
+.isle { background: #f7eedb; border: 2px solid #d6c39c; border-radius: 9px; padding: 8px 10px; color: var(--ink); box-shadow: 0 3px 0 rgba(0,0,0,.2); animation: sheetUp .18s ease-out; }
+.isle-head { display: flex; gap: 10px; align-items: flex-start; }
+.isle-head h3 { margin: 0; font-size: 16px; font-weight: normal; }
+.isle-head p { margin: 1px 0 0; font-size: 13px; }
+.isle-head .tiny-btn { flex: none; }
+.isle .sig { flex: none; width: 44px; height: 50px; display: flex; align-items: center; justify-content: center; }
+.isle .sig canvas { image-rendering: pixelated; }
+.isle-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.isle-acts .btn { flex: 1 1 40%; }
+.isle-acts .note { margin: 0; font-size: 13px; color: var(--ink-soft); flex: 1 1 100%; text-align: center; }
+.rel { display: inline-block; margin-left: 4px; padding: 0 6px; font-size: 11px; border-radius: 4px; color: #fff; vertical-align: 2px; }
+.rel.enemy { background: #d9534f; } .rel.neutral { background: #c9962a; } .rel.ally { background: #4f8f3a; }
+.sea-bar { display: flex; gap: 4px; } .sea-bar .btn { flex: 1; min-width: 0; padding-left: 0; padding-right: 0; font-size: 12px; white-space: nowrap; }
+body.sea #toasts { bottom: calc(var(--safe-bot) + 250px); }
