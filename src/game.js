@@ -111,7 +111,8 @@ export class Realm {
   syncState() {
     const S = this.state, h = this.home;
     if (!h) return;
-    S.buildings = h.buildings.map(b => ({ type: b.type, cx: b.cx, cy: b.cy, hp: Math.round(b.hp), maxHp: b.maxHp, buildEnd: b.buildEnd, buildTotal: b.buildTotal, variant: b.variant, queue: b.queue, level: b.level, upEnd: b.upEnd, upTotal: b.upTotal }));
+    const lifted = this.ui && this.ui.place && this.ui.place.move ? [this.ui.place.move] : [];
+    S.buildings = [...h.buildings, ...lifted].map(b => ({ type: b.type, cx: b.cx, cy: b.cy, hp: Math.round(b.hp), maxHp: b.maxHp, buildEnd: b.buildEnd, buildTotal: b.buildTotal, variant: b.variant, queue: b.queue, level: b.level, upEnd: b.upEnd, upTotal: b.upTotal }));
     S.trees = h.trees.map(t => ({ cx: t.cx, cy: t.cy, wood: t.wood, regrow: t.regrow })); // cx,cy: matched by position on load (annex.js)
     S.golds = h.golds.map(g => ({ cx: g.cx, cy: g.cy, amount: Math.round(g.amount) }));
     S.sheep = h.sheep.filter(s => !s.caught).length;
@@ -751,6 +752,27 @@ export class Realm {
     this.reach = reachable(this.home.map, this.door[0], this.door[1]);
     if (this.state.jobs.build === 0 && this.state.pawns > 1 && !this.buildTipShown) { this.buildTipShown = true; this.ui.toast('Tip: assign a pawn to Build in Workers to raise it faster.'); }
     this.save();
+    return null;
+  }
+  // ---- 3.6 moving buildings: lift one off the map, then drop it somewhere else
+  liftBuilding(b) {
+    const h = this.home; if (!h.buildings.includes(b)) return;
+    h.buildings = h.buildings.filter(o => o !== b); h.placeBlock(b.cells(), -1);
+    for (const u of h.units) if (u.kind === 'pawn' && u.node === b) { u.node = null; u.task = null; }
+    this.reach = reachable(h.map, this.door[0], this.door[1]);
+  }
+  dropBuilding(b, cx, cy, quiet) {
+    const h = this.home; b.cx = cx; b.cy = cy;
+    if (!h.buildings.includes(b)) { h.buildings.push(b); h.placeBlock(b.cells(), 1); }
+    this.reach = reachable(h.map, this.door[0], this.door[1]);
+    this.rescueTrapped();
+    if (!quiet) { b.pop = 0.45; h.fxAt('dust2', b.x, b.y, { scale: 1.6 }); this.sfx('place'); this.shake(2); }
+    this.save();
+  }
+  moveBuilding(b, cx, cy) {
+    if (!this.canPlace(b.type, cx, cy)) return 'That spot is blocked.';
+    this.dropBuilding(b, cx, cy);
+    this.state.stats.moves = (this.state.stats.moves || 0) + 1;
     return null;
   }
   demolish(b) {

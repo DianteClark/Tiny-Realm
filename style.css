@@ -319,3 +319,6 @@ button:disabled, .btn:disabled { cursor: url('assets/free/UI Elements/UI Element
 @keyframes sheetDown { to { transform: translateY(40px); opacity: 0; } }
 /* keep toasts clear of the placement and selection bars */
 #hud:has(#placebar:not(.hidden)) #toasts, #hud:has(#selbar:not(.hidden)) #toasts { bottom: calc(var(--safe-bot) + 160px); }
+#undoBtn { position: absolute; right: 10px; bottom: calc(var(--safe-bot) + 92px); min-width: 74px; z-index: 3; overflow: hidden; }
+#undoBtn.run::after { content: ''; position: absolute; left: -10px; right: -10px; bottom: -10px; height: 3px; background: #ffe9a8; transform-origin: left; animation: undoT var(--t, 8s) linear forwards; }
+@keyframes undoT { to { transform: scaleX(0); } }

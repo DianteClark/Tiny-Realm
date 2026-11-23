@@ -3,6 +3,7 @@ import { SHEETS } from './assets.js';
 import { levelCap, PROMOTIONS, PROMO_COST, UNITS, ENEMIES, BUILDINGS, TIERS, TRAITS, RELICS, XP_LEVELS, MAX_LEVEL, islandInfo, renownCost, STORY, upgradeCost, upgradeTime, describeLevel, levelEffects, ABILITIES, RIVALS, rivalDef, provinceOf } from './data.js';
 const FORMATIONS = ['Loose', 'Line', 'Wedge', 'Column'];
 import { Unit, Building, Struct, cellOf } from './world.js';
+import { reachable } from './terrain.js';
 import { T } from './terrain.js';
 import { MAJOR } from './events.js';
 import { audio } from './audio.js';
@@ -65,6 +66,7 @@ export class UI {
     $('#btnPlaceCancel').onclick = () => this.cancelPlace();
     this.body.addEventListener('click', e => { const el = e.target.closest('[data-act]'); if (el && !el.disabled) this.act(el.dataset.act, el); });
     this.tabs.addEventListener('click', e => { const el = e.target.closest('[data-tab]'); if (el) { this.tab = el.dataset.tab; this.renderPanel(); } });
+    $('#undoBtn').onclick = () => this.doUndo();
     $('#subbar').addEventListener('click', e => { const el = e.target.closest('[data-pill]'); if (el) this.pillAction(el.dataset.pill); });
     $('#hud').classList.remove('hidden');
     document.addEventListener('click', e => { const b = e.target.closest('button, .chip, summary'); if (b && !b.disabled && !b.classList.contains('navbtn')) audio.play('click'); }, true);
@@ -471,6 +473,37 @@ export class UI {
     this.R.scene.selected.clear(); this.refreshSel();
     this.toast('Drag the building where you want it, or tap a spot. Green tiles are free.');
   }
+  startMove(b) {
+    this.closePanel();
+    if (this.R.raid && this.R.raid.active) return this.toast('Not while raiders are ashore.', 'red');
+    this.R.liftBuilding(b);
+    this.place = { type: b.type, move: b, from: [b.cx, b.cy], cx: b.cx, cy: b.cy, moved: true };
+    $('#placebar').classList.remove('hidden'); $('#placeText').textContent = 'Move ' + b.def.name; $('#btnPlaceOk').textContent = 'Place here';
+    this.view.centerOn(b.x, b.y - 60);
+    $('#bottombar').classList.add('hidden');
+    this.R.scene.selected.clear(); this.refreshSel();
+    this.R.sfx('build');
+    this.toast('Drag it to its new home. Green tiles are free.');
+  }
+  // a few seconds to take back the last placement or move
+  offerUndo(u) {
+    this.undo = u; const el = $('#undoBtn'); el.classList.remove('hidden');
+    el.style.setProperty('--t', '8s'); el.classList.remove('run'); void el.offsetWidth; el.classList.add('run');
+    clearTimeout(this.undoT); this.undoT = setTimeout(() => { el.classList.add('hidden'); this.undo = null; }, 8000);
+  }
+  doUndo() {
+    const u = this.undo, R = this.R; if (!u) return;
+    this.undo = null; $('#undoBtn').classList.add('hidden'); clearTimeout(this.undoT);
+    if (!R.home.buildings.includes(u.b)) return;
+    if (u.kind === 'move') {
+      R.liftBuilding(u.b);
+      if (R.canPlace(u.b.type, u.from[0], u.from[1])) R.dropBuilding(u.b, u.from[0], u.from[1]);
+      else { R.dropBuilding(u.b, u.to[0], u.to[1], true); this.toast('Its old spot is taken now.', 'red'); }
+    } else if (u.kind === 'place' && !u.b.done) {
+      R.home.removeBuilding(u.b); R.addAll(BUILDINGS[u.b.type].cost); R.home.fxAt('dust1', u.b.x, u.b.y); R.sfx('close');
+      R.reach = reachable(R.home.map, R.door[0], R.door[1]); R.save();
+    }
+  }
   movePlace(wx, wy) {
     const d = BUILDINGS[this.place.type];
     if (d.wall || d.lantern) {
@@ -493,11 +526,23 @@ export class UI {
       if (p.line) { p.a = null; p.b = null; this.toast('Wall raised. Tap again for another line, or Cancel when done.'); } else this.cancelPlace();
       return;
     }
+    if (p.move) {
+      const err = this.R.moveBuilding(p.move, p.cx, p.cy);
+      if (err) { this.toast(err, 'red'); return; }
+      const b = p.move; this.place = null; this.cancelPlace();
+      if (b.cx !== p.from[0] || b.cy !== p.from[1]) this.offerUndo({ kind: 'move', b, from: p.from, to: [b.cx, b.cy] });
+      return;
+    }
     const err = this.R.placeBuilding(p.type, p.cx, p.cy);
     if (err) { this.toast(err, 'red'); return; }
+    const nb = this.R.home.buildings[this.R.home.buildings.length - 1];
     this.cancelPlace();
+    if (nb && nb.type === p.type) this.offerUndo({ kind: 'place', b: nb });
   }
   cancelPlace() {
+    const p = this.place;
+    $('#btnPlaceOk').textContent = 'Build here';
+    if (p && p.move && !this.R.home.buildings.includes(p.move)) this.R.dropBuilding(p.move, p.from[0], p.from[1], true); // put it back
     this.place = null;
     $('#placebar').classList.add('hidden');
     if (!this.R.exp) $('#bottombar').classList.remove('hidden');
@@ -968,7 +1013,7 @@ export class UI {
       };
       this.live.push(renderQ); this.afterRender = renderQ;
     }
-    if (b.type !== 'castle') html += `<p></p><button class="btn small red wide" data-act="demolish:${b.id}">Demolish</button>`;
+    if (b.type !== 'castle') html += `<p></p><div class="row-btns"><button class="btn small" data-act="move:${b.id}" ${R.raid && R.raid.active ? 'disabled' : ''}>Move</button><button class="btn small red" data-act="demolish:${b.id}">Demolish</button></div>${R.raid && R.raid.active ? '<p class="muted" style="text-align:center;font-size:12px">Buildings cannot be moved during a raid.</p>' : ''}`;
     return html;
   }
 
@@ -1018,6 +1063,7 @@ export class UI {
     if (k === 'bup') { err(R.upgradeBuilding(R.home.buildings.find(o => o.id === +x))); return this.refresh(); }
     if (k === 'repair') { err(R.repairNow(R.home.buildings.find(o => o.id === +x))); return this.refresh(); }
     if (k === 'cancel') { const b = R.home.buildings.find(o => o.id === +x); R.cancelTrain(b, +y); return this.refresh(); }
+    if (k === 'move') { const b = R.home.buildings.find(o => o.id === +x); if (b) this.startMove(b); return; }
     if (k === 'demolish') {
       const b = R.home.buildings.find(o => o.id === +x);
       return this.confirm('Demolish?', `Tear down this ${b.def.name}? You get a quarter of its cost back.`, 'Demolish', () => { R.demolish(b); this.closePanel(); });

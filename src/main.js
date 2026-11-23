@@ -206,7 +206,7 @@ function drawGhost() {
   ctx.setTransform(z, 0, 0, z, Math.round(-cam.x * z), Math.round(-cam.y * z));
   ctx.fillStyle = ok ? 'rgba(109,187,91,0.45)' : 'rgba(217,83,79,0.5)';
   for (let y = p.cy; y < p.cy + d.fh; y++) for (let x = p.cx; x < p.cx + d.fw; x++) ctx.fillRect(x * T + 2, y * T + 2, T - 4, T - 4);
-  const s = SHEETS[d.img || d.imgs[0]];
+  const s = SHEETS[p.move ? p.move.imgKey : (d.img || d.imgs[0])];
   if (s && s.img) {
     ctx.globalAlpha = 0.6;
     const bx = (p.cx + d.fw / 2) * T, by = (p.cy + d.fh) * T;
