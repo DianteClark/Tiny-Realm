@@ -27,8 +27,8 @@ import { familyInfo, LORE_STEPS } from './saga.js';
 import { SPEED } from './sea.js';
 import { parseSeedWords, normalizeSeedWords } from './ocean.js';
 
-export const VERSION = '9.0';
-const NOTES_SEEN = '9.0'; // the what's-new notes below were last changed in 9.0
+export const VERSION = '10.0';
+const NOTES_SEEN = '10.0'; // the what's-new notes below were last changed in 10.0
 
 const $ = s => document.querySelector(s);
 const src = k => SHEETS[k] ? encodeURI(SHEETS[k].src) : '';
@@ -212,10 +212,16 @@ export class UI {
     if (!info.fresh && localStorage.getItem('tinyrealm.seen') !== NOTES_SEEN) {
       const div = document.createElement('div');
       div.innerHTML = `<p style="text-align:left;font-size:14px;line-height:1.4">
+        <b>10.0 Presentation</b><br>
+        Tiny Realm reaches 10. A title screen greets you with your house, your ruler and the day of your realm.<br>
+        New music for the open sea, for night, and for the title; a soft fade marks every change of place.<br>
+        Settings: text size, reduced motion, and whether to show the title screen.<br>
+        A polish pass over every screen, on phone and desktop. Thank you for playing.<br><br>
         <b>9.0 Saga, Bestiary and Codex</b><br>
         Chronicle, Saga: the great deeds of your realm are written down as they happen, one book for each ruler. Past realms keep their sagas in the Hall of Realms.<br>
         Bestiary: every kind of foe you meet, with what you have learned of it. Slay 25, 100 and 300 of a kind and your soldiers strike it 5% harder each time.<br>
         Codex: the realm's book of knowledge, filled in as you build, train, sail, find relics, appoint generals and pass decrees.<br><br>
+</p><details class="older"><summary>Earlier versions</summary><p style="text-align:left;font-size:13px;line-height:1.4">
         <b>8.0 Dynasty, Court and Nemesis</b><br>
         Tap the castle, then The throne room. Your realm has a ruling house now.<br>
         Dynasty: your ruler has traits that help the whole realm, and ages a year every four hours. Marry into a kingdom at peace with you for an heir. When the ruler dies the heir takes the throne; with no heir, a succession crisis.<br>
@@ -292,6 +298,7 @@ export class UI {
         New pawns go straight to work on your scarcest resource.<br>
         Screen shake, hit flashes, damage numbers, a goal tracker, and smoother camera glide.<br>
         Islands rebuilt to follow the Tiny Swords tilemap rules: chunky coastlines, sea cliffs, two levels of high ground, and boats and clouds layered properly.${R.migrated ? '<br>Your island has been reshaped. Buildings were moved to the nearest solid ground.' : ''}</p>
+</p></details>
         <p class="muted" style="font-size:12px">Sound starts after your first tap. Volume is in Settings.</p>`;
       this.choice("What's new", div, [{ label: 'Onward' }]);
     }
@@ -806,7 +813,7 @@ export class UI {
     else if (a === 'load' && is) { const st = R.colonies.empty(is.id), W = Z.W; W.hold = W.hold || {}; for (const k in st) W.hold[k] = (W.hold[k] || 0) + st[k]; this.toast('The stores are loaded. They are unloaded when the fleet reaches home.', 'gold'); R.save(); }
     else if (a === 'garrison' && is) { R.colonies.leaveGarrison(is.id, Z.crewRecs()); this.toast('The crew stays to guard the colony.', 'gold'); R.save(); }
     else if (a === 'ungarrison' && is) { R.colonies.takeGarrison(is.id, TIERS[S.tier].squad); this.toast('The garrison comes aboard.', 'gold'); R.save(); }
-    else if (a === 'court' && is) { const id = is.id; this.closeSea(true); this.openPanel('court', id); return; }
+    else if (a === 'court' && is) { const id = is.id; this.courtFrom = null; this.closeSea(true); this.openPanel('court', id); return; }
     else if (a === 'crew' || a === 'crewview') { this.closeSea(true); this.openPanel('crew'); return; }
     else if (a === 'disembark') { Z.disembark(); this.toast('The crew comes ashore.'); }
     else if (a === 'rest') {
@@ -846,10 +853,12 @@ export class UI {
       const order = fams.slice().sort((a, b) => (B[b] ? 1 : 0) - (B[a] ? 1 : 0) || ((B[b] || {}).kills || 0) - ((B[a] || {}).kills || 0));
       html += order.map(f => {
         const b = B[f], I = familyInfo(f), d = I.def || {};
-        if (!b) return `<div class="card light locked"><div class="thumb"><span class="qm">?</span></div><div class="grow"><h3>Unknown foe</h3><p class="muted">Not yet met.</p></div></div>`;
+        if (!b) return '';
         const key = SHEETS[`${I.sprite}_idle`] ? `${I.sprite}_idle` : SHEETS[`${I.sprite}_run`] ? `${I.sprite}_run` : null, nx = Sg.nextLore(f), lo = Sg.lore(f.startsWith('house_') ? 'red_' + f.slice(6) : f);
         return `<div class="card light"><div class="thumb">${key ? `<img src="${spriteThumb(key)}" alt="">` : ''}</div><div class="grow"><h3>${esc(I.name)} <span class="rel ${lo ? 'ally' : 'neutral'}">${Sg.loreWord(f)}</span></h3><p>${esc(Sg.loreText(f))}</p><p class="muted">Health ${d.hp || '?'}, ${d.dmg ? `damage ${d.dmg}` : d.heal ? `heals ${d.heal}` : 'damage ?'}${d.proj ? ', ranged' : ''}. Slain: ${b.kills}.${lo ? ` +${Math.round(lo * 100)}% damage against them.` : ''}${nx ? ` Slay ${nx} more for the next step.` : ''}</p></div></div>`;
       }).join('');
+      const un = fams.length - known.length;
+      if (un) html += `<div class="unknowns">${'<span class="qm">?</span>'.repeat(Math.min(un, 40))}</div><p class="muted" style="text-align:center;font-size:13px">${un} kind${un === 1 ? '' : 's'} of foe not yet met.</p>`;
       return html;
     }
     const P = Sg.progress();
@@ -977,7 +986,7 @@ export class UI {
         ${B('war', s === 'truce' || s === 'ally' ? 'Break faith: declare war' : 'Declare war', s !== 'war', 'red')}
       </div><p class="muted" style="font-size:12px;text-align:center">${house ? 'A great house never makes a lasting peace. Truces buy time; only a siege ends the feud.' : 'Gifts raise their regard. Peace needs a friendly court, an alliance a warm one. Tribute is only paid to a realm half again their strength, once an hour.'}</p>`;
     }
-    html += `<button class="btn wide" data-act="tosea:${is0.id}">Back to the sea</button>`;
+    html += this.courtFrom === 'courts' ? `<button class="btn wide" data-act="courtsback">Back to Courts</button>` : `<button class="btn wide" data-act="tosea:${is0.id}">Back to the sea</button>`;
     return html;
   }
   coursHtml() {
@@ -1051,7 +1060,7 @@ export class UI {
   renderPanel() {
     this.live = [];
     const p = this.panel;
-    const titles = { crew: 'Crew', voyage: 'Trade', hero: 'Hero', nightmarket: 'Night Market', build: 'Build', workers: 'Workers', army: 'Army', chronicle: 'Chronicle', settings: 'Settings', merchant: 'Merchant', building: '', court: 'Court', throne: 'Throne room', codex: 'Codex' };
+    const titles = { crew: 'Crew', voyage: 'Trade and colonies', hero: 'Hero', nightmarket: 'Night Market', build: 'Build', workers: 'Workers', army: 'Army', chronicle: 'Chronicle', settings: 'Settings', merchant: 'Merchant', building: '', court: 'Court', throne: 'Throne room', codex: 'Codex' };
     $('#panelTitle').textContent = p === 'building' ? (this.panelArg.type === 'castle' && this.R.state.tier < 3 ? TIERS[this.R.state.tier].name + ' Hall' : this.panelArg.def.name) : p === 'hero' ? this.panelArg.name : titles[p];
     this.setTabs(null);
     const fn = this['panel_' + p];
@@ -1114,7 +1123,7 @@ export class UI {
         <div>${rec.traits.map(t => `<span class="trait ${TRAITS[t].rare ? 'rare' : ''}" title="${TRAITS[t].desc}">${TRAITS[t].name}</span>`).join('')}</div>
         ${this.gearRow(rec)}
         <div class="hpbar"><i style="width:${hpPct}%"></i></div><div class="xpbar"><i style="width:${xpPct}%"></i></div></div>
-      ${!opts.pick && !opts.noButtons ? `<div class="col-btns"><button class="btn small" data-act="hero:${rec.id}">Gear</button>${rec.status === 'home' && !this.R.exp ? `<button class="btn small" data-act="find:${rec.id}">Find</button>` : ''}</div>` : ''}</div>`;
+      ${!opts.pick && !opts.noButtons ? `<div class="col-btns"><button class="btn small" data-act="hero:${rec.id}">Details</button>${rec.status === 'home' && !this.R.exp ? `<button class="btn small" data-act="find:${rec.id}">Find</button>` : ''}</div>` : ''}</div>`;
   }
   gearRow(rec) {
     const S = this.R.state;
@@ -1381,7 +1390,8 @@ export class UI {
 
   panel_chronicle() {
     const R = this.R, S = R.state;
-    this.setTabs([['quest', 'Goals'], ['season', 'Season'], ['realm', 'Realm'], ['courts', 'Courts'], ['feats', 'Feats'], ['log', 'Saga']]);
+    this.setTabs([['quest', 'Goals'], ['season', 'Season'], ['realm', 'Realm'], ['courts', 'Courts'], ['feats', 'Feats'], ['log', 'Saga'], ['codex', 'Codex']]);
+    if (this.tab === 'codex') { setTimeout(() => { this.openPanel('codex', 'bestiary'); }); return ''; }
     if (this.tab === 'season') return this.seasonHtml();
     if (this.tab === 'courts') return this.coursHtml();
     if (this.tab === 'feats') {
@@ -1399,7 +1409,7 @@ export class UI {
       const hols = upcomingHolidays(5).map(h => `<div class="card light"><div class="grow"><h3>${h.name}</h3><p>${h.date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}. ${esc(h.desc)}</p></div></div>`).join('');
       const moonHtml = `<div class="card"><div class="grow"><h3>${moon.name}</h3><p>${moon.full ? 'Full moon tonight: the Moonlit Hunt stirs.' : moon.dark ? "A thieves' moon: dark nights bring extra thieves." : `Full moon in about ${Math.round(((29.53 / 2) - moon.age + 29.53) % 29.53)} days.`}</p></div></div>`;
       const seedCard = `<p class="section-title">This world</p><div class="card light"><div class="grow"><h3 class="seedw">${esc(R.sea.words())}</h3><p class="muted">Your world's seed. Paste it when you start a new realm to sail these same seas again.</p></div><button class="btn small" data-act="copyseed:${esc(R.sea.words())}">Copy</button></div>`;
-      return seedCard + `<button class="btn wide" data-act="throne">The throne room: dynasty, council and nemesis</button><div class="stat-grid">${rows.map(([a, b]) => `<span>${a}</span><span>${b}</span>`).join('')}</div><p class="section-title">The moon</p>${moonHtml}<p class="section-title">Holy days and festivals</p>${hols}<p class="section-title">Provinces</p>${provHtml}<p class="section-title">Rival houses</p>${rv}${this.legacyHtml(true)}`;
+      return seedCard + `<button class="btn wide" data-act="throne">The throne room</button><div class="stat-grid">${rows.map(([a, b]) => `<span>${a}</span><span>${b}</span>`).join('')}</div><p class="section-title">The moon</p>${moonHtml}<p class="section-title">Holy days and festivals</p>${hols}<p class="section-title">Provinces</p>${provHtml}<p class="section-title">Rival houses</p>${rv}${this.legacyHtml(true)}`;
     }
     if (this.tab === 'log') return this.sagaHtml();
     const q = R.currentQuest();
@@ -1408,8 +1418,8 @@ export class UI {
     const relicsOwned = Object.values(S.relics).filter(Boolean).length;
     const O = S.orders;
     const orders = O ? `<p class="section-title">${O.kind === 'night' ? 'Night orders' : 'Day orders'} <span class="muted">(new ones at ${O.kind === 'night' ? 'dawn' : 'dusk'})</span></p>` + O.list.map(o => `<div class="card ${o.done ? '' : 'light'}"><i class="ic ${o.done ? 'ic-shield' : 'ic-sword'}"></i><div class="grow"><h3>${esc(o.text)}</h3><p>${o.done ? 'Done.' : `${Math.floor(o.have || 0)} / ${o.n}`}</p>${o.done ? '' : `<div class="xpbar"><i style="width:${Math.min(100, (o.have || 0) / o.n * 100)}%"></i></div>`}${this.costHtml(o.reward).replace(/lack/g, '')}</div></div>`).join('') : '';
-    return this.decreeHtml() + this.chalHtml() + orders + `<p class="section-title">Chronicle</p><div class="card"><i class="ic ic-info" style="width:40px;height:40px"></i><div class="grow"><h3>${esc(q.text)}</h3><p>${Math.min(v, q.n)} / ${q.n}</p><div class="xpbar"><i style="width:${pct}%"></i></div>
-      <p style="margin-top:4px">Reward</p>${this.costHtml(q.reward).replace(/lack/g, '')}</div></div>
+    return `<p class="section-title">Current goal</p><div class="card"><i class="ic ic-info" style="width:40px;height:40px"></i><div class="grow"><h3>${esc(q.text)}</h3><p>${Math.min(v, q.n)} / ${q.n}</p><div class="xpbar"><i style="width:${pct}%"></i></div>
+      <p style="margin-top:4px">Reward</p>${this.costHtml(q.reward).replace(/lack/g, '')}</div></div>` + this.decreeHtml() + this.chalHtml() + orders + `
       ${(() => { const nx = nextChapter(S); if (nx < 0) return '<p class="section-title">The Drowned Crown</p><div class="card"><div class="grow"><p>Complete. The crown of the Sea Kings is yours.</p></div></div>'; const ch = CHAPTERS[nx];
         return `<p class="section-title">The Drowned Crown</p><div class="card light"><div class="grow"><h3>Chapter ${nx + 1}: ${esc(ch.name)}</h3><p>${chapterOpen(S, nx) ? `Ready. In Voyage, sail to the isle flying a gold banner marked ${nx + 1}.` : `Clear ${ch.need} islands at sea to reach it (${S.cleared} so far).`}</p><div class="xpbar"><i style="width:${nx / CHAPTERS.length * 100}%"></i></div></div></div>`; })()}
       <p class="section-title">Goals that never end</p>
@@ -1558,9 +1568,10 @@ export class UI {
         ${bl && !o.locked && bl.code !== 'cost' ? `<p class="warn">${esc(bl.msg)}</p>` : ''}</div>
         <button class="btn small ${bl && bl.code === 'housing' ? 'red' : ''}" data-act="train:${b.id}:${o.key}" ${o.locked || (bl && bl.code === 'unique') ? 'disabled' : ''}>${label}</button></div>`;
       }).join('');
-      html += `<p class="muted" style="text-align:center;font-size:12px">Tap a unit in the queue to cancel it for a full refund.</p><div class="queue" id="bqueue"></div>`;
+      html += `<p class="muted qhint" style="text-align:center;font-size:12px;${b.queue.length ? '' : 'display:none'}">Tap a unit in the queue to cancel it for a full refund.</p><div class="queue" id="bqueue"></div>`;
       const renderQ = () => {
         const e = $('#bqueue'); if (!e) return;
+        const qh = document.querySelector('.qhint'); if (qh) qh.style.display = b.queue.length ? '' : 'none';
         const now = Date.now();
         const k = b.queue.map(q => q.unit).join();
         if (e.dataset.k !== k) { e.dataset.k = k; e.innerHTML = b.queue.map((q, i) => `<button class="qi" data-act="cancel:${b.id}:${i}"><img src="${src(UNIT_AV[q.unit])}" alt=""><i></i></button>`).join(''); }
@@ -1614,7 +1625,7 @@ export class UI {
       <p class="title-sub">${esc(ruler)}${ruler ? ' - ' : ''}${TIERS[S.tier].name}, day ${day}</p>
       <div class="title-btns">
         <button class="btn wide" data-t="go">Continue</button>
-        <button class="btn wide" data-t="saga">The saga</button>
+        <button class="btn wide" data-t="saga">Saga</button>
         <button class="btn wide" data-t="set">Settings</button>
       </div>
       <p class="title-seed">${esc(R.sea.words ? R.sea.words() : '')} - ${VERSION}</p>
@@ -1708,8 +1719,9 @@ export class UI {
     }
     if (k === 'embark') { R.sea.embark([...this.squadPick]); this.crewInit = false; this.squadPick.clear(); this.openSea(); return; }
     if (k === 'tosea') { this.openSea(); if (x) { const is = R.sea.ocean.islandById(a.slice(6)); if (is) { this.seaSel = is; this.view.seaFocus(is.x, is.y); this.seaKey = null; this.renderSeaCard(); } } return; }
-    if (k === 'court') { this.openPanel('court', a.slice(6)); return; }
-    if (k === 'throne') { this.openPanel('throne'); return; }
+    if (k === 'court') { this.courtFrom = this.panel === 'chronicle' ? 'courts' : null; this.openPanel('court', a.slice(6)); return; }
+    if (k === 'courtsback') { this.openPanel('chronicle'); this.tab = 'courts'; this.renderPanel(); return; }
+    if (k === 'throne') { R.state.stats.throneVisits = (R.state.stats.throneVisits || 0) + 1; this.openPanel('throne'); return; }
     if (k === 'codex') { this.openPanel('codex', x); this.tab = x; this.renderPanel(); return; }
     if (k === 'marry') { const e = R.court.marry(a.slice(6)); if (e) this.toast(e, 'red'); else { this.toast('The wedding is held with great feasting.', 'gold'); R.sfx && R.sfx('victory'); } return this.refresh(); }
     if (k === 'hire') { const e = R.court.hire(+x, y); if (e) this.toast(e, 'red'); else this.toast('A new councillor takes their seat.', 'gold'); return this.refresh(); }

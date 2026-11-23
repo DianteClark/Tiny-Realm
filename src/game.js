@@ -1170,7 +1170,7 @@ export class Realm {
     const base = 40 + this.state.tier * 40;
     const gift = { gold: Math.round(base * mult), wood: Math.round(base * mult), meat: Math.round(base * 0.8 * mult) };
     for (const k in gift) gift[k] = this.addRes(k, gift[k]);
-    this.pendingDaily = { streak: D.streak, gift };
+    if (todayStr(new Date(this.state.created)) !== today) this.pendingDaily = { streak: D.streak, gift }; // not on a realm's first day: the intro says enough
   }
 
   // ------------------------------------------------------------ main tick
@@ -1505,6 +1505,8 @@ export class Realm {
     if (type === 'tier') return S.tier;
     if (type === 'renown') return S.renown;
     if (type === 'islandsCleared') return S.cleared;
+    if (type === 'generals') return S.soldiers.filter(r => r.general).length;
+    if (type === 'councillors') return Object.keys((S.council && S.council.seats) || {}).length;
     if (type.startsWith('built_')) return this.home.buildings.filter(b => b.type === type.slice(6) && b.done).length;
     return S.stats[type] || 0;
   }

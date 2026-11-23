@@ -94,6 +94,11 @@ let hoverT = 0;
 canvas.addEventListener('pointermove', e => {
   if (e.pointerType !== 'mouse' || ptrs.size || !realm.scene) return;
   const now = performance.now(); if (now - hoverT < 60) return; hoverT = now;
+  if (ui.seaOpen) { // on the sea: a hand over islands and fleets you could select
+    const sx = cam.x + e.clientX / cam.z, sy = cam.y + e.clientY / cam.z, Z = realm.sea;
+    const hit = (Z.ocean.islandAt(sx, sy, 26) || (Z.W.fleets || []).some(f => Math.hypot(f.x - sx, f.y - sy) < 40 && Z.fog.isRevealed(f.x, f.y)));
+    canvas.dataset.hover = hit ? 'tap' : ''; return;
+  }
   const wx = cam.x + e.clientX / cam.z, wy = cam.y + e.clientY / cam.z;
   const o = ui.place ? null : realm.scene.pick(wx, wy);
   const foe = o && o.team === 1;
@@ -153,10 +158,21 @@ canvas.addEventListener('pointercancel', endPtr);
 canvas.addEventListener('wheel', e => { e.preventDefault(); zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.12 : 1 / 1.12); }, { passive: false });
 document.addEventListener('gesturestart', e => e.preventDefault());
 window.addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('input,textarea') || e.ctrlKey || e.metaKey || e.altKey) return; // typing is not steering
+  // Escape and Enter work through whatever is on top: the title, a dialog, a panel, the sea
+  if (e.key === 'Escape' || e.key === 'Enter') {
+    const t = document.querySelector('#title:not(.out) [data-t="go"]'); if (t) { t.click(); return; }
+    const m = document.getElementById('modal');
+    if (m && !m.classList.contains('hidden')) { const bs = m.querySelectorAll('#modalBtns button'); const b = e.key === 'Enter' ? bs[0] : bs[bs.length - 1]; if (b) b.click(); return; }
+    if (e.key === 'Enter') return;
+    if (ui.place) { ui.cancelPlace(); return; }
+    if (ui.panel) { ui.closePanel(); if (ui.seaOpen) document.querySelector('[data-panel="voyage"]')?.classList.add('on'); return; }
+    if (ui.seaOpen) { ui.closeSea(); return; }
+    realm.scene.selected.clear(); ui.refreshSel && ui.refreshSel(); return;
+  }
   const s = 40 / cam.z;
   if (e.key === 'ArrowLeft' || e.key === 'a') cam.x -= s; else if (e.key === 'ArrowRight' || e.key === 'd') cam.x += s;
   else if (e.key === 'ArrowUp' || e.key === 'w') cam.y -= s; else if (e.key === 'ArrowDown' || e.key === 's') cam.y += s;
-  else if (e.key === 'Escape') { realm.scene.selected.clear(); ui.cancelPlace(); ui.closePanel(); }
   clampCam();
 });
 

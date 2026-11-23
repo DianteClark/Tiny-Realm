@@ -17,6 +17,7 @@ const STEPS = [
   { text: 'Every soldier has a name and traits, and death is permanent. Tap your new Warrior to select them.', world: R => R.home.units.find(u => u.rec && u.alive && !u.rec.hero) || R.home.units.find(u => u.rec && u.alive), done: R => R.home.selected.size > 0 },
   { text: 'Now tap the ground somewhere to move them. Soldiers guard the spot you choose.', done: R => [...R.home.selected].some(u => u.order || (u.home && Math.hypot(u.home.x - u.x, u.home.y - u.y) < 30 && u.movedOnce)) || R.home.units.some(u => u.rec && u.order) },
   { text: 'Each soldier type has a special ability. With them selected, try Shield Wall.', el: () => '.ab', done: R => R.home.units.some(u => u.buff && u.buff('shield')) || R.home.selected.size === 0 },
+  { text: 'Beyond your shore lies the sea: islands, kingdoms and treasure. Voyage opens it whenever you are ready.', el: () => '[data-panel="voyage"]', done: (R, U, t) => t > 6 || U.seaOpen },
   { text: 'You are ready. The goal tracker at the top always shows what to do next. Long live the realm!', el: () => '[data-pill="quest"]', done: (R, U, t) => t > 7 },
 ];
 
@@ -116,7 +117,7 @@ export const FEATS = [
   { id: 'marshal', name: 'Marshal of the Realm', desc: 'Raise a general to the rank of Marshal.', test: S => S.soldiers.some(r => r.general && (r.command || 0) >= 15) },
   { id: 'settler', name: 'New Shores', desc: 'Found your first colony.', test: S => (S.stats.colonies || 0) >= 1 },
   { id: 'empire', name: 'An Empire of Islands', desc: 'Hold three colonies at once.', test: S => S.world && S.world.colonies && Object.keys(S.world.colonies).length >= 3 },
-  { id: 'town', name: 'Townsfolk Abroad', desc: 'Grow a colony into a Town.', test: S => S.world && S.world.colonies && Object.values(S.world.colonies).some(c => c.level >= 3) },
+  { id: 'colonytown', name: 'Townsfolk Abroad', desc: 'Grow a colony into a Town.', test: S => S.world && S.world.colonies && Object.values(S.world.colonies).some(c => c.level >= 3) },
   { id: 'streak7', name: 'Faithful', desc: 'Visit 7 days in a row.', test: S => S.daily.streak >= 7 },
   { id: 'night', name: 'Night Watch', desc: 'Repel a raid at night.', test: S => (S.stats.nightRaids || 0) >= 1 },
   { id: 'storm', name: 'Storm Breaker', desc: 'Repel a raid during a storm.', test: S => (S.stats.stormRaids || 0) >= 1 },
@@ -130,7 +131,7 @@ export const FEATS = [
   { id: 'geared', name: 'Kitted Out', desc: 'Find 10 pieces of gear.', test: S => (S.stats.gearFound || 0) >= 10 },
   { id: 'legend', name: 'The Stuff of Legend', desc: 'Find a legendary piece of gear.', test: S => (S.stats.legendaries || 0) >= 1 },
   { id: 'streak3', name: 'Habit Forming', desc: 'Reach a 3 day challenge streak.', test: S => ((S.chal && S.chal.best) || 0) >= 3 },
-  { id: 'streak7', name: 'A Week of Valour', desc: 'Reach a 7 day challenge streak.', test: S => ((S.chal && S.chal.best) || 0) >= 7 },
+  { id: 'chal7', name: 'A Week of Valour', desc: 'Reach a 7 day challenge streak.', test: S => ((S.chal && S.chal.best) || 0) >= 7 },
   { id: 'trader', name: 'Merchant Prince', desc: 'Bring home 20 trade boats.', test: S => (S.stats.tradeTrips || 0) >= 20 },
   { id: 'joyful', name: 'A Joyful Realm', desc: 'Welcome 5 newcomers drawn by your happy realm.', test: S => (S.stats.newcomers || 0) >= 5 },
   { id: 'crown', name: 'The Drowned Crown', desc: 'Finish the story and claim the crown of the Sea Kings.', test: S => !!(S.relics && S.relics.seacrown) },

@@ -191,6 +191,7 @@ export class Kingdoms {
     const R = this.R, k = this.st(is), s = this.stance(is), name = is.kingdom.name, mine = this.myPower(), ratio = k.power / Math.max(1, mine);
     if (what === 'gift') {
       if (!R.pay(this.giftCost())) return 'Not enough gold for a fitting gift.';
+      R.state.stats.giftsSent = (R.state.stats.giftsSent || 0) + 1;
       const gain = Math.max(4, 16 - k.gifts * 3) * (1 + (R.court ? R.court.fx('regard') : 0)); k.gifts++; k.rel = Math.min(100, k.rel + gain);
       return { ok: `${name} accepts your gift. Their regard for you rises.` };
     }

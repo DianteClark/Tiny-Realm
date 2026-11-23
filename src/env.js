@@ -148,11 +148,11 @@ export class Environment {
     const w = this.w;
     if (w.rain || w.storm) { ctx.fillStyle = `rgba(30,50,80,${0.08 * (w.rain || 1)})`; ctx.fillRect(0, 0, vw, vh); }
     const snow = this.season.snow || (hol && hol.snow);
-    const want = w.rain ? 120 * w.rain : snow ? 90 : this.season.leaves ? 26 : 0;
-    const kind = w.rain ? 'rain' : snow ? 'snow' : this.season.leaves ? 'leaf' : null;
+    const want = w.rain ? 120 * w.rain : snow ? 90 : this.season.leaves && scene.kind === 'home' ? 26 : 0;
+    const kind = w.rain ? 'rain' : snow ? 'snow' : this.season.leaves && scene.kind === 'home' ? 'leaf' : null;
     while (this.drops.length < want) this.drops.push({ x: Math.random() * vw, y: Math.random() * vh, v: 0.6 + Math.random() * 0.8, p: Math.random() * 6 });
     if (this.drops.length > want) this.drops.length = want;
-    const s = vw / 400;
+    const dpr = Math.min(2, window.devicePixelRatio || 1), s = Math.min(1.5, vw / dpr / 400) * dpr; // the same size of drop on any screen
     for (const d of this.drops) {
       if (kind === 'rain') {
         d.y += 14 * d.v * s; d.x -= 3 * s;
@@ -163,7 +163,7 @@ export class Environment {
         ctx.fillStyle = 'rgba(255,255,255,0.85)'; const r = Math.max(2, 2.2 * s * d.v); ctx.fillRect(d.x, d.y, r, r);
       } else if (kind === 'leaf') {
         d.y += 1.1 * d.v * s; d.p += 0.05; d.x += Math.sin(d.p) * 1.4 * s;
-        ctx.fillStyle = d.v > 1 ? '#d9822b' : '#e8b93a'; const r = Math.max(3, 3 * s); ctx.fillRect(d.x, d.y, r * 1.4, r);
+        const r = Math.max(2, Math.round(2 * s)); ctx.fillStyle = d.v > 1 ? '#c8722b' : '#d9a33a'; ctx.fillRect(Math.round(d.x), Math.round(d.y), r * 2, r); ctx.fillStyle = d.v > 1 ? '#e8963a' : '#f0c85a'; ctx.fillRect(Math.round(d.x), Math.round(d.y), r, r);
       }
       if (d.y > vh + 20) { d.y = -20; d.x = Math.random() * vw; }
       if (d.x < -20) d.x = vw + 10;

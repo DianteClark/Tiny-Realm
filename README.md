@@ -2,10 +2,25 @@
 
 **Play now: [dianteclark.github.io/Tiny-Realm](https://dianteclark.github.io/Tiny-Realm/)**
 
-A persistent kingdom builder that runs in the browser. Grow a village into a
-citadel, send squads of named soldiers on dangerous expeditions (death is
-permanent), hold the castle against monster raids, and survive great events
-like the Troll Breakout.
+A solo kingdom builder that runs in the browser, on phone or desktop. Found a
+hamlet on an empty shore with two heroes and three pawns, and grow it into a
+Kingdom on an endless sea of your own. Train named soldiers (death is
+permanent), hold your island against raids, sail to monster lairs, ruins and
+rival kingdoms, make friends and enemies, settle colonies, raise generals,
+found a dynasty, and hunt the nemesis who swore to bring you down. Every world
+grows from a seed you can keep and share.
+
+### A realm in ten steps
+1. **Gather and build.** Put pawns to work on wood, gold and meat (Workers), and raise houses, barracks and towers (Build).
+2. **Defend.** Raiders land every few minutes. Train soldiers, tap them, then tap the ground or a foe.
+3. **Grow.** Tap your hall to grow from Hamlet to Village, Castle, Stronghold and Kingdom.
+4. **Sail.** Voyage opens the sea. Choose a crew, sail to an island, land and fight.
+5. **Deal with kingdoms.** Tap a kingdom, then Diplomacy: gifts, truces, peace, alliances, tribute or war.
+6. **Settle.** Found colonies on wild or cleared land and send trade boats to bring their stores home.
+7. **Lead.** Appoint veterans as generals (Army, a soldier) and fight enemy fleets at sea.
+8. **Rule.** The throne room (tap the castle): marry, raise an heir, fill the council, face your nemesis.
+9. **Remember.** Chronicle keeps your goals, your saga, the bestiary and the codex.
+10. **Begin again.** Found a new realm with a hero of the old one, or sail a friend's seed.
 
 ## Play
 
@@ -26,6 +41,12 @@ Progress saves automatically in the browser. Settings (gear icon) has Export,
 Import, and Wipe Realm to start over.
 
 ## How the game works
+
+**10.0, Presentation.**
+- A title screen with your house, ruler and day; fades between home, sea and battle; new music for the open sea, the night and the title.
+- Settings for text size, reduced motion and the title screen.
+- A polish pass over every screen, on phone and desktop.
+
 
 **9.0, Saga, Bestiary and Codex.**
 - **Saga** (Chronicle, Saga): founding, growth, wars, conquests, marriages, successions, your nemesis, colonies, sea victories and notable deaths are written into a book for each ruler. A realm's saga is kept in the Hall of Realms when it ends.

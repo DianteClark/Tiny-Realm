@@ -378,7 +378,7 @@ body.sea #toasts { bottom: var(--seacard, calc(var(--safe-bot) + 250px)); }
 /* ---------- 4.0 polish ---------- */
 /* an open panel or a tutorial box at the top hides the corner notices and minimap instead of half-covering them */
 #hud:has(#panel:not(.hidden)) #pills, #hud:has(#panel:not(.hidden)) #minimap, #hud:has(#panel:not(.hidden)) #squadBtns,
-#hud:has(#tut:not(.hidden):not(.low)) #pills, #hud:has(#tut:not(.hidden):not(.low)) #minimap, #hud:has(#tut:not(.hidden):not(.low)) #squadBtns { visibility: hidden; }
+#hud:has(#tut:not(.hidden):not(.low)) #minimap, #hud:has(#tut:not(.hidden):not(.low)) #squadBtns { visibility: hidden; }
 /* toasts stay clear of the Undo button and, in battle, of the ability buttons */
 #hud:has(#undoBtn:not(.hidden)) #toasts { bottom: calc(var(--safe-bot) + 140px); }
 body.exp #toasts { bottom: calc(var(--safe-bot) + 178px); }
@@ -477,3 +477,20 @@ html.text-l #panel, html.text-l #modal .dialog, html.text-l #seaCard, html.text-
 html.text-s #panel, html.text-s #modal .dialog, html.text-s #seaCard, html.text-s #toasts, html.text-s #banner { zoom: 0.92; }
 html.calm *, html.calm *::before, html.calm *::after { animation-duration: 0.001s !important; animation-iteration-count: 1 !important; transition-duration: 0.001s !important; }
 body.titling #tut, body.titling #tutHand, body.titling #banner, body.titling #toasts { display: none !important; }
+/* 10.0 desktop polish */
+.title-rib { display: inline-flex; }
+body.titling #topbar, body.titling #subbar, body.titling #bottombar, body.titling #pills, body.titling #minimap { visibility: hidden; }
+#modalBody { max-height: 70vh; overflow-y: auto; }
+details.older summary { cursor: pointer; padding: 6px 0; font-size: 14px; }
+.ab { border-image-source: url('assets/ui/btn_blue_regular.png'); background: linear-gradient(#4a9fbf, #4a9fbf) center / calc(100% - 6px) calc(100% - 6px) no-repeat; }
+.ab:active { border-image-source: url('assets/ui/btn_blue_pressed.png'); }
+@media (min-width: 1000px) {
+  #hud:has(#panel:not(.hidden)) #tut { left: calc(50% - 296px); transform: translateX(-100%); top: 34%; width: 280px; }
+  #toasts { left: 16px; right: auto; width: 340px; align-items: flex-start; }
+  body.sea #toasts { bottom: calc(var(--safe-bot) + 100px); }
+  #squadbar { flex-wrap: nowrap; justify-content: center; }
+  #squadbar #squadAvatars { order: 0; flex: 0 1 auto; }
+  .sheet { min-height: 60%; }
+}
+@media (min-width: 1500px) and (min-height: 950px) { #hud { zoom: 1.2; } }
+.unknowns { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 8px 0 4px; } .unknowns .qm { width: 30px; height: 30px; font-size: 16px; }
