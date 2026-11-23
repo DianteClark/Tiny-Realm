@@ -544,10 +544,10 @@ export class WorldMapRenderer {
     const fs = Math.round(12 * dpr), small = Math.round(10 * dpr);
     for (const s of vis) {
       const rp = s.r * z;
-      if (rp < 34 * dpr) continue;
+      if (rp < 26 * dpr) continue;
       const x = SX(s.x), y = SY(s.y + s.r * 0.95) + Math.round(6 * dpr);
       this.text(ctx, s.name, x, y, fs, '#ffffff', dpr);
-      if (rp >= 70 * dpr) {
+      if (rp >= 60 * dpr) {
         const sub = this.subtitle(s);
         if (sub) this.text(ctx, sub, x, y + Math.round(12 * dpr), small, s.kind === 'kingdom' ? (RELATION_COLORS[opts.relations ? opts.relations(s.kingdom.id) : 'enemy']) : '#ffe9a8', dpr);
       }

@@ -107,12 +107,11 @@ function regionFor(r, ring) {
 }
 
 // 32-bit mixing for per-chunk / per-island seeds
-function mix(a, b, c = 0) {
-  let h = (a ^ 0x9E3779B9) >>> 0;
-  h = Math.imul(h ^ (b + 0x7F4A7C15), 0x85EBCA6B); h ^= h >>> 13;
-  h = Math.imul(h ^ (c + 0x165667B1), 0xC2B2AE35); h ^= h >>> 16;
+function fmix(h) {
+  h ^= h >>> 16; h = Math.imul(h, 0x85EBCA6B); h ^= h >>> 13; h = Math.imul(h, 0xC2B2AE35); h ^= h >>> 16;
   return h >>> 0;
 }
+function mix(a, b, c = 0) { return fmix((a >>> 0) ^ fmix(((b >>> 0) + 0x9E3779B9) ^ fmix((c >>> 0) + 0x7F4A7C15))); }
 
 export const chunkOf = v => Math.floor((v + CHUNK / 2) / CHUNK);
 
