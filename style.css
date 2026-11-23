@@ -408,3 +408,5 @@ body.exp #minimap { top: calc(var(--safe-top) + 116px); }
 #hud:has(#abilitybar:not(.hidden)) #toasts { bottom: calc(var(--safe-bot) + 250px); }
 body.exp #hud:has(#abilitybar:not(.hidden)) #toasts { bottom: calc(var(--safe-bot) + 226px); }
 .card .thumb.dec { align-items: center; } .card .thumb.dec img { max-width: 48px; max-height: 48px; }
+/* panels with tabs keep one height, so switching tabs never makes the sheet jump */
+.sheet:has(#panelTabs:not(:empty)) { height: calc(100% - var(--safe-top) - 108px); }
