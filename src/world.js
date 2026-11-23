@@ -910,7 +910,8 @@ export class Scene {
       if (u.cursed > 0) this.bar(ctx, u.x, u.y - 78, 40, u.cursed / 45, '#a874c9');
       if (u.nemesis && u.alive) { // your nemesis: his name over his head, his health always shown
         if (u.hp >= u.maxHp && !this.selected.has(u)) this.bar(ctx, u.x, u.y - 72 * (u.def.scale || 1), 52, 1, '#d9534f', u);
-        ctx.font = '12px BoldPixels, monospace'; ctx.textAlign = 'center'; const ny = u.y - 86 * (u.def.scale || 1);
+        ctx.font = '13px BoldPixels, monospace'; ctx.textAlign = 'center'; const ny = u.y - 86 * (u.def.scale || 1), tw = ctx.measureText(u.nemName).width;
+        ctx.fillStyle = 'rgba(27,23,32,0.78)'; ctx.fillRect(Math.round(u.x - tw / 2 - 5), Math.round(ny - 12), Math.round(tw + 10), 17);
         ctx.fillStyle = '#2b2b3a'; ctx.fillText(u.nemName, u.x + 1, ny + 1); ctx.fillStyle = '#ff8a7e'; ctx.fillText(u.nemName, u.x, ny);
       }
     }

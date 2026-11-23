@@ -1299,7 +1299,7 @@ export class Realm {
         b -= ENEMIES[k].cost;
       }
     }
-    if (!opts.units && this.court.leads(region)) queue.splice(Math.min(3, queue.length), 0, { type: this.court.nemesisUnit(), si: 0, nemesis: true });
+    if (!opts.units && this.court.leads(region)) queue.splice(Math.min(3, queue.length), 0, { type: this.court.nemesisUnit(level), si: 0, nemesis: true });
     return { kind, region, level, spawns, queue, dir, gap: opts.gap, night: this.env.isNight };
   }
   showBoat(plan) {
@@ -1323,6 +1323,7 @@ export class Realm {
   endRaid(won) {
     const R = this.raid; if (!R || !R.active) return;
     R.active = false;
+    this.court.settleRaid(R);
     const S = this.state;
     if (won) {
       S.stats.raidsSurvived++; S.lastRaidWon = Date.now();
@@ -1350,6 +1351,7 @@ export class Realm {
   }
   loseRaid() {
     const R = this.raid; if (!R || !R.active) return;
+    this.court.settleRaid(R);
     const S = this.state; S.lastRaidLost = Date.now();
     const lost = {};
     for (const r of ['gold', 'wood', 'meat']) { lost[r] = Math.floor(S.res[r] * 0.25); S.res[r] -= lost[r]; }
