@@ -364,7 +364,12 @@ export class WorldMapRenderer {
         const key = s.kind === 'home' || s.kingdom.color === 'blue' ? 'b_Castle' : `b${s.kingdom.color}_Castle`;
         const w = s.r * (s.kind === 'home' ? 1.05 : 1.15) * z, sc = w / 320;
         drawAllegiance(ctx, fx, fy - 2 * sc, w * 0.95, relation, t);
-        this.sprite(ctx, key, fx, fy, sc);
+        if (s.kind === 'home' && opts.homeTier != null && opts.homeTier < 3) {
+          // before the Castle is raised home is a hall of wooden houses, as on the island itself
+          const h = sc * 1.25, put = (k, dx, k2) => this.sprite(ctx, k, Math.round(fx + dx * h), fy, h * k2);
+          if (opts.homeTier <= 1) { put('b_House1', -52, 0.75); put('b_House3', 40, 1); }
+          else { put('b_House2', -92, 0.9); put('b_House1', 94, 0.9); put('b_House3', 0, 1.1); }
+        } else this.sprite(ctx, key, fx, fy, sc);
         if (s.kind === 'kingdom' && r >= 14) {
           const sz = Math.max(12, Math.min(40, Math.round(r * 0.42 / dpr) * dpr));
           drawSigil(ctx, s.kingdom.sigil, Math.round(fx + w * 0.5 + sz * 0.15), Math.round(fy - w * 0.62), sz);

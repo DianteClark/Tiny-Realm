@@ -907,7 +907,8 @@ export class Scene {
       if (u.cursed > 0) this.bar(ctx, u.x, u.y - 78, 40, u.cursed / 45, '#a874c9');
     }
     for (const b of [...this.buildings, ...this.structs]) {
-      if (b.hp < b.maxHp && b.hp > 0 && !b.def.palisade) this.bar(ctx, b.x, b.y - (SHEETS[b.imgKey || b.def.sprite]?.fh || 160) + 30, 70, b.hp / b.maxHp, b.team === 0 ? '#6dbb5b' : '#d9534f', b);
+      const hall = b.type === 'castle' && this.kind === 'home' && this.game.state && this.game.state.tier < 3; // the hall's pennant reaches higher than the castle art
+      if (b.hp < b.maxHp && b.hp > 0 && !b.def.palisade) this.bar(ctx, b.x, hall ? b.y - 244 : b.y - (SHEETS[b.imgKey || b.def.sprite]?.fh || 160) + 30, 70, b.hp / b.maxHp, b.team === 0 ? '#6dbb5b' : '#d9534f', b);
       if (b.def.palisade && b.hp < b.maxHp && b.hp > 0) this.bar(ctx, b.x, b.y - 58, 40, b.hp / b.maxHp, '#d9534f', b);
       if (b.buildEnd && !b.done) this.progress(ctx, b.x, b.y - 44, 74, 1 - (b.buildEnd - Date.now()) / (b.buildTotal * 1000), '#e8c35a', 'icon_hammer', (b.buildEnd - Date.now()) / 1000);
       else if (b.upEnd) this.progress(ctx, b.x, b.y - 44, 74, 1 - (b.upEnd - Date.now()) / (b.upTotal * 1000), '#a874c9', 'icon_hammer', (b.upEnd - Date.now()) / 1000);
@@ -1084,13 +1085,18 @@ export class Scene {
     const tier = this.game.state.tier, x = b.x, y = b.y + 8;
     const put = (k, dx, dy, sc = 1) => { const s = SHEETS[k]; if (!s || !s.img) return; const w = s.img.width * sc, h = s.img.height * sc; ctx.drawImage(s.img, Math.round(x + dx - w / 2), Math.round(y + dy - h), Math.round(w), Math.round(h)); };
     const f = SHEETS.fence; // a little palisade yard across the front
-    if (f && f.img) for (let i = -2; i <= 2; i++) if (i !== 0) ctx.drawImage(f.img, 1 * T, 0, T, T, Math.round(x + i * T - T / 2), Math.round(y - 30), T, T);
+    // two short runs either side of the door, each capped with a post so no rail pokes into the gap
+    if (f && f.img) for (const i of [-2, -1, 1, 2]) { const c = i === -2 || i === 1 ? 2 : 1; ctx.drawImage(f.img, c * T, 2 * T, T, T, Math.round(x + i * T - T / 2), Math.round(y - 30), T, T); }
+    ctx.globalAlpha = b.ruined ? 0.55 : 1;
     if (tier <= 1) { put('b_House3', 0, -18); put('b_House1', -100, -10, 0.75); }
     else { put('b_House2', -96, -14, 0.9); put('b_House3', 0, -22, 1.1); put('b_House1', 98, -12, 0.9); }
+    ctx.globalAlpha = 1;
     // a pennant over the hall
     ctx.fillStyle = '#3b2f2a'; ctx.fillRect(Math.round(x + 34), Math.round(y - 230), 3, 70);
     const w = Math.sin(this.time * 3) * 2; ctx.fillStyle = '#4a90c0';
     ctx.beginPath(); ctx.moveTo(x + 37, y - 228); ctx.lineTo(x + 62 + w, y - 222); ctx.lineTo(x + 37, y - 214); ctx.fill();
+    const frac = b.hp / b.maxHp; // burns like any other building when badly hurt
+    if (frac < 0.6) { const n = frac <= 0 ? 4 : frac < 0.3 ? 3 : 1; for (let i = 0; i < n; i++) drawSprite(ctx, 'fire' + (1 + (i % 3)), b.x + (i - n / 2 + 0.5) * 34, b.y - 40 - (i % 2) * 40, b.fireT + i * 0.3); }
   }
   drawBuilding(ctx, b) {
     if (b.def.lantern) return this.drawLantern(ctx, b);

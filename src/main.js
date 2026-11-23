@@ -241,9 +241,13 @@ function drawSea(t) {
   if (!seaRenderer || seaRenderer.ocean !== Z.ocean) seaRenderer = new WorldMapRenderer(Z.ocean, SHEETS);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   const f = Z.W.fleet, marks = [{ x: f.x, y: f.y, kind: 'ship', flip: f.flip }];
+  { // a fleet still moored at the heart of home is drawn at the jetty, easing out as it leaves
+    const h = Z.ocean.islandAt(0, 0, 10), d = Math.hypot(f.x, f.y);
+    if (h && h.kind === 'home' && d < h.r) { const k = 1 - d / h.r; marks[0].x += h.r * 0.95 * k; marks[0].y += h.r * 0.35 * k; }
+  }
   if (Z.W.dest) marks.push({ x: Z.W.dest.x, y: Z.W.dest.y, kind: 'target' });
   seaRenderer.draw(ctx, { x: cam.x, y: cam.y, z: cam.z * dpr }, Z.fog, {
-    t, dpr, marks, selectedId: ui.seaSel ? ui.seaSel.id : null,
+    t, dpr, marks, selectedId: ui.seaSel ? ui.seaSel.id : null, homeTier: realm.state.tier,
     relations: kid => { const is = Z.ocean.islandById(String(kid).replace(/^k/, '')); return Z.relation(is); },
   });
   seaT -= 1 / 60; if (seaT <= 0) { seaT = 0.5; ui.renderSeaCard(); }

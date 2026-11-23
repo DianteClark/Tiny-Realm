@@ -30,7 +30,7 @@ export const MAJOR = {
   },
   moonhunt: {
     title: 'The Moonlit Hunt',
-    warn: 'The full moon rises. The Moonhide Bear wakes in the deep woods and leads its pack of spiders and snakes toward the light of your castle.',
+    warn: 'The full moon rises. The Moonhide Bear wakes in the deep woods and leads its pack of spiders and snakes toward the lights of your realm.',
     ok: (S, R) => false, // only triggered by the full moon
   },
   minotaur: {

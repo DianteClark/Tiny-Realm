@@ -4,7 +4,7 @@
 export const CHAPTERS = [
   {
     name: 'Saltholm Landing', region: 'goblin', level: 2, need: 0,
-    intro: 'A bottle washes up below the castle. Inside, a scrap of map and a single line: "The crown of the Sea Kings did not drown. It was taken." Goblins on Saltholm were seen with the rest of the map.',
+    intro: 'A bottle washes up on your shore. Inside, a scrap of map and a single line: "The crown of the Sea Kings did not drown. It was taken." Goblins on Saltholm were seen with the rest of the map.',
     outro: 'Among the goblin loot: a torn chart, marked with a crown and a trail of islands. Someone has been hunting for this for a long time.',
   },
   {

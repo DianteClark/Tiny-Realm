@@ -166,6 +166,7 @@ export class Realm {
     return b;
   }
   get tierDef() { return TIERS[this.state.tier]; }
+  seatName() { return this.state && this.state.tier >= 3 ? 'castle' : 'hall'; } // what the realm's seat is called in text
   // ---- 3.4 village services
   tavernHero() { // today's wandering hero, the same all day
     const S = this.state, day = new Date().toDateString();
@@ -631,7 +632,7 @@ export class Realm {
     const d = BUILDINGS[type];
     let n = 0, blocked = 0;
     for (const [x, y] of cells) {
-      if (this.countOf(type) >= this.limitFor(type)) { this.ui.toast('Your castle must grow before you can build more of these.', 'red'); break; }
+      if (this.countOf(type) >= this.limitFor(type)) { this.ui.toast('Your realm must grow before you can build more of these.', 'red'); break; }
       if (!this.canPlaceWall(x, y, type)) { blocked++; continue; }
       if (!this.canAfford(d.cost)) { this.ui.toast('Ran out of wood.', 'red'); break; }
       this.pay(d.cost);
@@ -660,7 +661,7 @@ export class Realm {
         for (const w of cells.map(([x, y]) => this.home.wallAt(x, y)).filter(b => b && !b.done)) { this.home.removeBuilding(w); this.addAll(d.cost); }
         this.home.wallMap = null;
         this.reach = reachable(this.home.map, this.door[0], this.door[1]);
-        return 'That fence would trap your people. Leave a gap, or grow the castle for another gate.';
+        return 'That fence would trap your people. Leave a gap, or grow the realm for another gate.';
       }
     }
     this.reach = reachable(this.home.map, this.door[0], this.door[1]);
@@ -762,7 +763,7 @@ export class Realm {
   }
   placeBuilding(type, cx, cy) {
     const d = BUILDINGS[type];
-    if (this.countOf(type) >= this.limitFor(type)) return 'Your castle must grow before you can build more of these.';
+    if (this.countOf(type) >= this.limitFor(type)) return 'Your realm must grow before you can build more of these.';
     if (!this.canPlace(type, cx, cy)) return 'That spot is blocked.';
     if (!this.pay(d.cost)) return 'Not enough resources.';
     const bt = Math.round(d.time * (1 + this.decrees.fx('build')));
@@ -819,7 +820,7 @@ export class Realm {
   }
   placeDecor(type, x, y) {
     const d = BUILDINGS[type];
-    if (this.decorList().filter(o => o.type === type).length >= this.limitFor(type)) return 'Your castle must grow before you can place more.';
+    if (this.decorList().filter(o => o.type === type).length >= this.limitFor(type)) return 'Your realm must grow before you can place more.';
     if (!this.canPlaceDecor(x, y)) return 'That spot is taken.';
     if (!this.pay(d.cost)) return 'Not enough to pay.';
     const k = d.decor[Math.floor(Math.random() * d.decor.length)];
@@ -922,7 +923,7 @@ export class Realm {
     if (b.upEnd) return { msg: 'Already upgrading.' };
     if (b.ruined) return { msg: 'Repair it first.' };
     if (b.level >= 5) return { msg: 'Fully upgraded.', max: true };
-    if (b.level >= max) return { msg: `Grow the castle to upgrade further.`, tierCap: true };
+    if (b.level >= max) return { msg: `Grow the realm to upgrade further.`, tierCap: true };
     if (!this.canAfford(upgradeCost(b.type, b.level))) return { msg: 'Not enough resources.' };
     return null;
   }
@@ -1014,7 +1015,7 @@ export class Realm {
     // finished work
     for (const b of this.home.buildings) if (b.buildEnd && now >= b.buildEnd) report.done.push(BUILDINGS[b.type].name + ' completed');
     for (const b of this.home.buildings) for (const q of b.queue) if (now >= q.end) report.done.push(UNITS[q.unit].name + ' trained');
-    if (S.upgradeEnd && now >= S.upgradeEnd) report.done.push('Castle upgrade finished');
+    if (S.upgradeEnd && now >= S.upgradeEnd) report.done.push(`Grew into a ${TIERS[Math.min(5, S.tier + 1)].name}`);
     { const tg = this.trade.catchUp(); for (const k in tg) report.got[k] += tg[k]; if (tg.gold + tg.wood + tg.meat > 0) report.done.push('Trade boats came and went'); }
     this.tickTimers(true);
     // buildings mend and sheep wander back
@@ -1272,7 +1273,7 @@ export class Realm {
     }
     this.raid = { id: Math.random(), active: true, t: 0, spawnT: 0, queue: plan.queue.slice(), units: [], spawns: plan.spawns, level: plan.level, kind: plan.kind, gap: plan.gap, onEnd: opts.onEnd, title: opts.title || 'Raid', loot: 0, region: plan.region };
     if (!opts.silent) this.sfx('horn');
-    if (!opts.silent) this.ui.banner(opts.title || 'To arms!', opts.text || 'Raiders are landing. Pawns are taking shelter in the castle.', 'red');
+    if (!opts.silent) this.ui.banner(opts.title || 'To arms!', opts.text || `Raiders are landing. Pawns are taking shelter in the ${this.seatName()}.`, 'red');
     for (const u of this.home.units) if (u.kind === 'pawn') { u.task = null; this.releaseNode(u); }
   }
   endRaid(won) {
@@ -1308,8 +1309,8 @@ export class Realm {
     S.stats.raidsLost++;
     for (const u of R.units) if (u.alive) { u.leaving = true; u.target = null; }
     this.sfx('defeat'); this.shake(10);
-    this.ui.banner('The castle has fallen', `Raiders plundered ${lost.gold} gold, ${lost.wood} wood and ${lost.meat} meat, then sailed off. The walls will mend.`, 'red');
-    this.log(`The castle fell to raiders. Lost a quarter of stores.`);
+    this.ui.banner(`The ${this.seatName()} has fallen`, `Raiders plundered ${lost.gold} gold, ${lost.wood} wood and ${lost.meat} meat, then sailed off. The walls will mend.`, 'red');
+    this.log(`The ${this.seatName()} fell to raiders. Lost a quarter of stores.`);
     R.active = false;
     if (R.onEnd) R.onEnd(false);
     this.home.raidMark = null; for (const u of this.home.units) u.alerted = null;

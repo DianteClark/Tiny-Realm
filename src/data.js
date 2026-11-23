@@ -123,7 +123,7 @@ export const RELICS = {
   rubberduck: { name: 'Lucky Rubber Duck', desc: '+5% to everything gathered. Quack.' },
   bearpelt: { name: 'Bear Pelt', desc: '+10% wood gathered' },
   pandabelt: { name: 'Panda Sash', desc: 'Soldiers attack 5% faster' },
-  turtleshell: { name: 'Turtle Shell', desc: 'Castle has 20% more health' },
+  turtleshell: { name: 'Turtle Shell', desc: 'Your hall or castle has 20% more health' },
   moonstone: { name: 'Moonstone', desc: 'Soldiers deal 15% more damage at night' },
   seacrown: { name: 'Crown of the Sea Kings', desc: '+10% health and damage for all soldiers, +10% to everything gathered' },
 };

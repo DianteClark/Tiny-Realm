@@ -28,7 +28,7 @@ const HOLY = {
   pentecost: { name: 'Pentecost', verse: '"And they were all filled with the Holy Ghost." Acts 2:4', desc: 'The coming of the Holy Spirit. Every soldier gains experience, and abilities recharge twice as fast today.', gift: 2, xpGift: 80, abilityHaste: true, colour: 'red' },
 };
 const FESTIVALS = {
-  newYear: { name: "New Year's Day", desc: 'Fireworks over the castle at night and a doubled daily tribute.', gift: 2, fireworks: true, colour: 'gold' },
+  newYear: { name: "New Year's Day", desc: 'Fireworks over the realm at night and a doubled daily tribute.', gift: 2, fireworks: true, colour: 'gold' },
   thanksgiving: { name: 'Thanksgiving', desc: 'A harvest feast. Shepherds bring back double meat, every soldier is healed, and the tribute is doubled.', gift: 2, meat: 1, feast: true, colour: 'gold' },
   midsummer: { name: 'Midsummer Tournament', desc: 'The longest days of the year. Soldiers earn 50% more experience and a merchant visits.', xp: 0.5, merchant: true, colour: 'yellow' },
   harvest: { name: 'Harvest Moon Fair', desc: 'Autumn fair: woodcutters and miners bring back 25% more.', gather: 0.25, colour: 'yellow' },

@@ -132,7 +132,7 @@ img, .ic { image-rendering: pixelated; }
 #panel, #modal { position: absolute; inset: 0; display: flex; align-items: flex-end; justify-content: center; background: rgba(30, 40, 50, .35); }
 #panel { bottom: calc(var(--safe-bot) + 80px); background: none; }
 #modal { align-items: center; z-index: 5; }
-.sheet { width: min(100%, 560px); max-height: calc(100% - var(--safe-top) - 64px); display: flex; flex-direction: column; animation: sheetUp .22s ease-out; }
+.sheet { width: min(100%, 560px); max-height: calc(100% - var(--safe-top) - 108px); display: flex; flex-direction: column; animation: sheetUp .22s ease-out; }
 @keyframes sheetUp { from { transform: translateY(40px); opacity: 0; } }
 .sheet-head { display: flex; justify-content: center; position: relative; margin: -36px 0 4px; }
 .sheet-head .close { position: absolute; right: -10px; top: 4px; }
@@ -374,3 +374,22 @@ body.sea #pills, body.sea #squadBtns, body.sea #abilitybar, body.sea #selbar, bo
 body.sea #toasts { bottom: calc(var(--safe-bot) + 250px); }
 .seedw { font-family: inherit; letter-spacing: 1px; color: #2f6fa8; } .seedw.small { font-size: 11px; margin-left: 4px; color: #6b5a4c; }
 .seed-in { width: 100%; box-sizing: border-box; padding: 10px; font: inherit; font-size: 16px; text-align: center; letter-spacing: 1px; text-transform: uppercase; border: 2px solid #d6c39c; border-radius: 7px; background: #fffaf0; color: var(--ink); }
+
+/* ---------- 4.0 polish ---------- */
+/* an open panel or a tutorial box at the top hides the corner notices and minimap instead of half-covering them */
+#hud:has(#panel:not(.hidden)) #pills, #hud:has(#panel:not(.hidden)) #minimap, #hud:has(#panel:not(.hidden)) #squadBtns,
+#hud:has(#tut:not(.hidden):not(.low)) #pills, #hud:has(#tut:not(.hidden):not(.low)) #minimap, #hud:has(#tut:not(.hidden):not(.low)) #squadBtns { visibility: hidden; }
+/* toasts stay clear of the Undo button and, in battle, of the ability buttons */
+#hud:has(#undoBtn:not(.hidden)) #toasts { bottom: calc(var(--safe-bot) + 140px); }
+body.exp #toasts { bottom: calc(var(--safe-bot) + 178px); }
+body.exp #hud:has(#abilitybar:not(.hidden)) #toasts { bottom: calc(var(--safe-bot) + 226px); }
+body.exp #minimap { top: calc(var(--safe-top) + 116px); }
+/* on phones the banner sits under the minimap rather than over it */
+@media (max-width: 699px) { #hud:has(#minimap:not(.hidden)) #banner { top: calc(var(--safe-top) + 196px); } }
+#banner { z-index: 4; }
+.exp-info span { display: flex; gap: 12px; }
+/* sea card */
+.isle-head .grow { flex: 1; min-width: 0; }
+.isle-head h3 { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 4px; }
+.isle-head .rel { margin-left: 2px; vertical-align: 0; }
+.sea-bar .btn.small { min-height: 40px; }

@@ -108,6 +108,8 @@ export class UI {
   }
   dropToast(el) { if (el.classList.contains('out')) return; el.classList.add('out'); setTimeout(() => el.remove(), 450); }
   banner(title, text, color = 'blue') {
+    // a dialog is up: hold the banner until it closes so the two never overlap
+    if (!this.modalEl.classList.contains('hidden')) { (this.bannerQueue = this.bannerQueue || []).push([title, text, color]); if (this.bannerQueue.length > 3) this.bannerQueue.shift(); return; }
     const b = this.bannerEl;
     b.querySelector('.banner-ribbon').innerHTML = `<div class="ribbon ${color === 'gold' ? 'yellow' : color}"><span>${esc(title)}</span></div>`;
     const p = b.querySelector('p'); p.textContent = fixText(text); p.className = 'paper';
@@ -135,6 +137,7 @@ export class UI {
   closeModal() {
     this.modalEl.classList.add('hidden');
     if (this.modalQueue.length) { const [a, b, c] = this.modalQueue.shift(); setTimeout(() => this.choice(a, b, c), 150); }
+    else if (this.bannerQueue && this.bannerQueue.length) { const q = this.bannerQueue; this.bannerQueue = []; const last = q[q.length - 1]; setTimeout(() => { if (this.modalEl.classList.contains('hidden')) this.banner(...last); else this.bannerQueue.push(last); }, 250); }
   }
   confirm(title, text, ok, fn) { this.choice(title, text, [{ label: ok, cls: 'red', fn }, { label: 'Cancel' }]); }
   welcome(info) {
@@ -157,7 +160,7 @@ export class UI {
         <div class="cost" style="justify-content:center;font-size:18px">
           <span><i class="ic ic-gold"></i>+${a.got.gold}</span><span><i class="ic ic-wood"></i>+${a.got.wood}</span><span><i class="ic ic-meat"></i>+${a.got.meat}</span></div>
         ${a.done.length ? `<p class="muted">${a.done.slice(0, 6).map(esc).join('<br>')}</p>` : ''}
-        ${Object.values(S.res).some(v => v >= R.storage()) ? '<p>Your stores are full. Upgrade the castle to hold more.</p>' : ''}`;
+        ${Object.values(S.res).some(v => v >= R.storage()) ? '<p>Your stores are full. Grow the realm to hold more.</p>' : ''}`;
       this.choice('Welcome back', div, [{ label: 'To work' }]);
     }
     if (!info.fresh && localStorage.getItem('tinyrealm.seen') !== VERSION) {
@@ -219,7 +222,7 @@ export class UI {
     if (R.pendingDaily) {
       const d = R.pendingDaily; R.pendingDaily = null;
       const div = document.createElement('div');
-      div.innerHTML = `<p>Day ${d.streak} in a row. Your people leave a gift at the castle gate.</p>
+      div.innerHTML = `<p>Day ${d.streak} in a row. Your people leave a gift at the ${R.seatName()} door.</p>
         <div class="cost" style="justify-content:center;font-size:18px"><span><i class="ic ic-gold"></i>+${d.gift.gold}</span><span><i class="ic ic-wood"></i>+${d.gift.wood}</span><span><i class="ic ic-meat"></i>+${d.gift.meat}</span></div>
         <p class="muted">Return tomorrow for a bigger gift. A new Bounty Isle awaits in Voyage.</p>`;
       this.choice('Daily tribute', div, [{ label: 'Thank you' }]);
@@ -290,13 +293,13 @@ export class UI {
     if (E.merchant) N.push(['merchant', 'gold', 'ic-gold', `Merchant ${time(E.merchant.t)}`]);
     if (E.bees) N.push(['bees', 'red', 'ic-x', 'Bee swarm in the forest']);
     if (R.home.goldRush > 0) N.push(['rush', 'gold', 'ic-gold', `Gold Rush ${time(R.home.goldRush)}`]);
-    if (S.upgradeEnd) N.push(['upgrade', 'blue', 'ic-hammer', `Castle grows ${time((S.upgradeEnd - Date.now()) / 1000)}`]);
+    if (S.upgradeEnd) N.push(['upgrade', 'blue', 'ic-hammer', `${TIERS[Math.min(5, S.tier + 1)].name} in ${time((S.upgradeEnd - Date.now()) / 1000)}`]);
     if (!R.exp && S.orders) { const o = S.orders.list, d = o.filter(x => x.done).length; if (d < o.length) N.push(['orders', S.orders.kind === 'night' ? 'purple' : 'gold', 'ic-sword', `${S.orders.kind === 'night' ? 'Night' : 'Day'} orders ${d}/${o.length}`]); }
     if (!R.exp && R.state.tier >= 2 && R.seasonal.bossReady() && !R.seasonal.summonBlock()) N.push(['season', 'purple', 'ic-sword', `${R.seasonal.ev.boss.title} awaits`]);
     if (!R.exp && !R.decrees.D.pick) N.push(['decree', 'purple', 'ic-info', 'Choose this week\'s royal decree']);
     if (!R.exp && R.needs.get().mood.key === 'unhappy') N.push(['mood', 'red', 'ic-pawn', 'Your people are unhappy']);
     if (!R.exp && R.chal.C.day && !R.chal.C.day.done) { const c = R.chal.C.day; N.push(['chal', 'gold', 'ic-shield', `Daily: ${c.text}${c.n > 1 ? ` ${Math.floor(c.have)}/${c.n}` : ''}`]); }
-    if (!R.exp) { const q = R.currentQuest(); N.push(['quest', 'blue', 'ic-info', `${q.text} ${Math.min(R.questValue(q.type), q.n)}/${q.n}`]); }
+    if (!R.exp) { const q = R.currentQuest(); N.unshift(['quest', 'blue', 'ic-info', `${q.text} ${Math.min(R.questValue(q.type), q.n)}/${q.n}`]); } // the goal tracker always leads
     const max = this.noticesOpen ? N.length : 3;
     const list = N.slice(0, max);
     if (N.length > 3) list.push(['more', 'more', null, this.noticesOpen ? 'Show less' : `+${N.length - 3} more`]);
@@ -329,7 +332,7 @@ export class UI {
     else if (k === 'raid' && R.raid) { const u = R.raid.units.find(u => u.alive); if (u) this.view.centerOn(u.x, u.y); }
     else if (k === 'bees' && R.events.bees) this.view.centerOn(R.events.bees.x, R.events.bees.y);
     else if (k === 'upgrade') this.openPanel('building', R.castle);
-    else if (k === 'raidsoon' || k === 'event') this.toast('Keep soldiers near the castle and towers on high ground.');
+    else if (k === 'raidsoon' || k === 'event') this.toast(`Keep soldiers near the ${R.seatName()} and towers on high ground.`);
   }
   syncFormButtons() { $('#btnForm').textContent = this.formation; $('#btnSquadForm').textContent = this.formation; }
   renderAbilities() {
@@ -378,7 +381,8 @@ export class UI {
   renderExpHud() {
     const st = this.R.expStatus(); if (!st) return;
     $('#expName').textContent = `${st.name} - ${st.region} - Level ${st.level}`;
-    $('#expStat').textContent = `Camps ${st.camps}   Foes ${st.foes}` + (st.boss && st.boss.alive ? `   Boss: ${ENEMIES[st.boss.type].name}` : '');
+    const stat = `<span>Camps ${st.camps}</span><span>Foes ${st.foes}</span>` + (st.boss && st.boss.alive ? `<span>Boss: ${esc(ENEMIES[st.boss.type].name)}</span>` : '');
+    if (stat !== this.expStatKey) { this.expStatKey = stat; $('#expStat').innerHTML = stat; }
   }
   renderSquad(force) {
     const sc = this.R.exp; if (!sc) return;
@@ -621,7 +625,7 @@ export class UI {
   }
   kindLabel(is) { return { home: 'Your island', kingdom: 'Kingdom', lair: 'Monster lair', ruins: 'Ruins', port: 'Free port', wild: 'Wild land', abyss: 'The Abyss', story: 'Story isle' }[is.kind] || ''; }
   renderSeaCard() {
-    const R = this.R, Z = R.sea, W = Z.W, el = $('#seaCard'), top = $('#seaTop');
+    const R = this.R, S = R.state, Z = R.sea, W = Z.W, el = $('#seaCard'), top = $('#seaTop');
     if (!this.seaOpen) return;
     // the waters at the centre of the view
     const c = this.view.seaCenter(), ring = Z.ocean.ringOf(c[0], c[1]);
@@ -633,7 +637,7 @@ export class UI {
     if (is) {
       const rel = is.kingdom ? Z.relation(is) : null, here = !sail && docked && docked.id === is.id;
       const d = Math.round(Math.hypot(is.x - W.fleet.x, is.y - W.fleet.y)), eta = time(d / 150);
-      const sub = is.kind === 'kingdom' ? `${esc(is.kingdom.name)}, ${esc(is.kingdom.realm || '')}` : is.kind === 'lair' ? `${(REGION_NAMES[is.region] || 'Monsters')}${is.boss ? ', with a boss' : ''}` : is.kind === 'story' ? `The Drowned Crown, chapter ${is.chapter}` : this.kindLabel(is);
+      const sub = is.kind === 'home' ? `The ${TIERS[S.tier].name.toLowerCase()} of your realm` : is.kind === 'kingdom' ? `${esc(is.kingdom.name)}, ${esc(is.kingdom.realm || '')}` : is.kind === 'lair' ? `${(REGION_NAMES[is.region] || 'Monsters')}${is.boss ? ', with a boss' : ''}` : is.kind === 'story' ? `The Drowned Crown, chapter ${is.chapter}` : this.kindLabel(is);
       const L = Z.landing(is);
       let acts = '';
       if (here) {
@@ -643,7 +647,7 @@ export class UI {
         else acts = `<p class="note">${esc(L.note)}</p>`;
       } else if (is.kind !== 'home' || !Z.atHome()) acts = `<button class="btn" data-sea="go">${is.kind === 'home' ? 'Sail home' : 'Sail here'} (${eta})</button>`;
       const relHtml = rel ? `<span class="rel ${rel}">${{ enemy: 'Enemy', neutral: 'Neutral', ally: 'Vassal' }[rel]}</span>` : '';
-      html += `<div class="isle"><div class="isle-head"><div class="sig" data-sig></div><div class="grow"><h3>${esc(is.name)} ${relHtml}</h3><p>${sub}</p><p class="muted">${this.kindLabel(is)}${is.kind !== 'home' ? ` - level ${is.level} - ${esc(Z.ocean.ringOf(is.x, is.y).name)}` : ''}${W.cleared[is.id] ? ' - cleared' : ''}</p></div><button class="tiny-btn" data-sea="close" aria-label="Close"><i class="ic ic-x"></i></button></div>
+      html += `<div class="isle"><div class="isle-head"><div class="sig" data-sig></div><div class="grow"><h3>${esc(is.name)} ${relHtml}</h3><p>${sub}</p>${is.kind !== 'home' ? `<p class="muted">${this.kindLabel(is)} - level ${is.level} - ${esc(Z.ocean.ringOf(is.x, is.y).name)}${W.cleared[is.id] ? ' - cleared' : ''}</p>` : ''}</div><button class="tiny-btn red" data-sea="close" aria-label="Close"><i class="ic ic-x"></i></button></div>
         <div class="isle-acts">${acts}</div></div>`;
     }
     html += `<div class="sea-bar"><button class="btn small" data-sea="fleet">Fleet${crew.length ? ` (${crew.length} aboard)` : ''}</button><button class="btn small" data-sea="crewview">Crew</button><button class="btn small" data-sea="trade">Trade</button><button class="btn small" data-sea="homeview">Home</button></div>`;
@@ -651,7 +655,10 @@ export class UI {
     if (key === this.seaKey) return; this.seaKey = key;
     el.innerHTML = html; el.classList.remove('hidden');
     const sig = el.querySelector('[data-sig]');
-    if (sig) { if (is && is.kingdom) sig.appendChild(sigilCanvas(is.kingdom.sigil, 44)); else sig.remove(); }
+    if (sig) {
+      if (is && is.kingdom) { const sc = sigilCanvas(is.kingdom.sigil, 44), cv = document.createElement('canvas'); cv.width = sc.width; cv.height = sc.height; cv.getContext('2d').drawImage(sc, 0, 0); sig.appendChild(cv); }
+      else sig.remove();
+    }
   }
   seaAct(a) {
     const R = this.R, Z = R.sea, is = this.seaSel, S = R.state;
@@ -753,7 +760,7 @@ export class UI {
       const locked = lim === 0;
       const full = n >= lim;
       const ok = !locked && !full && R.canAfford(d.cost);
-      const need = locked ? `Needs a ${TIERS.findIndex((t, i) => t && t.limits[k] > 0) > 0 ? TIERS[TIERS.findIndex((t, i) => t && t.limits[k] > 0)].name : 'bigger castle'}` : `${n} / ${lim} built`;
+      const need = locked ? `Needs a ${TIERS.findIndex((t, i) => t && t.limits[k] > 0) > 0 ? TIERS[TIERS.findIndex((t, i) => t && t.limits[k] > 0)].name : 'bigger realm'}` : `${n} / ${lim} built`;
       return `<div class="card light"><div class="thumb"><img src="${src(BLD_IMG[k])}" alt=""></div>
         <div class="grow"><h3>${d.name}</h3><p>${d.desc}</p>${this.costHtml(d.cost)}<p class="muted">${need} - ${d.time}s</p></div>
         <button class="btn small" data-act="place:${k}" ${ok ? '' : 'disabled'}>Build</button></div>`;
@@ -772,7 +779,7 @@ export class UI {
     return mood + `<p class="section-title">${S.pawns} pawns - ${S.pawns - busy} idle</p>` +
       jobs.map(([k, n, ic, d]) => `<div class="job card light"><i class="ic ${ic}"></i><div class="name"><h3>${n}</h3><p>${d}</p></div>
         <button class="tiny-btn red" data-act="job:${k}:-1">-</button><span class="count">${J[k]}</span><button class="tiny-btn" data-act="job:${k}:1">+</button></div>`).join('') +
-      `<div class="card"><div class="thumb"><img src="${src('av_h5')}" class="av" alt=""></div><div class="grow"><h3>Train a Pawn</h3><p>New hands for the realm. Trained at the Castle.${q ? ` ${q} in training.` : ''}</p>${this.costHtml(UNITS.pawn.cost)}</div>
+      `<div class="card"><div class="thumb"><img src="${src('av_h5')}" class="av" alt=""></div><div class="grow"><h3>Train a Pawn</h3><p>New hands for the realm. Trained at the ${R.seatName()}.${q ? ` ${q} in training.` : ''}</p>${this.costHtml(UNITS.pawn.cost)}</div>
         <button class="btn small" data-act="train:${castle.id}:pawn">Train</button></div>
        <p class="muted" style="text-align:center;font-size:13px">Room: ${R.popUsed()} of ${R.popCap()} people. Houses add room, and upgraded Houses add more.</p>
        <p class="muted" style="font-size:13px;text-align:center">While you are away, assigned pawns keep working at half pace until the stores are full.</p>`;
@@ -830,7 +837,7 @@ export class UI {
       </div></div>`;
     }).join('');
     html += `<button class="btn wide" data-act="sqnew" ${L.length >= Q.max() ? 'disabled' : ''}>Raise a new squad</button>`;
-    if (L.length >= Q.max()) html += `<p class="muted" style="text-align:center;font-size:12px">A bigger castle can field more squads.</p>`;
+    if (L.length >= Q.max()) html += `<p class="muted" style="text-align:center;font-size:12px">A bigger realm can field more squads.</p>`;
     return html;
   }
   renderSquadBtns() { // quick-select buttons down the right edge
@@ -1064,7 +1071,7 @@ export class UI {
     }
     if (this.tab === 'realm') {
       const days = Math.floor((Date.now() - S.created) / 86400000) + 1;
-      const rows = [['Realm day', days], ['Castle', TIERS[S.tier].name], ['Renown', S.renown], ['Daily streak', S.daily.streak], ['Islands cleared', S.cleared], ['Raids repelled', S.stats.raidsSurvived], ['Raids lost', S.stats.raidsLost], ['Great events survived', S.stats.eventsSurvived], ['Monsters slain', S.stats.kills], ['Trolls slain', S.stats.trollsSlain], ['Soldiers fallen', S.fallen.length], ['Gold gathered', fmt(S.stats.gold || 0)], ['Wood gathered', fmt(S.stats.wood || 0)], ['Meat gathered', fmt(S.stats.meat || 0)], ['Storage cap', fmt(R.storage())]];
+      const rows = [['Realm day', days], ['Realm', TIERS[S.tier].name], ['Renown', S.renown], ['Daily streak', S.daily.streak], ['Islands cleared', S.cleared], ['Raids repelled', S.stats.raidsSurvived], ['Raids lost', S.stats.raidsLost], ['Great events survived', S.stats.eventsSurvived], ['Monsters slain', S.stats.kills], ['Trolls slain', S.stats.trollsSlain], ['Soldiers fallen', S.fallen.length], ['Gold gathered', fmt(S.stats.gold || 0)], ['Wood gathered', fmt(S.stats.wood || 0)], ['Meat gathered', fmt(S.stats.meat || 0)], ['Storage cap', fmt(R.storage())]];
       const rv = RIVALS.map(r => { const st = S.rivals[r.key], open = R.rivalUnlocked(r);
         return `<div class="card light"><div class="thumb"><img src="${src('b' + r.key + '_Castle')}" alt=""></div><div class="grow"><h3>${r.name}</h3><p>${!open ? 'Unknown waters. Grow your realm to meet them.' : st.subjugated ? `Your vassal. Pays ${R.tributeRate(r.key).gold} gold and ${R.tributeRate(r.key).wood} wood per hour.` : `At war. Level ${R.rivalLevel(r.key)}, ${st.raids} raids so far. Conquer their capital from Voyage.`}</p></div></div>`; }).join('');
       const prov = (S.annexed || []).map(a => provinceOf(a.region));
@@ -1090,7 +1097,7 @@ export class UI {
         return `<p class="section-title">The Drowned Crown</p><div class="card light"><div class="grow"><h3>Chapter ${nx + 1}: ${esc(ch.name)}</h3><p>${chapterOpen(S, nx) ? 'Ready. Find it along the bottom of the sea chart in Voyage.' : `Clear ${ch.need} frontier islands to reach it (${S.cleared} so far).`}</p><div class="xpbar"><i style="width:${nx / CHAPTERS.length * 100}%"></i></div></div></div>`; })()}
       <p class="section-title">Goals that never end</p>
       <div class="card light"><div class="grow"><p>Push the frontier: island ${S.frontier} awaits. Every fifth island holds a boss and a relic.</p></div></div>
-      <div class="card light"><div class="grow"><p>Raise the castle: ${S.tier < 5 ? 'next is ' + TIERS[S.tier + 1].name : 'The Kingdom is crowned. Raise your Renown without limit.'}</p></div></div>
+      <div class="card light"><div class="grow"><p>Grow the realm: ${S.tier < 5 ? 'next is a ' + TIERS[S.tier + 1].name + '.' : 'the Kingdom is crowned. Raise your Renown without limit.'}</p></div></div>
       <div class="card light"><div class="grow"><p>Relics found: ${relicsOwned} of ${Object.keys(RELICS).length}. Great events like the Troll Breakout hold the rarest.</p></div></div>`;
   }
 
@@ -1152,7 +1159,7 @@ export class UI {
   panel_building() {
     const R = this.R, S = R.state, b = this.panelArg;
     if (!R.home.buildings.includes(b)) { setTimeout(() => this.closePanel()); return ''; }
-    let html = `<div class="card light"><div class="thumb"><img src="${src(b.imgKey)}" alt=""></div><div class="grow"><p>${b.def.desc}</p>
+    let html = `<div class="card light"><div class="thumb"><img src="${src(b.type === 'castle' && S.tier < 3 ? 'b_House3' : b.imgKey)}" alt=""></div><div class="grow"><p>${b.def.desc}</p>
       <div class="hpbar"><i id="bhp" style="width:${b.hp / b.maxHp * 100}%"></i></div><p class="muted" id="bhpt">${Math.ceil(b.hp)} / ${b.maxHp} health${b.ruined ? ' - in ruins' : ''}</p></div></div>`;
     this.live.push(() => { const e = $('#bhp'); if (e) e.style.width = (b.hp / b.maxHp * 100) + '%'; const t = $('#bhpt'); if (t) t.textContent = `${Math.ceil(b.hp)} / ${b.maxHp} health${b.ruined ? ' - in ruins' : ''}`; });
     if (!b.done) {
@@ -1168,7 +1175,7 @@ export class UI {
         const nt = TIERS[S.tier + 1];
         const unlock = Object.entries(nt.limits).filter(([k, v]) => v > (TIERS[S.tier].limits[k] || 0)).map(([k, v]) => `${v} ${BUILDINGS[k].name}${v > 1 ? 's' : ''}`).join(', ');
         const units = Object.values(UNITS).filter(u => u.tier === S.tier + 1).map(u => u.name).join(', ');
-        html += `<div class="card"><div class="grow"><h3>Grow into a ${nt.name}</h3><p>Storage ${fmt(nt.storage)}, squad of ${nt.squad}, castle health ${nt.castleHp}. Allows ${unlock}.${units ? ' New soldiers: ' + units + '.' : ''} Takes ${time(nt.time)}.</p>${this.costHtml(nt.cost)}</div>
+        html += `<div class="card"><div class="grow"><h3>Grow into a ${nt.name}</h3><p>Storage ${fmt(nt.storage)}, squad of ${nt.squad}, ${S.tier + 1 >= 3 ? 'castle' : 'hall'} health ${nt.castleHp}. Allows ${unlock}.${units ? ' New soldiers: ' + units + '.' : ''} Takes ${time(nt.time)}.</p>${this.costHtml(nt.cost)}</div>
           <button class="btn small" data-act="upgrade" ${R.canAfford(nt.cost) ? '' : 'disabled'}>Grow</button></div>`;
       } else {
         const c = renownCost(S.renown);
@@ -1357,7 +1364,7 @@ export class UI {
       const id = +x, cap = TIERS[R.state.tier].squad;
       if (this.squadPick.has(id)) this.squadPick.delete(id);
       else if (this.squadPick.size < cap) this.squadPick.add(id);
-      else this.toast(`Your castle supports a squad of ${cap}.`);
+      else this.toast(`Your realm can send ${cap} soldiers at a time.`);
       return this.refresh();
     }
     if (k === 'launch') {

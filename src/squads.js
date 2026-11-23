@@ -15,7 +15,7 @@ export const STANCES = {
   chase: { name: 'Chase', desc: 'Hunt raiders anywhere on the island.', aggro: 22, leash: 40 },
 };
 export const DISTRICTS = {
-  castle: 'Castle Grounds', north: 'North Reach', east: 'East Shore', south: 'South Fields', west: 'West Woods',
+  castle: 'Home Grounds', north: 'North Reach', east: 'East Shore', south: 'South Fields', west: 'West Woods',
 };
 
 export function districtAt(R, cx, cy) {
@@ -34,7 +34,7 @@ export class Squads {
   of(rec) { return this.list.find(q => q.members.includes(rec.id)); }
   byId(id) { return this.list.find(q => q.id === id); }
   create() {
-    const L = this.list; if (L.length >= this.max()) return 'Grow the castle to raise more squads.';
+    const L = this.list; if (L.length >= this.max()) return 'Grow the realm to raise more squads.';
     const used = new Set(L.map(q => q.color)), color = COLORS.find(c => !used.has(c.key)) || COLORS[0];
     const name = NAMES.find(n => !L.some(q => q.name === n)) || 'Squad ' + (L.length + 1);
     const R = this.R, door = R.door;

@@ -27,7 +27,7 @@ export function happiness(R) {
   if (meat >= pop * 10) { parts.push(['Plenty of food', 8]); h += 8; }
   else if (meat < pop * 2) { parts.push(['Food is short', -15]); h -= 15; }
   if (R.popUsed() >= R.popCap()) { parts.push(['Crowded houses', -8]); h -= 8; }
-  if (S.lastRaidLost && Date.now() - S.lastRaidLost < 30 * 60000) { parts.push(['The castle fell recently', -15]); h -= 15; }
+  if (S.lastRaidLost && Date.now() - S.lastRaidLost < 30 * 60000) { parts.push(['Raiders sacked the realm', -15]); h -= 15; }
   if (S.lastRaidWon && Date.now() - S.lastRaidWon < 10 * 60000) { parts.push(['A raid was beaten', 5]); h += 5; }
   const hol = R.holiday();
   if (hol) { parts.push([hol.name, 10]); h += 10; }
