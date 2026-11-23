@@ -57,15 +57,21 @@ export class Tutorial {
       this.R.state.tutorial = i + 1; this.t = 0; audio.play('ready');
       this.show(); return;
     }
-    this.box.classList.remove('hidden');
     // point the hand
     let x = null, y = null;
     const sel = st.el && st.el(this.R, this.U);
     const el = sel && document.querySelector(sel);
+    // a panel the step is not about has the screen: step aside until it closes
+    const pan = document.getElementById('panel');
+    if (this.U.panel && pan && !(el && (pan.contains(el) || el.id === 'panelClose'))) { this.box.classList.add('hidden'); this.hand.classList.add('hidden'); return; }
+    this.box.classList.remove('hidden');
     if (el && el.offsetParent !== null) { const r = el.getBoundingClientRect(); x = r.left + r.width / 2; y = r.top + r.height / 2; }
     else if (st.world) { const o = st.world(this.R); if (o) { const p = this.view.toScreen(o.x, (o.bodyY ?? o.y) - 10); x = p.x; y = p.y; } }
     // keep the message out of the way of whatever we point at
-    this.box.classList.toggle('low', y !== null && y < window.innerHeight * 0.45);
+    if (el && el.offsetParent !== null) { // move the message off the target, whichever way leaves it clear
+      const t = el.getBoundingClientRect(), hit = () => { const b = this.box.getBoundingClientRect(); return !(t.right < b.left || t.left > b.right || t.bottom < b.top || t.top > b.bottom); };
+      this.box.classList.remove('low'); if (hit()) { this.box.classList.add('low'); if (hit()) this.box.classList.remove('low'); }
+    } else this.box.classList.toggle('low', y !== null && y < window.innerHeight * 0.45);
     if (x === null) { this.hand.classList.add('hidden'); return; }
     this.hand.classList.remove('hidden');
     const bob = Math.sin(performance.now() / 180) * 6;

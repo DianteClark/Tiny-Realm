@@ -129,6 +129,8 @@ export class UI {
   bannerBlocked(color) { return !this.modalEl.classList.contains('hidden') || (this.panel && color !== 'red'); }
   banner(title, text, color = 'blue') {
     const Q = this.bannerQueue = this.bannerQueue || [];
+    if (this.bannerCur && this.bannerCur[0] === title && !this.bannerEl.classList.contains('hidden')) { this.showBanner(title, text, color); return; } // the same news again just refreshes
+    const dup = Q.findIndex(q => q[0] === title); if (dup >= 0) Q.splice(dup, 1);
     if (this.bannerBlocked(color) || (!this.bannerEl.classList.contains('hidden') && color !== 'red')) { Q.push([title, text, color]); if (Q.length > 4) Q.shift(); return; }
     this.showBanner(title, text, color);
   }
