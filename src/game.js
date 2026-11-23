@@ -811,7 +811,8 @@ export class Realm {
   // ---- 4.0 the coronation: the founder (or the best soldier) is crowned when the realm becomes a Kingdom
   crown(quiet) {
     const S = this.state; if (S.soldiers.some(s => s.type === 'king')) return;
-    let rec = S.soldiers.find(s => s.hero && s.title === 'Founder') || [...S.soldiers].sort((a, b) => b.level - a.level)[0];
+    const here = S.soldiers.filter(s => s.status !== 'garrison');
+    let rec = here.find(s => s.hero && s.title === 'Founder') || [...here].sort((a, b) => b.level - a.level)[0];
     const old = rec && this.home.units.find(u => u.rec === rec && u.alive);
     if (!rec) rec = this.newSoldier('king');
     rec.type = 'king'; rec.avatar = 'av_king1'; rec.title = 'King'; rec.hero = true;
@@ -1757,7 +1758,7 @@ export class Realm {
       for (const u of survivors) { u.rec.status = 'away'; u.rec.hp = Math.round(u.hp); u.rec.post = null; }
       S.world.crew = survivors.map(u => u.rec.id);
       summary.fromSea = true;
-      if (!survivors.length) { S.world.fleet = { x: 0, y: 0 }; S.world.dest = null; summary.shipHome = true; }
+      if (!survivors.length) { S.world.fleet = { x: 0, y: 0 }; S.world.dest = null; summary.shipHome = true; this.sea.unloadHold(); }
     } else {
       for (const u of survivors) { u.rec.status = 'home'; u.rec.hp = Math.round(u.hp); u.rec.post = null; }
     }

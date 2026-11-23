@@ -70,6 +70,7 @@ export class Sea {
   update(dt) {
     if (!this.ocean) return;
     const W = this.W, f = W.fleet, d = W.dest;
+    if (W.hold && this.atHome()) this.unloadHold();
     if (d) {
       const dx = d.x - f.x, dy = d.y - f.y, L = Math.hypot(dx, dy), step = SPEED * dt;
       if (L <= step) {
@@ -77,7 +78,7 @@ export class Sea {
         const is = this.ocean.islandById(d.id);
         this.fog.reveal(f.x, f.y, SIGHT);
         if (is) { W.seen[is.id] = 1; if (is.kind === 'home' && W.crew.length) { this.disembark(); this.R.ui.toast('Home again. The crew comes ashore.', 'gold'); }
-          if (is.kind === 'home' && W.hold) { const h = W.hold; W.hold = null; const got = {}; for (const k in h) got[k] = this.R.addRes(k, h[k]); const txt = Object.entries(got).filter(([, v]) => v > 0).map(([k, v]) => v + ' ' + k).join(', '); this.R.ui.toast(txt ? `The fleet unloads colony stores: ${txt}.` : 'The fleet is home, but the stores are full.', 'gold'); this.R.sfx('coin'); } this.R.ui.onFleetArrive && this.R.ui.onFleetArrive(is); }
+          if (is.kind === 'home') this.unloadHold(); this.R.ui.onFleetArrive && this.R.ui.onFleetArrive(is); }
         else this.R.ui.toast('The fleet drops anchor in open water.');
         this.persist();
       } else { f.x += dx / L * step; f.y += dy / L * step; f.flip = dx < 0; }
@@ -85,6 +86,15 @@ export class Sea {
       this.saveT -= dt; if (this.saveT <= 0) { this.saveT = 5; this.persist(); }
     }
   }
+  // colony stores carried aboard come ashore whenever the fleet is home
+  unloadHold() {
+    const W = this.W, h = W.hold; if (!h || !Object.values(h).some(v => v > 0)) { W.hold = null; return; }
+    W.hold = null; const got = {}; for (const k in h) got[k] = this.R.addRes(k, h[k]);
+    const txt = Object.entries(got).filter(([, v]) => v > 0).map(([k, v]) => v + ' ' + k).join(', ');
+    if (this.R.ui) this.R.ui.toast(txt ? `The fleet unloads colony stores: ${txt}.` : 'The fleet is home, but the stores are full.', txt ? 'gold' : '');
+    this.R.sfx && this.R.sfx('coin');
+  }
+  holdText() { const h = this.W.hold; return h ? Object.entries(h).filter(([, v]) => v > 0).map(([k, v]) => `${Math.floor(v)} ${k}`).join(', ') : ''; }
   persist() { this.W.fog = this.fog.serialize(); }
   // crew: soldiers aboard leave the island and come back when the fleet docks at home
   embark(ids) {

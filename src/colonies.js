@@ -2,6 +2,8 @@
 // Outpost into a Settlement and a Town, fills its storehouse every hour with what its land gives, and
 // needs a trade boat (or your fleet) to carry the stores home. Kingdoms at war with you may raid it;
 // soldiers left behind as a garrison stand in the way.
+import { XP_LEVELS, levelCap } from './data.js';
+
 export const COLONY_LEVELS = [
   null,
   { name: 'Outpost', rate: 1, store: 6, houses: 1 },
@@ -10,8 +12,8 @@ export const COLONY_LEVELS = [
 ];
 // what each kind of land yields per hour at an Outpost
 const YIELD = {
-  wild: { wood: 30, meat: 30 }, goblin: { meat: 34, gold: 14 }, gnome: { wood: 40, gold: 10 }, badlands: { gold: 34 },
-  reef: { meat: 30, gold: 18 }, crypt: { gold: 26, wood: 14 }, ruins: { gold: 22, wood: 22 },
+  wild: { wood: 150, meat: 150 }, goblin: { meat: 170, gold: 70 }, gnome: { wood: 200, gold: 50 }, badlands: { gold: 170 },
+  reef: { meat: 150, gold: 90 }, crypt: { gold: 130, wood: 70 }, ruins: { gold: 110, wood: 110 },
 };
 
 export class Colonies {
@@ -37,7 +39,7 @@ export class Colonies {
     const base = YIELD[is.kind === 'wild' ? 'wild' : is.kind === 'ruins' ? 'ruins' : is.region] || YIELD.wild, ring = Math.min(4, is.ring || 0);
     const out = {}; for (const k in base) out[k] = Math.round(base[k] * (1 + ring * 0.25)); return out;
   }
-  rate(id) { const c = this.C[id], is = this.R.sea.ocean.islandById(id); if (!c || !is) return {}; const y = this.yieldOf(is), L = COLONY_LEVELS[c.level], out = {}; for (const k in y) out[k] = Math.round(y[k] * L.rate * (c.sackedUntil > Date.now() ? 0 : 1)); return out; }
+  rate(id, base) { const c = this.C[id], is = this.R.sea.ocean.islandById(id); if (!c || !is) return {}; const y = this.yieldOf(is), L = COLONY_LEVELS[c.level], out = {}; for (const k in y) out[k] = Math.round(y[k] * L.rate * (!base && c.sackedUntil > Date.now() ? 0 : 1)); return out; }
   cap(id) { const c = this.C[id], L = COLONY_LEVELS[c.level], y = this.yieldOf(this.R.sea.ocean.islandById(id)), out = {}; for (const k in y) out[k] = Math.round(y[k] * L.rate * L.store); return out; }
   settle(is) {
     const R = this.R, S = R.state, why = this.canSettle(is); if (why) return why;
@@ -70,8 +72,11 @@ export class Colonies {
   // bring the storehouse up to date
   collect(id, now = Date.now()) {
     const c = this.C[id]; if (!c) return;
-    const hrs = Math.max(0, (now - c.at) / 3600000); c.at = now; if (!hrs) return;
-    const r = this.rate(id), cap = this.cap(id);
+    const from = c.at; c.at = now; if (now <= from) return;
+    // no work is done in the hour after a sack
+    let ms = now - from; if (c.sackedUntil && c.sackStart) ms -= Math.max(0, Math.min(now, c.sackedUntil) - Math.max(from, c.sackStart));
+    const hrs = Math.max(0, ms / 3600000); if (!hrs) return;
+    const r = this.rate(id, true), cap = this.cap(id);
     for (const k in r) c.store[k] = Math.min(cap[k] || 0, (c.store[k] || 0) + r[k] * hrs);
   }
   stores(id) { this.collect(id); const s = this.C[id].store, out = {}; for (const k in s) out[k] = Math.floor(s[k]); return out; }
@@ -89,6 +94,7 @@ export class Colonies {
     for (const r of this.garrison(id)) { if (Z.W.crew.length >= cap) break; r.status = 'away'; r.colony = null; Z.W.crew.push(r.id); c.garrison = c.garrison.filter(x => x !== r.id); n++; }
     return n;
   }
+  xp(r, n) { if (r.level >= levelCap(r)) return; r.xp = (r.xp || 0) + n; while (r.level < levelCap(r) && r.xp >= XP_LEVELS[r.level + 1]) r.level++; }
   defence(id) { const c = this.C[id]; return 10 + c.level * 15 + this.garrison(id).reduce((a, r) => a + 8 + r.level * 4 + (r.promoted ? 10 : 0), 0); }
   // ---- the world turns: kingdoms at war look at your colonies
   update(dt) {
@@ -99,17 +105,16 @@ export class Colonies {
   threats(secs, live) {
     const K = this.R.kingdoms; if (!K) return;
     for (const { id, c, is } of this.list()) {
-      if (c.sackedUntil > Date.now()) continue;
-      const foes = K.islands().filter(k => K.stance(k) === 'war' && Math.hypot(k.x - is.x, k.y - is.y) < 1400);
-      if (!foes.length || Math.random() > secs / 5400 * foes.length) continue;
+      if (c.sackedUntil > Date.now() || Date.now() - c.founded < 2 * 3600000) continue; // a new colony has time to dig in
+      const foes = K.islands().filter(k => K.stance(k) === 'war' && K.near(k) && Math.hypot(k.x - is.x, k.y - is.y) < 1400);
+      if (!foes.length || Math.random() > secs / 16200 * Math.min(2, foes.length)) continue;
       const f = foes[Math.floor(Math.random() * foes.length)], atk = K.st(f).power * 0.45, def = this.defence(id);
       if (Math.random() < def / (def + atk)) {
-        K.st(f).power *= 0.9;
-        for (const r of this.garrison(id)) r.xp = (r.xp || 0) + 20;
+        K.st(f).power = Math.max(K.st(f).power * 0.96, 20);
+        for (const r of this.garrison(id)) this.xp(r, 15);
         K.news(`Raiders of ${f.kingdom.name} were beaten back from ${is.name}.`, live);
       } else {
-        this.collect(id); c.store = {}; c.sackedUntil = Date.now() + 3600000;
-        for (const r of this.garrison(id)) r.hp = undefined;
+        this.collect(id); c.store = {}; c.sackStart = Date.now(); c.sackedUntil = Date.now() + 3600000;
         K.news(`${f.kingdom.name} sacked ${is.name} and carried off its stores. Work stops there for an hour.`, live);
         if (live && this.R.ui) this.R.ui.banner('A colony is sacked', `${f.kingdom.name} raided ${is.name}. Leave a garrison there, or make peace.`, 'red');
       }

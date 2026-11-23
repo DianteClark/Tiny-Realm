@@ -29,14 +29,14 @@ export function ports(R) {
   // your colonies: a boat carries the storehouse home (6.0)
   if (R.colonies && Z && Z.ocean) for (const { id, is, c } of R.colonies.list()) {
     const d = Math.hypot(is.x, is.y);
-    out.push({ key: 'col:' + id, name: `${is.name} ${['', 'outpost', 'settlement', 'town'][c.level]}`, sub: 'Your colony. The boat brings home whatever its stores hold', mins: Math.max(5, Math.round(4 + d / 450)), risk: 0.06, cargo: R.colonies.stores(id), colony: id, x: is.x, y: is.y });
+    out.push({ key: 'col:' + id, name: `${is.name} ${['', 'outpost', 'settlement', 'town'][c.level]}`, sub: 'Your colony. The boat loads whatever its stores hold and brings it home', mins: Math.max(5, Math.round(4 + d / 450)), risk: 0.06, cargo: R.colonies.stores(id), colony: id, x: is.x, y: is.y });
   }
   // kingdoms that trade with you: a pact or an alliance opens their harbour (6.0)
   if (R.kingdoms && Z && Z.ocean && W && W.k) for (const [id, k] of Object.entries(W.k)) {
     if (!k.pact && k.stance !== 'ally') continue;
     const is = Z.ocean.islandById(id); if (!is || !is.kingdom || R.kingdoms.stance(is) === 'war') continue;
     const d = Math.hypot(is.x, is.y), base = 80 + is.level * 26, ally = k.stance === 'ally';
-    out.push({ key: 'kport:' + id, name: `${is.name} harbour`, sub: `${is.kingdom.name}, ${ally ? 'your ally' : 'bound to you by a trade pact'}`, mins: Math.max(6, Math.round(5 + d / 420)), risk: ally ? 0.04 : 0.07, cargo: { gold: Math.round(base * (ally ? 1.3 : 1.1)) + t * 30, wood: Math.round(base * 0.6), meat: Math.round(base * 0.6) }, x: is.x, y: is.y });
+    out.push({ key: 'kport:' + id, name: `${is.name} harbour`, sub: `${is.kingdom.name}, ${ally ? 'your ally' : 'bound to you by a trade pact'}`, mins: Math.max(6, Math.round(5 + d / 420)), risk: ally ? 0.04 : 0.07, cargo: { gold: Math.round(base * (ally ? 1 : 0.8)) + t * 20, wood: Math.round(base * 0.45), meat: Math.round(base * 0.45) }, x: is.x, y: is.y });
   }
   for (const r of RIVALS) {
     const st = S.rivals[r.key]; if (!st || !st.subjugated) continue;
@@ -75,10 +75,10 @@ export class Trade {
     const p = this.port(slot.port); if (!p || slot.stopAfter) { slot.port = null; slot.back = 0; slot.stopAfter = false; return; }
     const fast = this.R.home.buildings.some(b => b.type === 'market' && b.done && this.R.hasBonus(b, 'Harbour market'));
     slot.leave = at; slot.back = at + p.mins * 60000 * (fast ? 0.8 : 1); slot.cargo = { ...p.cargo };
+    if (p.colony && this.R.colonies.C[p.colony]) slot.cargo = this.R.colonies.empty(p.colony); // the boat loads the colony's stores and carries them home
   }
   deliver(slot, mult = 1, quiet) {
     const R = this.R, got = {};
-    if (slot.port && slot.port.startsWith('col:') && R.colonies && R.colonies.C[slot.port.slice(4)]) slot.cargo = R.colonies.empty(slot.port.slice(4));
     for (const k in slot.cargo) got[k] = R.addRes(k, Math.round(slot.cargo[k] * mult * (1 + R.decrees.fx('trade'))));
     R.state.stats.tradeTrips = (R.state.stats.tradeTrips || 0) + 1;
     if (!quiet) {

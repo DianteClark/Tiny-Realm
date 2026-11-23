@@ -703,6 +703,7 @@ export class UI {
     if (top.textContent !== tt) top.textContent = tt; top.classList.remove('hidden');
     const is = this.seaSel, sail = W.dest, docked = Z.fleetIsland(), crew = Z.crewRecs();
     let html = '';
+    if (W.hold && Z.holdText()) html += `<div class="sea-status"><span>In the hold: <b>${esc(Z.holdText())}</b>. Unloaded at home.</span></div>`;
     if (sail) { const to = Z.ocean.islandById(sail.id); html += `<div class="sea-status"><span>Sailing to <b>${esc(to ? to.name : 'open sea')}</b>, ${time(Z.eta())}</span><button class="btn small red" data-sea="stop">Stop</button></div>`; }
     if (is && is.kind === 'water') {
       const d = Math.round(Math.hypot(is.x - W.fleet.x, is.y - W.fleet.y)), rg = Z.ocean.ringOf(is.x, is.y);
@@ -733,12 +734,12 @@ export class UI {
       const relHtml = rel ? this.stanceTag(is) : R.colonies.C[is.id] ? '<span class="rel own">Your colony</span>' : '';
       const colInfo = R.colonies.C[is.id] ? this.colonyLine(is.id) : '';
       if (is.kind === 'kingdom') acts += `<button class="btn" data-sea="court">Diplomacy</button>`;
-      html += `<div class="isle"><div class="isle-head"><div class="sig" data-sig></div><div class="grow"><h3>${esc(is.name)} ${relHtml}</h3><p>${sub}</p>${is.kind !== 'home' ? `<p class="muted">${this.kindLabel(is)} - ${is.kind === 'abyss' ? `floor ${(S.abyss && S.abyss.depth) || 1} awaits` : `level ${is.level}`} - ${esc(Z.ocean.ringOf(is.x, is.y).name)}${W.cleared[is.id] && !R.colonies.C[is.id] ? ' - cleared' : ''}</p>` : ''}${colInfo}</div><button class="tiny-btn red" data-sea="close" aria-label="Close"><i class="ic ic-x"></i></button></div>
+      html += `<div class="isle"><div class="isle-head"><div class="sig" data-sig></div><div class="grow"><h3>${esc(is.name)} ${relHtml}</h3><p>${sub}</p>${is.kind !== 'home' ? `<p class="muted">${this.kindLabel(is)} - ${is.kind === 'abyss' ? `floor ${(S.abyss && S.abyss.depth) || 1} awaits` : R.colonies.C[is.id] ? 'yours' : `level ${is.level}`} - ${esc(Z.ocean.ringOf(is.x, is.y).name)}${W.cleared[is.id] && !R.colonies.C[is.id] ? ' - cleared' : ''}</p>` : ''}${colInfo}</div><button class="tiny-btn red" data-sea="close" aria-label="Close"><i class="ic ic-x"></i></button></div>
         <div class="isle-acts">${acts}</div></div>`;
     }
-    html += `<div class="sea-bar"><button class="btn small" data-sea="fleet">Fleet${crew.length ? ` (${crew.length})` : ''}</button><button class="btn small" data-sea="crewview">Crew</button><button class="btn small" data-sea="trade">Trade</button><button class="btn small" data-sea="homeview">Home</button></div>`;
+    html += `<div class="sea-bar"><button class="btn small" data-sea="fleet">Fleet${crew.length ? ` (${crew.length})` : ''}${W.hold ? ' +cargo' : ''}</button><button class="btn small" data-sea="crewview">Crew</button><button class="btn small" data-sea="trade">Trade</button><button class="btn small" data-sea="homeview">Home</button></div>`;
     const key = html + (is ? is.id : '');
-    if (key === this.seaKey) { this.seaCardPx = window.innerHeight - el.getBoundingClientRect().top + 8; return; } this.seaKey = key;
+    if (key === this.seaKey) { this.seaCardPx = window.innerHeight - el.getBoundingClientRect().top + 8; document.body.style.setProperty('--seacard', Math.round(this.seaCardPx + 6) + 'px'); return; } this.seaKey = key;
     el.innerHTML = html; el.classList.remove('hidden');
     const sig = el.querySelector('[data-sig]');
     if (sig) {
@@ -787,7 +788,7 @@ export class UI {
     let html = `<p class="section-title">Colonies (${L.length} of ${Co.max()})</p>`;
     if (!L.length) return html + `<p style="text-align:center;font-size:13px">Sail to wild land, or to a lair you have cleared, and found a colony there. ${S.tier < 2 ? 'Your hamlet must grow into a Village first.' : 'Each one costs two pawns as settlers.'}</p>`;
     for (const { id, c, is } of L) {
-      const up = c.level < 3 ? `<button class="btn small" data-act="colup:${id}">Grow into a ${COLONY_LEVELS[c.level + 1].name}</button>${this.costHtml(Co.upCost(c))}` : '<p class="muted" style="font-size:12px">A Town, with a wharf that adds a trade boat.</p>';
+      const up = c.level < 3 ? `<button class="btn small" data-act="colup:${id}">Grow into a ${COLONY_LEVELS[c.level + 1].name}</button>${this.costHtml(Co.upCost(c))}` : '<p class="muted" style="font-size:12px">A Town, with a wharf that adds a trade boat while you have a Market.</p>';
       const route = R.trade.st.slots.some(s => s.port === 'col:' + id);
       html += `<div class="card light colcard"><div class="thumb"><img src="${src(['', 'b_House1', 'b_House2', 'b_House3'][c.level])}" alt=""></div><div class="grow"><h3>${esc(is.name)}</h3>${this.colonyLine(id)}<p class="muted" style="font-size:12px">${route ? 'A trade boat serves this colony.' : 'No trade boat serves it yet. Send one from Trade.'}</p>${up}</div><button class="btn small" data-act="tosea:${id}">Find</button></div>`;
     }
