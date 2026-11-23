@@ -153,7 +153,7 @@ export class Unit {
     if (this.anim === 'warrior' && this.state === 'idle') a *= 0.85;
     if (this.buff('shield')) a *= 0.4;
     this.hp -= a; this.flash = 0.12;
-    this.lastHitBy = src;
+    this.lastHitBy = src; this.hurtAt = this.scene.time;
     if (this.team === 1 && src) this.scene.alertCamp(this, src);
     if (this.hp <= 0) this.scene.kill(this, src);
   }
@@ -479,13 +479,24 @@ export class Scene {
     // explicit orders
     if (u.order && u.order.type === 'move') {
       if (u.atkAnim >= 0) return;
+      // fight back on the way: anyone who hits us, or a foe right in our path, gets dealt with first
+      if (!u.order.noStop && u.cursed <= 0 && !u.def.heal) {
+        let foe = u.fightOnWay && u.fightOnWay.alive && !u.fightOnWay.hidden ? u.fightOnWay : null;
+        if (!foe) {
+          const src = u.lastHitBy, hurt = (u.hurtAt || -9) > this.time - 1.2;
+          if (hurt && src && src.alive && !src.hidden && src.team !== u.team && src.kind !== 'pawn' && u.distTo(src) < 7 * T) foe = src;
+          else foe = this.nearestFoe(u, u.def.proj ? Math.min(u.range, 4 * T) : 1.8 * T);
+        }
+        if (foe) { u.fightOnWay = foe; u.target = foe; u.path = null; this.engage(u, foe, dt); return; }
+        if (u.fightOnWay) { u.fightOnWay = null; u.target = null; u.path = null; }
+      }
       if (!u.path) { if (!u.setPath(u.order.x, u.order.y)) { u.order = null; return; } }
       if (u.stepPath(dt)) { u.home = { x: u.x, y: u.y }; u.order = null; u.charged = true; }
       return;
     }
     if (u.order && u.order.type === 'attack') {
       const t = u.order.target;
-      if (!t.alive) { u.order = null; u.target = null; }
+      if (!t.alive) { u.order = null; u.target = null; if (this.kind !== 'home') u.home = { x: u.x, y: u.y }; }
       else {
         // fight back against anyone in our face while battering a structure
         if (t instanceof Struct || t instanceof Building) {
@@ -511,6 +522,8 @@ export class Scene {
       if (this.kind === 'home' && dist(u.x, u.y, u.home.x, u.home.y) > leash * T && !u.target.big) { u.target = null; }
       else return this.engage(u, u.target, dt);
     }
+    // on a mission, troops hold the ground they took instead of walking back to the boat
+    if (this.kind !== 'home') { if (u.atkAnim < 0) { u.home = { x: u.x, y: u.y }; u.stop(); u.charged = true; } return; }
     // return to post (if the post can't be reached, the current spot becomes the post)
     if (u.atkAnim < 0 && dist(u.x, u.y, u.home.x, u.home.y) > 40) {
       if ((!u.path || !u.path.length) && !u.setPath(u.home.x, u.home.y)) { u.home = { x: u.x, y: u.y }; return; }
