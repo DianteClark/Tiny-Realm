@@ -861,7 +861,8 @@ export class Scene {
       ctx.drawImage(s.img, (Math.floor(p.t * 12) % s.frames) * s.fw, 0, s.fw, s.fh, -s.fw / 2, -s.fh / 2, s.fw, s.fh);
       ctx.restore();
     }
-    // overlays: selection, hp bars
+    // overlays: orders (lines, flags, target brackets), selection, hp bars
+    this.drawOrders(ctx);
     for (const u of this.selected) if (u.alive) drawSprite(ctx, 'cursorRing', u.x, u.bodyY + 16, 0, { scale: (u.big ? 0.85 : 0.6) * (1 + Math.sin(this.time * 6) * 0.06) });
     for (const u of this.units) {
       if (!u.alive || u.hidden || u.kind === 'pawn') continue;
@@ -906,6 +907,48 @@ export class Scene {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.game.env.drawScreen(ctx, vw, vh, this, cam);
     if (this.tint > 0) { ctx.fillStyle = `rgba(70,10,40,${0.32 * this.tint})`; ctx.fillRect(0, 0, vw, vh); }
+  }
+  // what the selected troops are doing: dashed lines to targets, red brackets on what they attack,
+  // and a flag where they were told to go
+  drawOrders(ctx) {
+    const sel = [...this.selected].filter(u => u.alive && !u.hidden);
+    const targets = new Set(), flags = new Map();
+    ctx.save(); ctx.lineWidth = 2; ctx.setLineDash([6, 7]); ctx.lineDashOffset = -this.time * 22;
+    for (const u of sel) {
+      const ord = u.order;
+      if (ord && ord.type === 'move' && !u.fightOnWay) {
+        const k = Math.round(ord.x / 16) + ',' + Math.round(ord.y / 16); if (!flags.has(k)) flags.set(k, ord);
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.beginPath(); ctx.moveTo(u.x, u.y); ctx.lineTo(ord.x, ord.y); ctx.stroke();
+      }
+      const t = (ord && ord.type === 'attack' && ord.target) || u.target;
+      if (t && t.alive && t.team !== u.team) {
+        targets.add(t);
+        ctx.strokeStyle = 'rgba(255,110,100,0.45)'; ctx.beginPath(); ctx.moveTo(u.x, u.y - 20); ctx.lineTo(t.x, (t.bodyY ?? t.y) + 10); ctx.stroke();
+      }
+    }
+    ctx.setLineDash([]);
+    if (this.hoverObj && this.hoverObj.alive && this.hoverObj.team === 1 && !targets.has(this.hoverObj)) this.brackets(ctx, this.hoverObj, 'rgba(255,120,110,0.5)', 0);
+    for (const t of targets) { this.brackets(ctx, t, '#ff5a4e', 1); if (t instanceof Unit && t.hp >= t.maxHp) this.bar(ctx, t.x, t.y - (t.big ? 110 : 72) * (t.def.scale || 1), t.big ? 56 : 40, 1, '#d9534f', t); }
+    for (const f of flags.values()) { // a little pennant on a pole
+      const x = Math.round(f.x), y = Math.round(f.y) + 8, w = Math.sin(this.time * 6) * 2;
+      ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(x, y, 10, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#3b2f2a'; ctx.fillRect(x - 1, y - 34, 3, 34);
+      ctx.fillStyle = '#4a90c0'; ctx.beginPath(); ctx.moveTo(x + 2, y - 34); ctx.lineTo(x + 20 + w, y - 28); ctx.lineTo(x + 2, y - 21); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillRect(x + 2, y - 33, 12, 2);
+    }
+    ctx.restore();
+  }
+  brackets(ctx, t, color, pulse) {
+    const big = t.big || t instanceof Struct || t instanceof Building;
+    let w = big ? 48 : 30, h = big ? 52 : 34;
+    if (t instanceof Struct || t instanceof Building) { w = (t.fw || 2) * 32 + 8; h = 60; }
+    const s = 1 + (pulse ? Math.sin(this.time * 7) * 0.06 : 0), cx = t.x, cy = (t.bodyY ?? t.y - 40) + 8;
+    const x0 = cx - w * s, x1 = cx + w * s, y0 = cy - h * s, y1 = cy + h * 0.55 * s, L = 12;
+    ctx.strokeStyle = '#2b2b3a'; ctx.lineWidth = 5;
+    const draw = () => { ctx.beginPath();
+      ctx.moveTo(x0, y0 + L); ctx.lineTo(x0, y0); ctx.lineTo(x0 + L, y0); ctx.moveTo(x1 - L, y0); ctx.lineTo(x1, y0); ctx.lineTo(x1, y0 + L);
+      ctx.moveTo(x0, y1 - L); ctx.lineTo(x0, y1); ctx.lineTo(x0 + L, y1); ctx.moveTo(x1 - L, y1); ctx.lineTo(x1, y1); ctx.lineTo(x1, y1 - L); ctx.stroke(); };
+    draw(); ctx.strokeStyle = color; ctx.lineWidth = 2.5; draw();
   }
   // health bar: dark frame, a pale trail that drains after a hit, then the colour with a highlight
   bar(ctx, x, y, w, frac, color, owner) {
