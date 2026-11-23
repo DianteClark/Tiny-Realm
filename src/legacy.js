@@ -37,7 +37,7 @@ export function foundNewRealm(R, founderId) {
   const S = R.state, L = loadLegacy(), sc = realmScore(R);
   const days = Math.floor((Date.now() - S.created) / 86400000) + 1;
   L.points += sc.total;
-  L.realms.unshift({ ended: Date.now(), days, tier: S.tier, renown: S.renown, cleared: S.cleared, abyss: (S.abyss && S.abyss.best) || 0, chapters: (S.story && S.story.done) || 0, points: sc.total });
+  L.realms.unshift({ seed: R.sea && R.sea.ocean ? R.sea.words() : null, ended: Date.now(), days, tier: S.tier, renown: S.renown, cleared: S.cleared, abyss: (S.abyss && S.abyss.best) || 0, chapters: (S.story && S.story.done) || 0, points: sc.total });
   L.realms.length = Math.min(L.realms.length, 20);
   const rec = S.soldiers.find(s => s.id === founderId);
   if (rec) {

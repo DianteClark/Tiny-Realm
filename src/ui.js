@@ -19,6 +19,7 @@ import * as Legacy from './legacy.js';
 import { COLORS, STANCES, DISTRICTS, districtAt } from './squads.js';
 import { minimapOn, setMinimap } from './minimap.js';
 import { sigilCanvas } from './heraldry.js';
+import { parseSeedWords, normalizeSeedWords } from './ocean.js';
 
 export const VERSION = '3.6';
 
@@ -1109,6 +1110,16 @@ export class UI {
       item('bundle', 'Fair goods', `${200 + S.tier * 120} each of gold, wood and meat.`);
     return html + '<p class="muted" style="text-align:center;font-size:12px">Tokens and tasks reset when the season changes. Spend them before it ends.</p>';
   }
+  // before a new realm begins: a random world, or a seed you liked
+  askSeed(done) {
+    const div = document.createElement('div');
+    div.innerHTML = `<p>Every realm sails its own world. Leave this empty for a new one, or paste a seed from the Hall of Realms to sail a world you enjoyed.</p><input id="seedIn" class="seed-in" placeholder="e.g. SALT-RAVEN-4821" autocomplete="off" autocapitalize="characters" spellcheck="false"><p class="muted" id="seedNote" style="font-size:12px;min-height:16px"></p>`;
+    this.choice('Choose a world', div, [
+      { label: 'Begin', fn: () => { const v = (document.getElementById('seedIn') || {}).value || ''; done(v.trim() ? normalizeSeedWords(v) : null); } },
+      { label: 'Cancel', cls: 'red' },
+    ]);
+    setTimeout(() => { const i = document.getElementById('seedIn'), n = document.getElementById('seedNote'); if (!i) return; i.oninput = () => { const v = i.value.trim(); n.textContent = !v ? '' : parseSeedWords(v) != null ? `A known world: ${normalizeSeedWords(v)}` : 'Not a seed from the Hall, but it will still make a world of its own.'; }; }, 50);
+  }
   legacyHtml(full) {
     const R = this.R, L = Legacy.loadLegacy(), rank = Legacy.rankOf(L.points), sc = Legacy.realmScore(R), b = Legacy.rankBonus(rank);
     const next = rank < 20 ? (rank + 1) * 100 : null;
@@ -1116,7 +1127,8 @@ export class UI {
       ${next ? `<div class="xpbar"><i style="width:${(L.points % 100)}%"></i></div>` : ''}<p class="muted">This realm is worth ${sc.total} points: ${sc.parts.map(p => `${p[0].toLowerCase()} ${p[1]}`).join(', ') || 'nothing yet'}.</p></div></div>`;
     html += Legacy.canFound(R) ? `<button class="btn wide" data-act="found">Found a new realm</button><p class="muted" style="text-align:center;font-size:12px">Bank this realm's points, choose a hero to sail with you, and begin again on a new island.</p>`
       : `<p style="text-align:center;font-size:13px">Raise the Castle to found a new realm and bank your Legacy.</p>`;
-    if (full && L.realms.length) html += '<p class="section-title">Hall of Realms</p>' + L.realms.map((r, i) => `<div class="card light"><div class="grow"><h3>Realm ${L.realms.length - i}</h3><p>${r.days} days, ${TIERS[r.tier].name}${r.renown ? ` renown ${r.renown}` : ''}, ${r.cleared} islands, Abyss floor ${r.abyss}, ${r.chapters} story chapters. Worth ${r.points} points. Ended ${ago(r.ended)}.</p></div></div>`).join('');
+    if (full) html = `<p class="section-title">This world</p><div class="card light"><div class="grow"><h3 class="seedw">${esc(R.sea.words())}</h3><p class="muted">Your world's seed. Paste it when you start a new realm to sail these same seas again.</p></div><button class="btn small" data-act="copyseed:${esc(R.sea.words())}">Copy</button></div>` + html;
+    if (full && L.realms.length) html += '<p class="section-title">Hall of Realms</p>' + L.realms.map((r, i) => `<div class="card light"><div class="grow"><h3>Realm ${L.realms.length - i}${r.seed ? ` <span class="seedw small">${esc(r.seed)}</span>` : ''}</h3><p>${r.days} days, ${(TIERS[r.tier] || TIERS[1]).name}${r.renown ? ` renown ${r.renown}` : ''}, ${r.cleared} islands, Abyss floor ${r.abyss}, ${r.chapters} story chapters. Worth ${r.points} points. Ended ${ago(r.ended)}.</p></div>${r.seed ? `<button class="btn small" data-act="copyseed:${esc(r.seed)}">Copy seed</button>` : ''}</div>`).join('');
     return html;
   }
   decreeHtml() {
@@ -1317,6 +1329,11 @@ export class UI {
       for (const id of q.members) { const r = R.state.soldiers.find(s => s.id === id); if (r && r.status === 'home' && this.squadPick.size < cap) this.squadPick.add(id); }
       this.pickedSquad = q.id; return this.refresh();
     }
+    if (k === 'copyseed') {
+      const w = a.slice(9);
+      try { navigator.clipboard.writeText(w).then(() => this.toast(`Copied ${w}.`, 'gold'), () => this.toast(`Seed: ${w}`)); } catch (e) { this.toast(`Seed: ${w}`); }
+      return;
+    }
     if (k === 'embark') { R.sea.embark([...this.squadPick]); this.crewInit = false; this.squadPick.clear(); this.openSea(); return; }
     if (k === 'tosea') { this.openSea(); return; }
     if (k === 'tsend') { err(R.trade.send(a.slice(6))); return this.refresh(); }
@@ -1373,7 +1390,7 @@ export class UI {
       if (!Legacy.canFound(R)) return err('Raise the Castle first.');
       const heroes = [...S.soldiers].filter(s => s.type !== 'king').sort((a, b) => b.level - a.level || b.kills - a.kills).slice(0, 5);
       const go = id => this.confirm('Found a new realm?', `This realm ends and its ${sc.total} points join your Legacy.${id ? ` ${S.soldiers.find(s => s.id === id).name} sails with you, with their best piece of gear.` : ''} Everything else stays behind.`, 'Set sail', () => {
-        Legacy.foundNewRealm(R, id); this.wiping = true; R.wipe(); location.reload();
+        this.askSeed(words => { Legacy.foundNewRealm(R, id); try { if (words) localStorage.setItem('tinyrealm.nextSeed', words); } catch (e) { /* ignore */ } this.wiping = true; R.wipe(); location.reload(); });
       });
       return this.choice('Choose a founder', `Your new realm begins with one hero from this one, back at level 5, keeping up to three traits and their best piece of gear.`, [
         ...heroes.map(h => ({ label: `${h.name}, level ${h.level} ${UNITS[h.type].name}`, fn: () => go(h.id) })),
@@ -1384,7 +1401,7 @@ export class UI {
     if (k === 'wipe') {
       return this.confirm('Wipe your realm?', 'Everything will be erased and a new island will rise from the sea.', 'Wipe it all', () => {
         this.confirm('Are you certain?', 'Last chance. Your soldiers, relics and records will be gone forever.', 'Yes, start over', () => {
-          this.wiping = true; try { localStorage.removeItem('tinyrealm.legacy'); } catch (e) { /* ignore */ } R.wipe(); location.reload();
+          this.askSeed(words => { this.wiping = true; try { localStorage.removeItem('tinyrealm.legacy'); if (words) localStorage.setItem('tinyrealm.nextSeed', words); } catch (e) { /* ignore */ } R.wipe(); location.reload(); });
         });
       });
     }

@@ -372,3 +372,5 @@ body.sea #pills, body.sea #squadBtns, body.sea #abilitybar, body.sea #selbar, bo
 .rel.enemy { background: #d9534f; } .rel.neutral { background: #c9962a; } .rel.ally { background: #4f8f3a; }
 .sea-bar { display: flex; gap: 4px; } .sea-bar .btn { flex: 1; min-width: 0; padding-left: 0; padding-right: 0; font-size: 12px; white-space: nowrap; }
 body.sea #toasts { bottom: calc(var(--safe-bot) + 250px); }
+.seedw { font-family: inherit; letter-spacing: 1px; color: #2f6fa8; } .seedw.small { font-size: 11px; margin-left: 4px; color: #6b5a4c; }
+.seed-in { width: 100%; box-sizing: border-box; padding: 10px; font: inherit; font-size: 16px; text-align: center; letter-spacing: 1px; text-transform: uppercase; border: 2px solid #d6c39c; border-radius: 7px; background: #fffaf0; color: var(--ink); }
